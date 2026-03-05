@@ -1,8 +1,8 @@
 <?php
-$host     = getenv('DB_HOST') ?: 'localhost';
-$dbname   = getenv('DB_NAME') ?: 'inventory_system';
-$username = getenv('DB_USER') ?: 'root';
-$password = getenv('DB_PASS') ?: 'king.dee/0306';
+$host     = 'localhost';
+$dbname   = 'inventory_system';
+$username = 'inventory_admin';
+$password = 'king.dee/0306';
 
 try {
     $pdo = new PDO(
