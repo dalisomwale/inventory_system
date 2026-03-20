@@ -20,7 +20,7 @@ function logAudit(PDO $pdo, int $user_id, string $action, ?int $item_id = null, 
  * Return a CSS class name deterministically based on a category string.
  * This ensures each category gets a consistent color.
  */
-function catClass(string $cat): string {
+function catClass(?string $cat): string {
     // Map your categories to specific colors for better visual consistency
     $color_map = [
         'Caterriage' => 0,
@@ -32,12 +32,12 @@ function catClass(string $cat): string {
         'Other' => 6
     ];
     
-    if (isset($color_map[$cat])) {
+    if ($cat && isset($color_map[$cat])) {
         return 'cat-' . $color_map[$cat];
     }
     
     // Fallback to hash for any new categories
-    return 'cat-' . (crc32($cat) % 7);
+    return 'cat-' . (crc32($cat ?? 'Other') % 7);
 }
 
 /**
@@ -45,4 +45,11 @@ function catClass(string $cat): string {
  */
 function getCategories(PDO $pdo): array {
     return $pdo->query("SELECT DISTINCT category FROM items WHERE category != '' ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
+}
+
+/**
+ * Get all categories from categories table
+ */
+function getAllCategories(PDO $pdo): array {
+    return $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 }

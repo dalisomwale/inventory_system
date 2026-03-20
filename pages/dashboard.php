@@ -76,9 +76,10 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <div class="action-group">
-    <a href="receive_stock.php"  class="btn btn-success">&#8681; Receive Stock</a>
-    <a href="issue_stock.php"    class="btn btn-primary">&#8682; Issue Stock</a>
-    <a href="procurement.php"    class="btn btn-warning">&#128722; Request Procurement</a>
+    <a href="receive_stock.php"  class="btn btn-success">Receive Stock</a>
+    <a href="issue_stock.php"    class="btn btn-primary">Issue Stock</a>
+    <a href="procurement.php"    class="btn btn-warning">Request Procurement</a>
+    <a href="category_reports.php" class="btn btn-info">Category Reports</a>
 </div>
 
 <!-- LOW STOCK SECTION - ALWAYS VISIBLE -->
@@ -86,9 +87,9 @@ include __DIR__ . '/../includes/header.php';
     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
         <h3 style="margin:0">
             <?php if (count($low_stock) > 0): ?>
-                &#9888; Low Stock Alert (<?php echo count($low_stock); ?> item<?php echo count($low_stock) != 1 ? 's' : ''; ?> need attention)
+                Low Stock Alert (<?php echo count($low_stock); ?> item<?php echo count($low_stock) != 1 ? 's' : ''; ?> need attention)
             <?php else: ?>
-                ✓ All Stock Levels Healthy
+                All Stock Levels Healthy
             <?php endif; ?>
         </h3>
         <?php if (count($low_stock) > 0): ?>
@@ -139,9 +140,9 @@ include __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
                         </td>
                         <td style="white-space:nowrap">
-                            <a href="receive_stock.php?item=<?php echo $item['id']; ?>" class="btn btn-sm btn-success" title="Receive Stock">📥 Receive</a>
-                            <a href="issue_stock.php?item=<?php echo $item['id']; ?>" class="btn btn-sm btn-primary" title="Issue Stock">📤 Issue</a>
-                            <a href="procurement.php?item_name=<?php echo urlencode($item['item_name']); ?>&qty=<?php echo $item['reorder_level'] * 2; ?>" class="btn btn-sm btn-warning" title="Request Procurement">📝 Request</a>
+                            <a href="receive_stock.php?item=<?php echo $item['id']; ?>" class="btn btn-sm">Receive</a>
+                            <a href="issue_stock.php?item=<?php echo $item['id']; ?>" class="btn btn-sm">Issue</a>
+                            <a href="procurement.php?item_name=<?php echo urlencode($item['item_name']); ?>&qty=<?php echo $item['reorder_level'] * 2; ?>" class="btn btn-sm">Request</a>
                         </td>
                     </tr>
                     <?php endforeach; ?>
@@ -149,7 +150,6 @@ include __DIR__ . '/../includes/header.php';
             </table>
         </div>
     <?php else: ?>
-        <!-- This shows when NO low stock items exist -->
         <div style="text-align:center; padding:30px 20px; background:#f9fafb; border-radius:8px;">
             <div style="font-size:3rem; color:var(--success); margin-bottom:10px;">✓</div>
             <h3 style="color:var(--success); margin-bottom:10px;">All Stock Levels are Healthy</h3>
@@ -157,13 +157,12 @@ include __DIR__ . '/../includes/header.php';
                 Great job! All <?php echo $healthy_count; ?> items in your inventory are above their reorder levels.
             </p>
             <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
-                <a href="receive_stock.php" class="btn btn-success">📥 Receive New Stock</a>
-                <a href="issue_stock.php" class="btn btn-primary">📤 Issue Stock</a>
+                <a href="receive_stock.php" class="btn btn-success">Receive New Stock</a>
+                <a href="issue_stock.php" class="btn btn-primary">Issue Stock</a>
             </div>
         </div>
     <?php endif; ?>
     
-    <!-- Summary stats at the bottom of the card -->
     <div style="margin-top:15px; display:flex; gap:15px; flex-wrap:wrap; border-top:1px solid var(--border); padding-top:15px;">
         <div style="font-size:.85rem;">
             <span style="color:var(--muted);">Total Items:</span> 
