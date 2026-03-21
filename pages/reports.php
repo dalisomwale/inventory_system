@@ -23,7 +23,7 @@ $categories = $pdo->query("SELECT id, name, description FROM categories ORDER BY
 // REALISTIC DATA - BASED ON RECEPTION ACTIVITIES
 // ============================================
 
-// 1. OVERALL INVENTORY STATUS (Current state based on all reception transactions)
+// 1. OVERALL INVENTORY STATUS
 $inventory_status = $pdo->query("
     SELECT 
         COUNT(*) as total_items,
@@ -34,7 +34,7 @@ $inventory_status = $pdo->query("
     FROM items
 ")->fetch();
 
-// 2. RECEPTION ACTIVITY SUMMARY (Based on actual reception staff transactions)
+// 2. RECEPTION ACTIVITY SUMMARY
 $reception_activity = $pdo->prepare("
     SELECT 
         (SELECT COUNT(DISTINCT received_by) FROM stock_receiving WHERE DATE(created_at) BETWEEN ? AND ?) as active_receiving_staff,
@@ -47,7 +47,7 @@ $reception_activity = $pdo->prepare("
 $reception_activity->execute([$start, $end, $start, $end, $start, $end, $start, $end, $start, $end, $start, $end]);
 $activity = $reception_activity->fetch();
 
-// 3. CATEGORY PERFORMANCE (Based on reception transactions)
+// 3. CATEGORY PERFORMANCE
 $category_performance = $pdo->prepare("
     SELECT 
         i.category,
@@ -68,7 +68,7 @@ $category_performance = $pdo->prepare("
 $category_performance->execute([$start, $end, $start, $end]);
 $categories_data = $category_performance->fetchAll();
 
-// 4. TOP RECEIVED ITEMS (Based on reception receiving activities)
+// 4. TOP RECEIVED ITEMS
 $top_received = $pdo->prepare("
     SELECT 
         i.item_name,
@@ -86,7 +86,7 @@ $top_received = $pdo->prepare("
 $top_received->execute([$start, $end]);
 $top_received_items = $top_received->fetchAll();
 
-// 5. TOP ISSUED ITEMS (Based on reception issuing activities)
+// 5. TOP ISSUED ITEMS
 $top_issued = $pdo->prepare("
     SELECT 
         i.item_name,
@@ -104,7 +104,7 @@ $top_issued = $pdo->prepare("
 $top_issued->execute([$start, $end]);
 $top_issued_items = $top_issued->fetchAll();
 
-// 6. RECEPTION STAFF PERFORMANCE - FIXED
+// 6. RECEPTION STAFF PERFORMANCE
 $staff_performance = $pdo->prepare("
     SELECT 
         u.full_name,
@@ -122,14 +122,14 @@ $staff_performance = $pdo->prepare("
 $staff_performance->execute([$start, $end, $start, $end]);
 $staff_data = $staff_performance->fetchAll();
 
-// Sort in PHP instead of SQL to avoid alias issues
+// Sort in PHP
 usort($staff_data, function($a, $b) {
     $total_a = $a['receive_transactions'] + $a['issue_transactions'];
     $total_b = $b['receive_transactions'] + $b['issue_transactions'];
     return $total_b - $total_a;
 });
 
-// 7. DAILY ACTIVITY TREND (Based on reception daily transactions) - FIXED
+// 7. DAILY ACTIVITY TREND
 $daily_trend = $pdo->prepare("
     SELECT 
         DATE(created_at) as date,
@@ -149,7 +149,7 @@ $daily_trend = $pdo->prepare("
 $daily_trend->execute([$start, $end, $start, $end]);
 $daily_activity = $daily_trend->fetchAll();
 
-// 8. SUPPLIER ACTIVITY (Based on reception receiving from suppliers)
+// 8. SUPPLIER ACTIVITY
 $supplier_activity = $pdo->prepare("
     SELECT 
         supplier,
@@ -165,7 +165,7 @@ $supplier_activity = $pdo->prepare("
 $supplier_activity->execute([$start, $end]);
 $top_suppliers = $supplier_activity->fetchAll();
 
-// 9. RECENT TRANSACTIONS (Actual reception transactions)
+// 9. RECENT TRANSACTIONS
 $recent_transactions = $pdo->prepare("
     (SELECT 
         'Receive' as type,
@@ -215,7 +215,7 @@ $low_stock_items = $pdo->query("
         i.current_quantity ASC
 ")->fetchAll();
 
-// 11. If specific category selected, get category-specific reception activity
+// 11. If specific category selected, get category-specific data
 if ($selected_category_id > 0 && $selected_category) {
     // Items in this category
     $category_items = $pdo->prepare("
@@ -255,11 +255,17 @@ if ($selected_category_id > 0 && $selected_category) {
         LEFT JOIN stock_issuing si ON i.id = si.item_id AND DATE(si.created_at) BETWEEN ? AND ?
         WHERE i.category_id = ?
         GROUP BY i.id, i.item_name, i.current_quantity, i.reorder_level, i.unit_price
-        ORDER BY (received_period + issued_period) DESC
-        LIMIT 10
     ");
     $category_top_items->execute([$start, $end, $start, $end, $selected_category_id]);
     $top_items_category = $category_top_items->fetchAll();
+    
+    // Sort in PHP to avoid alias reference
+    usort($top_items_category, function($a, $b) {
+        $total_a = $a['received_period'] + $a['issued_period'];
+        $total_b = $b['received_period'] + $b['issued_period'];
+        return $total_b - $total_a;
+    });
+    $top_items_category = array_slice($top_items_category, 0, 10);
     
     // Recent transactions in this category
     $category_transactions = $pdo->prepare("
@@ -300,10 +306,6 @@ include __DIR__ . '/../includes/header.php';
 
 <style>
 /* Reports Page Styles */
-.reports-header {
-    margin-bottom: 30px;
-}
-
 .filter-card {
     background: var(--surface);
     border-radius: var(--radius);
@@ -314,7 +316,7 @@ include __DIR__ . '/../includes/header.php';
 
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 20px;
     margin-bottom: 30px;
 }
@@ -380,19 +382,11 @@ include __DIR__ . '/../includes/header.php';
     font-weight: 500;
     background: #e6f7ff;
     color: #0050b3;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.category-pill:hover {
-    transform: scale(1.05);
-    background: var(--accent);
-    color: white;
 }
 
 .category-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 20px;
     margin-bottom: 30px;
 }
@@ -523,13 +517,27 @@ td {
     font-size: 0.85rem;
     color: var(--text2);
 }
+
+.action-buttons {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+}
 </style>
 
 <h1>Manager Reports</h1>
 
+<!-- Action Buttons with Category Reports Link -->
+<div class="action-buttons">
+    <a href="view_category_reports.php" class="btn btn-info">📋 Category Monthly Reports</a>
+    <a href="reports.php" class="btn btn-primary">Standard Reports</a>
+    <a href="monthly_closing.php" class="btn btn-warning">📅 Monthly Closing</a>
+</div>
+
 <!-- Info Note -->
 <div class="info-note">
-    <strong>Report Source:</strong> All data in this report is based on actual transactions performed by reception staff. This includes stock receiving, stock issuing, and procurement requests.
+    <strong>Report Source:</strong> All data in this report is based on actual transactions performed by reception staff.
 </div>
 
 <!-- Date Filter Card -->
@@ -553,9 +561,7 @@ td {
 </div>
 
 <?php if ($selected_category_id > 0 && $selected_category): ?>
-<!-- ============================================ -->
-<!-- CATEGORY-SPECIFIC REPORT (Based on Reception Activity) -->
-<!-- ============================================ -->
+<!-- Category Specific Report -->
 <div>
     <a href="reports.php?start_date=<?php echo $start; ?>&end_date=<?php echo $end; ?>" class="back-button">← Back to All Categories</a>
     
@@ -588,11 +594,11 @@ td {
         </div>
     </div>
     
-    <!-- Category Items Table -->
+    <!-- Items Table -->
     <div class="card">
         <h3 class="section-title">Items in <?php echo htmlspecialchars($selected_category['name']); ?></h3>
         <div class="table-container">
-            <table>
+             <table>
                 <thead>
                     <tr>
                         <th>Item Name</th>
@@ -627,12 +633,12 @@ td {
         </div>
     </div>
     
-    <!-- Top Moving Items in Category -->
+    <!-- Top Moving Items -->
     <?php if (count($top_items_category) > 0): ?>
     <div class="card">
-        <h3 class="section-title">Top Moving Items in <?php echo htmlspecialchars($selected_category['name']); ?> (Based on Reception Activity)</h3>
+        <h3 class="section-title">Top Moving Items in <?php echo htmlspecialchars($selected_category['name']); ?></h3>
         <div class="table-container">
-            <table>
+             <table>
                 <thead>
                     <tr>
                         <th>Item Name</th>
@@ -662,12 +668,12 @@ td {
     </div>
     <?php endif; ?>
     
-    <!-- Recent Transactions in Category -->
+    <!-- Recent Transactions -->
     <?php if (isset($transactions_category) && count($transactions_category) > 0): ?>
     <div class="card">
-        <h3 class="section-title">Recent Transactions in <?php echo htmlspecialchars($selected_category['name']); ?> (Performed by Reception)</h3>
+        <h3 class="section-title">Recent Transactions in <?php echo htmlspecialchars($selected_category['name']); ?></h3>
         <div class="table-container">
-            <table>
+             <table>
                 <thead>
                     <tr>
                         <th>Date & Time</th>
@@ -701,62 +707,54 @@ td {
 </div>
 
 <?php else: ?>
-<!-- ============================================ -->
-<!-- MAIN REPORTS VIEW - Based on Reception Activity -->
-<!-- ============================================ -->
+<!-- Main Reports View -->
 <div>
-    <!-- 1. CURRENT INVENTORY STATUS -->
+    <!-- Overall Summary -->
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-value"><?php echo number_format($inventory_status['total_items'] ?? 0); ?></div>
             <div class="stat-label">Total Items</div>
-            <div class="stat-sub">In inventory</div>
         </div>
         <div class="stat-card">
             <div class="stat-value"><?php echo number_format($inventory_status['total_stock_units'] ?? 0); ?></div>
             <div class="stat-label">Total Stock Units</div>
-            <div class="stat-sub">Across all items</div>
         </div>
         <div class="stat-card high-value">
             <div class="stat-value">K<?php echo number_format($inventory_status['total_inventory_value'] ?? 0, 2); ?></div>
             <div class="stat-label">Total Inventory Value</div>
-            <div class="stat-sub">Current value</div>
         </div>
         <div class="stat-card low-stock">
             <div class="stat-value"><?php echo $inventory_status['low_stock_items'] ?? 0; ?></div>
             <div class="stat-label">Low Stock Items</div>
-            <div class="stat-sub"><?php echo $inventory_status['out_of_stock_items'] ?? 0; ?> out of stock</div>
         </div>
     </div>
     
-    <!-- 2. RECEPTION ACTIVITY SUMMARY -->
+    <!-- Reception Activity Summary -->
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-value"><?php echo $activity['total_receive_transactions'] ?? 0; ?></div>
             <div class="stat-label">Receiving Transactions</div>
-            <div class="stat-sub"><?php echo $activity['total_units_received'] ?? 0; ?> units received</div>
+            <div class="stat-sub"><?php echo $activity['total_units_received'] ?? 0; ?> units</div>
         </div>
         <div class="stat-card">
             <div class="stat-value"><?php echo $activity['total_issue_transactions'] ?? 0; ?></div>
             <div class="stat-label">Issuing Transactions</div>
-            <div class="stat-sub"><?php echo $activity['total_units_issued'] ?? 0; ?> units issued</div>
+            <div class="stat-sub"><?php echo $activity['total_units_issued'] ?? 0; ?> units</div>
         </div>
         <div class="stat-card">
             <div class="stat-value"><?php echo ($activity['total_units_received'] ?? 0) - ($activity['total_units_issued'] ?? 0); ?></div>
-            <div class="stat-label">Net Stock Movement</div>
+            <div class="stat-label">Net Movement</div>
             <div class="stat-sub"><?php echo date('d/m/Y', strtotime($start));?> - <?php echo date('d/m/Y', strtotime($end));?></div>
         </div>
         <div class="stat-card">
             <div class="stat-value"><?php echo ($activity['active_receiving_staff'] ?? 0) + ($activity['active_issuing_staff'] ?? 0); ?></div>
-            <div class="stat-label">Active Reception Staff</div>
-            <div class="stat-sub">Performed transactions</div>
+            <div class="stat-label">Active Staff</div>
         </div>
     </div>
     
-    <!-- 3. CATEGORY PERFORMANCE CARDS -->
+    <!-- Category Cards -->
     <div class="card">
-        <h3 class="section-title">Category Performance Overview</h3>
-        <p style="color: var(--muted); margin-bottom: 20px;">Click on any category to view detailed transaction report</p>
+        <h3 class="section-title">Category Performance</h3>
         <div class="category-grid">
             <?php foreach ($categories_data as $cat): ?>
             <?php 
@@ -784,26 +782,25 @@ td {
                         <span>Value</span>
                     </div>
                 </div>
-                <div style="margin-top: 10px; font-size: 0.75rem;">
-                    <span>Received: <?php echo $cat['units_received_period']; ?> units</span><br>
-                    <span>Issued: <?php echo $cat['units_issued_period']; ?> units</span>
-                </div>
                 <div style="margin-top: 10px;">
                     <?php if ($cat['low_stock_count'] > 0): ?>
-                        <span style="color: var(--danger);">⚠️ <?php echo $cat['low_stock_count']; ?> low stock items</span>
+                        <span style="color: var(--danger);">⚠️ <?php echo $cat['low_stock_count']; ?> low stock</span>
                     <?php else: ?>
-                        <span style="color: var(--success);">✓ All items healthy</span>
+                        <span style="color: var(--success);">✓ All healthy</span>
                     <?php endif; ?>
+                </div>
+                <div style="margin-top: 8px; font-size: 0.7rem; color: var(--muted);">
+                    📥 Received: <?php echo $cat['units_received_period']; ?> | 📤 Issued: <?php echo $cat['units_issued_period']; ?>
                 </div>
             </div>
             <?php endforeach; ?>
         </div>
     </div>
     
-    <!-- 4. TOP RECEIVED ITEMS -->
+    <!-- Top Received Items -->
     <?php if (count($top_received_items) > 0): ?>
     <div class="card">
-        <h3 class="section-title">Most Received Items (Reception Activity)</h3>
+        <h3 class="section-title">Most Received Items</h3>
         <div class="table-container">
             <table>
                 <thead>
@@ -819,10 +816,10 @@ td {
                     <?php foreach ($top_received_items as $item): ?>
                     <tr>
                         <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
-                        <td><span class="cat-pill <?php echo catClass($item['category']); ?>"><?php echo htmlspecialchars($item['category']); ?></span></td>
+                        <td><span class="category-pill"><?php echo htmlspecialchars($item['category']); ?></span></td>
                         <td><strong><?php echo $item['total_received']; ?></strong> units</td>
                         <td><?php echo $item['receive_count']; ?> transactions</td>
-                        <td style="max-width: 200px; white-space: normal;"><?php echo htmlspecialchars($item['suppliers']); ?></td>
+                        <td style="max-width:200px;"><?php echo htmlspecialchars($item['suppliers']); ?></td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -831,10 +828,10 @@ td {
     </div>
     <?php endif; ?>
     
-    <!-- 5. TOP ISSUED ITEMS -->
+    <!-- Top Issued Items -->
     <?php if (count($top_issued_items) > 0): ?>
     <div class="card">
-        <h3 class="section-title">Most Issued Items (Reception Activity)</h3>
+        <h3 class="section-title">Most Issued Items</h3>
         <div class="table-container">
             <table>
                 <thead>
@@ -850,7 +847,7 @@ td {
                     <?php foreach ($top_issued_items as $item): ?>
                     <tr>
                         <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
-                        <td><span class="cat-pill <?php echo catClass($item['category']); ?>"><?php echo htmlspecialchars($item['category']); ?></span></td>
+                        <td><span class="category-pill"><?php echo htmlspecialchars($item['category']); ?></span></td>
                         <td><strong><?php echo $item['total_issued']; ?></strong> units</td>
                         <td><?php echo $item['issue_count']; ?> transactions</td>
                         <td><?php echo $item['unique_recipients']; ?> recipients</td>
@@ -862,7 +859,7 @@ td {
     </div>
     <?php endif; ?>
     
-    <!-- 6. RECEPTION STAFF PERFORMANCE -->
+    <!-- Reception Staff Performance -->
     <?php if (count($staff_data) > 0): ?>
     <div class="card">
         <h3 class="section-title">Reception Staff Performance</h3>
@@ -883,37 +880,36 @@ td {
                     <tr>
                         <td style="font-weight:500"><?php echo htmlspecialchars($staff['full_name']); ?></td>
                         <td><?php echo $staff['receive_transactions']; ?></td>
-                        <td><?php echo $staff['units_received']; ?> units</td>
-                        <td><?php echo $staff['issue_transactions']; ?></td>
-                        <td><?php echo $staff['units_issued']; ?> units</td>
-                        <td><strong><?php echo $staff['receive_transactions'] + $staff['issue_transactions']; ?></strong> transactions</td>
-                    </tr>
+                        <td><?php echo $staff['units_received']; ?> units49
+                        <td><?php echo $staff['issue_transactions']; ?>49
+                        <td><?php echo $staff['units_issued']; ?> units49
+                        <td><strong><?php echo $staff['receive_transactions'] + $staff['issue_transactions']; ?></strong> transactions49
+                    40
                     <?php endforeach; ?>
                 </tbody>
-            </table>
+              </>
         </div>
     </div>
     <?php endif; ?>
     
-    <!-- 7. TOP SUPPLIERS -->
+    <!-- Top Suppliers -->
     <?php if (count($top_suppliers) > 0): ?>
     <div class="card">
-        <h3 class="section-title">Top Suppliers (Reception Activity)</h3>
+        <h3 class="section-title">Top Suppliers</h3>
         <div class="table-container">
-            <table>
+            表
                 <thead>
                     <tr>
                         <th>Supplier</th>
                         <th>Receiving Transactions</th>
                         <th>Total Units</th>
                         <th>Unique Items</th>
-                    </tr>
-                </thead>
+                    </thead>
                 <tbody>
                     <?php foreach ($top_suppliers as $supplier): ?>
                     <tr>
-                        <td style="font-weight:500"><?php echo htmlspecialchars($supplier['supplier']); ?></td>
-                        <td><?php echo $supplier['receive_count']; ?></td>
+                        <td style="font-weight:500"><?php echo htmlspecialchars($supplier['supplier']); ?>47
+                        <td><?php echo $supplier['receive_count']; ?>47
                         <td><strong><?php echo $supplier['total_units']; ?></strong> units</td>
                         <td><?php echo $supplier['unique_items']; ?> items</td>
                     </tr>
@@ -924,12 +920,12 @@ td {
     </div>
     <?php endif; ?>
     
-    <!-- 8. DAILY ACTIVITY TREND -->
+    <!-- Daily Activity Trend -->
     <?php if (count($daily_activity) > 0): ?>
     <div class="card">
         <h3 class="section-title">Daily Activity Trend (Last 30 Days)</h3>
         <div class="table-container">
-            <table>
+            表
                 <thead>
                     <tr>
                         <th>Date</th>
@@ -957,12 +953,12 @@ td {
     </div>
     <?php endif; ?>
     
-    <!-- 9. RECENT TRANSACTIONS -->
+    <!-- Recent Transactions -->
     <?php if (count($transactions) > 0): ?>
     <div class="card">
-        <h3 class="section-title">Recent Transactions (Performed by Reception Staff)</h3>
+        <h3 class="section-title">Recent Transactions</h3>
         <div class="table-container">
-            <table>
+            表
                 <thead>
                     <tr>
                         <th>Date & Time</th>
@@ -984,7 +980,7 @@ td {
                             </span>
                         </td>
                         <td style="font-weight:500"><?php echo htmlspecialchars($t['item_name']); ?></td>
-                        <td><span class="cat-pill <?php echo catClass($t['category']); ?>"><?php echo htmlspecialchars($t['category']); ?></span></td>
+                        <td><span class="category-pill"><?php echo htmlspecialchars($t['category']); ?></span></td>
                         <td><strong><?php echo $t['quantity']; ?></strong></td>
                         <td><?php echo htmlspecialchars($t['counterparty'] ?? '—'); ?></td>
                         <td><?php echo htmlspecialchars($t['staff_name']); ?></td>
@@ -996,13 +992,13 @@ td {
     </div>
     <?php endif; ?>
     
-    <!-- 10. LOW STOCK ITEMS -->
+    <!-- Low Stock Items -->
     <div class="card">
         <h3 class="section-title">Items Requiring Attention (Low Stock)</h3>
         
         <?php if (count($low_stock_items) > 0): ?>
         <div class="table-container">
-            <table>
+            表
                 <thead>
                     <tr>
                         <th>Item Name</th>
@@ -1017,7 +1013,7 @@ td {
                     <?php foreach ($low_stock_items as $item): ?>
                     <tr>
                         <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
-                        <td><span class="cat-pill <?php echo catClass($item['category']??'Other'); ?>"><?php echo htmlspecialchars($item['category']??'Other'); ?></span></td>
+                        <td><span class="category-pill"><?php echo htmlspecialchars($item['category']??'Other'); ?></span></td>
                         <td><?php echo $item['current_quantity']; ?></td>
                         <td><?php echo $item['reorder_level']; ?></td>
                         <td>
@@ -1041,7 +1037,7 @@ td {
         <?php else: ?>
         <div style="text-align:center; padding:40px; color:var(--muted);">
             <div style="font-size: 2rem; margin-bottom: 10px;">✓</div>
-            <p>All items are above their reorder levels. Good job, reception team!</p>
+            <p>All items are above their reorder levels. Good job!</p>
         </div>
         <?php endif; ?>
     </div>
@@ -1054,7 +1050,7 @@ td {
 </div>
 
 <script>
-// Auto-hide alerts after 5 seconds
+// Auto-hide alerts
 setTimeout(function() {
     var alerts = document.querySelectorAll('.alert');
     alerts.forEach(function(alert) {
