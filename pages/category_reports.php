@@ -17,6 +17,7 @@ $category_data = null;
 $items_in_category = [];
 $receiving_data = [];
 $issuing_data = [];
+$opening_stock_data = [];
 
 // Check if report already submitted for this month and category
 $existing_report = null;
@@ -27,6 +28,14 @@ if ($selected_category_id > 0) {
     ");
     $report_check->execute([$selected_category_id, $selected_month]);
     $existing_report = $report_check->fetch();
+    
+    // If report exists, load opening stock data
+    if ($existing_report) {
+        $existing_items = json_decode($existing_report['items_data'], true);
+        foreach ($existing_items as $item) {
+            $opening_stock_data[$item['item_name']] = $item['opening_stock'];
+        }
+    }
 }
 
 if ($selected_category_id > 0) {
@@ -97,15 +106,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_report'])) {
     $report_month = $_POST['report_month'];
     $notes = trim($_POST['notes']);
     
-    // Get items data for this category
+    // Get items data with opening stock from form
     $items_data = [];
     foreach ($items_in_category as $item) {
+        $opening_key = 'opening_' . $item['id'];
+        $opening_stock = isset($_POST[$opening_key]) ? (int)$_POST[$opening_key] : 0;
+        $closing_stock = $item['current_quantity'];
+        
         $items_data[] = [
             'item_name' => $item['item_name'],
-            'opening_stock' => 0,
-            'closing_stock' => $item['current_quantity'],
+            'opening_stock' => $opening_stock,
+            'closing_stock' => $closing_stock,
             'reorder_level' => $item['reorder_level'],
-            'status' => $item['current_quantity'] <= $item['reorder_level'] ? 'Low Stock' : 'OK'
+            'status' => $closing_stock <= $item['reorder_level'] ? 'Low Stock' : 'OK'
         ];
     }
     
@@ -220,14 +233,6 @@ include __DIR__ . '/../includes/header.php';
     margin-top: 5px;
 }
 
-.stat-card.low-stock .stat-value {
-    color: var(--danger);
-}
-
-.stat-card.success .stat-value {
-    color: var(--success);
-}
-
 .section-title {
     font-size: 1rem;
     font-weight: 600;
@@ -290,13 +295,13 @@ include __DIR__ . '/../includes/header.php';
     margin-bottom: 20px;
 }
 
-.items-table {
+.report-table {
     width: 100%;
     border-collapse: collapse;
     background: var(--surface);
 }
 
-.items-table th {
+.report-table th {
     text-align: left;
     padding: 12px 15px;
     background: #f9fafb;
@@ -305,9 +310,17 @@ include __DIR__ . '/../includes/header.php';
     font-size: 0.85rem;
 }
 
-.items-table td {
+.report-table td {
     padding: 10px 15px;
     border-bottom: 1px solid var(--border);
+}
+
+.report-table input {
+    width: 100px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.85rem;
 }
 
 .status-badge {
@@ -429,13 +442,22 @@ include __DIR__ . '/../includes/header.php';
     margin-bottom: 20px;
     border: 1px solid var(--border);
 }
+
+.instruction-text {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 15px;
+    padding: 8px 12px;
+    background: #f9fafb;
+    border-radius: 5px;
+}
 </style>
 
 <h1>Category Reports</h1>
 
 <!-- Info Note -->
 <div class="info-note">
-    <strong>Monthly Report Submission:</strong> Review the stock levels below and click "Submit Report" to send this month's report to the manager.
+    <strong>Monthly Report Submission:</strong> Enter the Opening Stock for each item (stock at the beginning of the month). The Closing Stock (current stock) will be automatically populated. Click "Submit Report" to send to the manager.
 </div>
 
 <!-- Month Selector -->
@@ -505,130 +527,146 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<!-- Items Table -->
-<div class="card">
-    <h3 class="section-title">Items in <?php echo htmlspecialchars($category_data['name']); ?></h3>
-    <div class="table-container">
-        <table class="items-table">
-            <thead>
-                <tr>
-                    <th>Item Name</th>
-                    <th>Current Stock</th>
-                    <th>Reorder Level</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php 
-                $low_stock_count = 0;
-                foreach ($items_in_category as $item): 
-                    $is_low_stock = $item['current_quantity'] <= $item['reorder_level'];
-                    if ($is_low_stock) $low_stock_count++;
-                ?>
-                <tr>
-                    <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
-                    <td><?php echo $item['current_quantity']; ?></td>
-                    <td><?php echo $item['reorder_level']; ?></td>
-                    <td>
-                        <?php if ($item['current_quantity'] == 0): ?>
-                            <span class="status-badge status-critical">Out of Stock</span>
-                        <?php elseif ($is_low_stock): ?>
-                            <span class="status-badge status-low">Low Stock</span>
-                        <?php else: ?>
-                            <span class="status-badge status-ok">OK</span>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-            <tfoot style="background: #f9fafb; font-weight: bold;">
-                <tr>
-                    <td colspan="3" style="text-align: right;">Low Stock Items:</td>
-                    <td style="color: <?php echo $low_stock_count > 0 ? 'var(--danger)' : 'var(--success)'; ?>">
-                        <?php echo $low_stock_count; ?> item<?php echo $low_stock_count != 1 ? 's' : ''; ?>
-                    </td>
-                </tr>
-            </tfoot>
-        </table>
-    </div>
-</div>
-
-<!-- Activity Table -->
-<div class="card">
-    <h3 class="section-title">Recent Activity (<?php echo date('d/m/Y', strtotime($start_date));?> - <?php echo date('d/m/Y', strtotime($end_date));?>)</h3>
-    <?php if (!empty($transactions)): ?>
-    <div class="table-container">
-        <table class="items-table">
-            <thead>
-                <tr>
-                    <th>Date & Time</th>
-                    <th>Type</th>
-                    <th>Item</th>
-                    <th>Quantity</th>
-                    <th>Counterparty</th>
-                    <th>User</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($transactions as $t): ?>
-                <tr>
-                    <td style="white-space:nowrap"><?php echo date('d/m/Y H:i', strtotime($t['created_at'])); ?></td>
-                    <td><span class="status-badge <?php echo $t['type'] == 'Received' ? 'status-ok' : 'status-critical'; ?>"><?php echo $t['type']; ?></span></td>
-                    <td style="font-weight:500"><?php echo htmlspecialchars($t['item_name']); ?></td>
-                    <td><strong><?php echo $t['quantity']; ?></strong></td>
-                    <td><?php echo htmlspecialchars($t['counterparty'] ?? '—'); ?></td>
-                    <td><?php echo htmlspecialchars($t['user_name']); ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-    <?php else: ?>
-    <div class="empty-state">
-        <p>No transactions found for this category in the selected date range.</p>
-    </div>
-    <?php endif; ?>
-</div>
-
-<!-- Quick Stats -->
-<div class="card">
-    <h3 class="section-title">Quick Summary</h3>
-    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
-        <div>
-            <strong>Receiving:</strong><br>
-            <?php echo $receiving_data['transaction_count'] ?? 0; ?> transactions<br>
-            <?php echo $receiving_data['supplier_count'] ?? 0; ?> different suppliers
-        </div>
-        <div>
-            <strong>Issuing:</strong><br>
-            <?php echo $issuing_data['transaction_count'] ?? 0; ?> transactions<br>
-            <?php echo $issuing_data['recipient_count'] ?? 0; ?> different recipients
-        </div>
-        <div>
-            <strong>Inventory Health:</strong><br>
-            <?php 
-            $healthy_count = count($items_in_category) - $low_stock_count;
-            ?>
-            <span style="color: var(--success);"><?php echo $healthy_count; ?></span> items healthy<br>
-            <span style="color: var(--danger);"><?php echo $low_stock_count; ?></span> items low stock
-        </div>
-    </div>
-</div>
-
-<!-- Submit Report Form -->
-<form method="POST" class="notes-section">
+<!-- Report Form with Opening Stock Input -->
+<form method="POST">
     <input type="hidden" name="category_id" value="<?php echo $selected_category_id; ?>">
     <input type="hidden" name="report_month" value="<?php echo $selected_month; ?>">
-    <label><strong>Notes for Manager (Optional):</strong></label>
-    <textarea name="notes" placeholder="Add any notes about this month's stock, issues, or observations..."><?php echo htmlspecialchars($existing_report['notes'] ?? ''); ?></textarea>
     
-    <div class="report-actions">
-        <?php if ($existing_report): ?>
-        <button type="submit" name="submit_report" class="btn-submit btn-update">Update Report</button>
+    <div class="card">
+        <h3 class="section-title">Stock Report for <?php echo htmlspecialchars($category_data['name']); ?> - <?php echo date('F Y', strtotime($selected_month . '-01')); ?></h3>
+        
+        <div class="instruction-text">
+            <strong>Instructions:</strong> Enter the opening stock for each item (stock level at the beginning of the month). The closing stock is automatically shown as the current stock level.
+        </div>
+        
+        <div class="table-container">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Item Name</th>
+                        <th>Opening Stock</th>
+                        <th>Closing Stock</th>
+                        <th>Reorder Level</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php 
+                    $low_stock_count = 0;
+                    foreach ($items_in_category as $item): 
+                        $closing_stock = $item['current_quantity'];
+                        $opening_default = isset($opening_stock_data[$item['item_name']]) ? $opening_stock_data[$item['item_name']] : 0;
+                        $is_low_stock = $closing_stock <= $item['reorder_level'];
+                        if ($is_low_stock) $low_stock_count++;
+                    ?>
+                    <tr>
+                        <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
+                        <td>
+                            <input type="number" name="opening_<?php echo $item['id']; ?>" 
+                                   value="<?php echo $opening_default; ?>" 
+                                   min="0" required>
+                        </td>
+                        <td><strong><?php echo $closing_stock; ?></strong></td>
+                        <td><?php echo $item['reorder_level']; ?></td>
+                        <td>
+                            <?php if ($closing_stock == 0): ?>
+                                <span class="status-badge status-critical">Out of Stock</span>
+                            <?php elseif ($is_low_stock): ?>
+                                <span class="status-badge status-low">Low Stock</span>
+                            <?php else: ?>
+                                <span class="status-badge status-ok">OK</span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+                <tfoot style="background: #f9fafb; font-weight: bold;">
+                    <tr>
+                        <td colspan="4" style="text-align: right;">Low Stock Items:</td>
+                        <td style="color: <?php echo $low_stock_count > 0 ? 'var(--danger)' : 'var(--success)'; ?>">
+                            <?php echo $low_stock_count; ?> item<?php echo $low_stock_count != 1 ? 's' : ''; ?>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Activity Table -->
+    <div class="card">
+        <h3 class="section-title">Recent Activity (<?php echo date('d/m/Y', strtotime($start_date));?> - <?php echo date('d/m/Y', strtotime($end_date));?>)</h3>
+        <?php if (!empty($transactions)): ?>
+        <div class="table-container">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Type</th>
+                        <th>Item</th>
+                        <th>Quantity</th>
+                        <th>Counterparty</th>
+                        <th>User</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($transactions as $t): ?>
+                    <tr>
+                        <td style="white-space:nowrap"><?php echo date('d/m/Y H:i', strtotime($t['created_at'])); ?></td>
+                        <td><span class="status-badge <?php echo $t['type'] == 'Received' ? 'status-ok' : 'status-critical'; ?>"><?php echo $t['type']; ?></span></td>
+                        <td style="font-weight:500"><?php echo htmlspecialchars($t['item_name']); ?></td>
+                        <td><strong><?php echo $t['quantity']; ?></strong></td>
+                        <td><?php echo htmlspecialchars($t['counterparty'] ?? '—'); ?></td>
+                        <td><?php echo htmlspecialchars($t['user_name']); ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
         <?php else: ?>
-        <button type="submit" name="submit_report" class="btn-submit">Submit Report to Manager</button>
+        <div class="empty-state">
+            <p>No transactions found for this category in the selected date range.</p>
+        </div>
         <?php endif; ?>
-        <a href="dashboard.php" class="btn">Cancel</a>
+    </div>
+    
+    <!-- Quick Stats -->
+    <div class="card">
+        <h3 class="section-title">Quick Summary</h3>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+            <div>
+                <strong>Receiving:</strong><br>
+                <?php echo $receiving_data['transaction_count'] ?? 0; ?> transactions<br>
+                <?php echo $receiving_data['supplier_count'] ?? 0; ?> different suppliers
+            </div>
+            <div>
+                <strong>Issuing:</strong><br>
+                <?php echo $issuing_data['transaction_count'] ?? 0; ?> transactions<br>
+                <?php echo $issuing_data['recipient_count'] ?? 0; ?> different recipients
+            </div>
+            <div>
+                <strong>Inventory Health:</strong><br>
+                <?php 
+                $healthy_count = count($items_in_category) - $low_stock_count;
+                ?>
+                <span style="color: var(--success);"><?php echo $healthy_count; ?></span> items healthy<br>
+                <span style="color: var(--danger);"><?php echo $low_stock_count; ?></span> items low stock
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notes Section -->
+    <div class="notes-section">
+        <label><strong>Notes for Manager (Optional):</strong></label>
+        <textarea name="notes" placeholder="Add any notes about this month's stock, issues, or observations..."><?php echo htmlspecialchars($existing_report['notes'] ?? ''); ?></textarea>
+        
+        <div class="report-actions">
+            <?php if ($existing_report): ?>
+            <button type="submit" name="submit_report" class="btn-submit btn-update">Update Report</button>
+            <?php else: ?>
+            <button type="submit" name="submit_report" class="btn-submit">Submit Report to Manager</button>
+            <?php endif; ?>
+            <a href="dashboard.php" class="btn">Cancel</a>
+        </div>
     </div>
 </form>
 
