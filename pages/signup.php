@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
                 $pdo->prepare("INSERT INTO users (full_name, username, password, role) VALUES (?, ?, ?, ?)")
                     ->execute([$full_name, $username, $hash, $role]);
-                $success = 'Account created! You can now <a href="login.php">log in</a>.';
+                $success = 'Account created. You can now <a href="login.php">sign in</a>.';
             }
         } catch (PDOException $e) {
             $error = 'Registration failed. Please try again.';
@@ -43,16 +43,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Sign Up — Inventory System</title>
+<title>Create Account — Inventory System</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
 <div class="login-wrapper">
-    <div class="login-card">
+    <div class="login-card" style="max-width: 400px;">
         <div class="login-brand">
-            <div class="logo-icon">&#9632;</div>
+            <div class="logo-icon">INV</div>
             <div>
                 <h2>Create Account</h2>
                 <div class="sub">Inventory Management System</div>
@@ -69,13 +69,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <form method="POST" novalidate>
             <div class="form-group">
                 <label for="full_name">Full Name</label>
-                <input type="text" id="full_name" name="full_name" required placeholder="Enter your full name"
+                <input type="text" id="full_name" name="full_name" required placeholder="Your full name"
                        value="<?php echo htmlspecialchars($_POST['full_name'] ?? ''); ?>">
             </div>
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" id="username" name="username" required placeholder="Choose a username"
-                       value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>">
+                       value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>" autocomplete="username">
             </div>
             <div class="form-group">
                 <label for="role">Role</label>
@@ -86,14 +86,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" required placeholder="Min. 8 characters">
+                <input type="password" id="password" name="password" required placeholder="Min. 8 characters" autocomplete="new-password">
             </div>
             <div class="form-group">
                 <label for="confirm_password">Confirm Password</label>
-                <input type="password" id="confirm_password" name="confirm_password" required placeholder="Repeat password">
+                <input type="password" id="confirm_password" name="confirm_password" required placeholder="Repeat password" autocomplete="new-password">
             </div>
-            <button type="submit" class="btn btn-success login-submit">Create Account</button>
+            <button type="submit" class="btn btn-primary login-submit">Create Account</button>
         </form>
+
         <div class="login-alt">
             Already have an account? <a href="login.php">Sign in</a>
         </div>

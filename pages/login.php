@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 
-// Redirect already-logged-in users
 if (isset($_SESSION['user_id'])) {
     header($_SESSION['role'] === 'manager' ? 'Location: manager_dashboard.php' : 'Location: dashboard.php');
     exit();
@@ -19,11 +18,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$username]);
             $user = $stmt->fetch();
 
-            // Support both password_hash (bcrypt) and legacy md5
             $valid = false;
             if ($user) {
                 if (strlen($user['password']) === 32) {
-                    // Legacy MD5 — migrate on first login
                     $valid = ($user['password'] === md5($password));
                     if ($valid) {
                         $hash = password_hash($password, PASSWORD_DEFAULT);
@@ -62,16 +59,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Login — Inventory System</title>
+<title>Sign In — Inventory System</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
 <div class="login-wrapper">
     <div class="login-card">
         <div class="login-brand">
-            <div class="logo-icon">&#9632;</div>
+            <div class="logo-icon">INV</div>
             <div>
                 <h2>InvMS</h2>
                 <div class="sub">Inventory Management System</div>
@@ -86,21 +83,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" id="username" name="username" required placeholder="Enter username"
-                       value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>">
+                       value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>" autocomplete="username">
             </div>
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" required placeholder="Enter password">
+                <input type="password" id="password" name="password" required placeholder="Enter password" autocomplete="current-password">
             </div>
             <button type="submit" class="btn btn-primary login-submit">Sign In</button>
         </form>
 
-        <div class="login-alt">
-            Don't have an account? <a href="signup.php">Sign up here</a>
+        <div class="login-alt" style="margin-top: 14px;">
+            Don't have an account? <a href="signup.php">Create one</a>
         </div>
 
+        <hr class="login-divider">
+
         <div class="demo-box">
-            <strong>Demo Credentials</strong><br>
+            <strong>Demo credentials</strong><br>
             Manager: <code>manager</code> / <code>password123</code><br>
             Front Desk: <code>frontdesk</code> / <code>password123</code>
         </div>
