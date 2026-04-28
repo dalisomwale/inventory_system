@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../config/database.php';
 redirectIfNotLoggedIn();
 if (!isManager()) { header('Location: dashboard.php'); exit(); }
 
@@ -8,82 +8,84 @@ $pending_count   = $pdo->query("SELECT COUNT(*) FROM procurement WHERE status='p
 $low_stock_count = $pdo->query("SELECT COUNT(*) FROM items WHERE current_quantity <= reorder_level")->fetchColumn();
 $total_items     = $pdo->query("SELECT COUNT(*) FROM items")->fetchColumn();
 
+// SQLite compatible query - use strftime instead of DATE_FORMAT
 $report_status = $pdo->prepare("
     SELECT c.id, c.name,
            CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END as submitted,
-           r.submitted_at, r.total_value
+           r.submitted_at
     FROM categories c
-    LEFT JOIN category_monthly_reports r ON c.id = r.category_id AND DATE_FORMAT(r.report_month, '%Y-%m') = ?
+    LEFT JOIN category_monthly_reports r ON c.id = r.category_id AND strftime('%Y-%m', r.report_month) = ?
     ORDER BY c.name
 ");
 $report_status->execute([$current_month]);
 $reports_data    = $report_status->fetchAll();
 $total_cats      = count($reports_data);
-$submitted_count = count(array_filter($reports_data, fn($r) => $r['submitted']));
+$submitted_count = 0;
+foreach ($reports_data as $r) {
+    if ($r['submitted']) $submitted_count++;
+}
 
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
-    <h1>Manager Dashboard</h1>
+    <h1>Inventory Management System - Manager Dashboard</h1>
     <div style="font-size:.78rem; color:var(--muted)"><?php echo date('l, d F Y'); ?></div>
 </div>
 
 <!-- Stats -->
-<div class="dashboard">
-    <div class="card">
-        <div class="stat"><?php echo $total_items; ?></div>
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value"><?php echo $total_items; ?></div>
         <div class="stat-label">Total Items</div>
     </div>
-    <div class="card">
-        <div class="stat" style="color:<?php echo $low_stock_count > 0 ? 'var(--danger)' : 'inherit'; ?>"><?php echo $low_stock_count; ?></div>
+    <div class="stat-card">
+        <div class="stat-value" style="color:<?php echo $low_stock_count > 0 ? '#f59e0b' : 'inherit'; ?>"><?php echo $low_stock_count; ?></div>
         <div class="stat-label">Low Stock Items</div>
     </div>
-    <div class="card">
-        <div class="stat" style="color:<?php echo $pending_count > 0 ? 'var(--warning)' : 'inherit'; ?>"><?php echo $pending_count; ?></div>
+    <div class="stat-card">
+        <div class="stat-value" style="color:<?php echo $pending_count > 0 ? '#f59e0b' : 'inherit'; ?>"><?php echo $pending_count; ?></div>
         <div class="stat-label">Pending Requests</div>
     </div>
-    <div class="card">
-        <div class="stat"><?php echo $submitted_count; ?>/<?php echo $total_cats; ?></div>
+    <div class="stat-card">
+        <div class="stat-value"><?php echo $submitted_count; ?>/<?php echo $total_cats; ?></div>
         <div class="stat-label">Reports Submitted</div>
     </div>
 </div>
 
-<!-- Navigation -->
-<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:22px;">
-    <?php
-    $navItems = [
-        ['manage_items.php',        'Manage Items',      'Add, edit or delete items'],
-        ['view_transactions.php',   'Transactions',      'All stock movements'],
-        ['reports.php',             'Monthly Reports',   'View category reports'],
-        ['procurement.php',         'Procurement',       'Manage requests'],
-        ['adjust_stock.php',        'Adjust Stock',      'Manual stock correction'],
-    ];
-    foreach ($navItems as [$href, $title, $desc]):
-    ?>
-    <a href="<?php echo $href; ?>" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-decoration:none; color:var(--text); transition:border-color .15s, box-shadow .15s;" onmouseover="this.style.borderColor='var(--accent)'; this.style.boxShadow='var(--shadow)';" onmouseout="this.style.borderColor='var(--border)'; this.style.boxShadow='none';">
-        <div style="font-size:.88rem; font-weight:600; margin-bottom:4px;"><?php echo $title; ?></div>
-        <div style="font-size:.72rem; color:var(--muted)"><?php echo $desc; ?></div>
-    </a>
-    <?php endforeach; ?>
-</div>
-
-<!-- Report Submission Progress -->
-<div class="card" style="margin-bottom:16px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-        <h3 style="margin:0">Monthly Reports &mdash; <?php echo date('F Y'); ?></h3>
-        <a href="reports.php" class="btn btn-sm">View All</a>
+<!-- Navigation Cards -->
+<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 24px;">
+    <div class="card">
+        <div class="card-header">
+            <h3>Quick Actions</h3>
+        </div>
+        <div class="card-body">
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <a href="manage_items.php" style="display: inline-block; padding: 10px 16px; background: #2563eb; color: white; text-decoration: none; border-radius: 8px; text-align: center;">Manage Items</a>
+                <a href="procurement.php" style="display: inline-block; padding: 10px 16px; background: #10b981; color: white; text-decoration: none; border-radius: 8px; text-align: center;">View Procurement Requests</a>
+                <a href="reports.php" style="display: inline-block; padding: 10px 16px; background: #0891b2; color: white; text-decoration: none; border-radius: 8px; text-align: center;">View Monthly Reports</a>
+                <a href="adjust_stock.php" style="display: inline-block; padding: 10px 16px; background: #f59e0b; color: white; text-decoration: none; border-radius: 8px; text-align: center;">Adjust Stock</a>
+            </div>
+        </div>
     </div>
-    <div class="progress-track">
-        <div class="progress-fill" style="width:<?php echo $total_cats > 0 ? round(($submitted_count / $total_cats) * 100) : 0; ?>%"></div>
-    </div>
-    <div style="font-size:.74rem; color:var(--muted); margin-bottom:12px"><?php echo $submitted_count; ?> of <?php echo $total_cats; ?> categories submitted</div>
-    <div style="display:flex; flex-wrap:wrap; gap:6px;">
-        <?php foreach ($reports_data as $r): ?>
-        <span style="padding:3px 10px; border-radius:999px; font-size:.72rem; font-weight:500; background:<?php echo $r['submitted'] ? '#f0fdf4' : '#fafafa'; ?>; color:<?php echo $r['submitted'] ? '#166534' : 'var(--muted)'; ?>; border:1px solid <?php echo $r['submitted'] ? '#bbf7d0' : 'var(--border)'; ?>">
-            <?php echo htmlspecialchars($r['name']); ?>
-        </span>
-        <?php endforeach; ?>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3>Report Submission Progress</h3>
+        </div>
+        <div class="card-body">
+            <div style="height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
+                <div style="width: <?php echo $total_cats > 0 ? round(($submitted_count / $total_cats) * 100) : 0; ?>%; height: 100%; background: #10b981;"></div>
+            </div>
+            <div style="font-size:.74rem; color:#64748b; margin: 12px 0"><?php echo $submitted_count; ?> of <?php echo $total_cats; ?> categories submitted</div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                <?php foreach ($reports_data as $r): ?>
+                <span style="padding:3px 10px; border-radius:999px; font-size:.72rem; font-weight:500; background:<?php echo $r['submitted'] ? '#d1fae5' : '#f1f5f9'; ?>; color:<?php echo $r['submitted'] ? '#065f46' : '#64748b'; ?>;">
+                    <?php echo htmlspecialchars($r['name']); ?>
+                </span>
+                <?php endforeach; ?>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -100,25 +102,25 @@ $pending_requests = $pdo->query("
 ")->fetchAll();
 ?>
 <div class="card">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
-        <h3 style="margin:0">Pending Procurement &mdash; <span style="color:var(--warning)"><?php echo $pending_count; ?> request<?php echo $pending_count != 1 ? 's' : ''; ?></span></h3>
-        <a href="procurement.php" class="btn btn-sm">View All</a>
+    <div class="card-header">
+        <h3>Pending Procurement Requests (<?php echo $pending_count; ?>)</h3>
+        <a href="procurement.php" style="padding: 4px 12px; background: #f1f5f9; border-radius: 6px; text-decoration: none; color: #1e293b; font-size: 12px;">View All</a>
     </div>
-    <div class="table-container">
-        <table>
+    <div style="overflow-x: auto;">
+        <table style="width:100%; border-collapse: collapse;">
             <thead>
-                <tr><th>Item</th><th>Qty</th><th>Requested By</th><th>Date</th><th></th></tr>
+                <tr><th style="padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0;">Item</th><th style="padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0;">Qty</th><th style="padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0;">Requested By</th><th style="padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0;">Date</th><th style="padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0;"></th></tr>
             </thead>
             <tbody>
                 <?php foreach ($pending_requests as $req): ?>
                 <tr>
-                    <td style="font-weight:500"><?php echo htmlspecialchars($req['item_name']); ?></td>
-                    <td><?php echo $req['quantity']; ?></td>
-                    <td style="color:var(--muted)"><?php echo htmlspecialchars($req['requester']); ?></td>
-                    <td style="color:var(--muted); font-size:.76rem; white-space:nowrap"><?php echo date('d/m/Y', strtotime($req['created_at'])); ?></td>
-                    <td style="white-space:nowrap">
-                        <a href="procurement.php?action=approve&id=<?php echo $req['id']; ?>" class="btn btn-sm btn-success" onclick="return confirm('Approve this request?')">Approve</a>
-                        <a href="procurement.php?action=reject&id=<?php echo $req['id']; ?>" class="btn btn-sm" onclick="return confirm('Reject this request?')">Reject</a>
+                    <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; font-weight:500"><?php echo htmlspecialchars($req['item_name']); ?></td>
+                    <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;"><?php echo $req['quantity']; ?></td>
+                    <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; color:#64748b"><?php echo htmlspecialchars($req['requester']); ?></td>
+                    <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; color:#64748b; font-size:.76rem"><?php echo date('d/m/Y', strtotime($req['created_at'])); ?></td>
+                    <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; white-space:nowrap">
+                        <a href="procurement.php?action=approve&id=<?php echo $req['id']; ?>" style="padding: 4px 10px; background: #10b981; color: white; text-decoration: none; border-radius: 4px; font-size: 12px; margin-right: 4px;" onclick="return confirm('Approve this request?')">Approve</a>
+                        <a href="procurement.php?action=reject&id=<?php echo $req['id']; ?>" style="padding: 4px 10px; background: #ef4444; color: white; text-decoration: none; border-radius: 4px; font-size: 12px;" onclick="return confirm('Reject this request?')">Reject</a>
                     </td>
                 </tr>
                 <?php endforeach; ?>

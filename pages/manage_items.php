@@ -95,7 +95,7 @@ if (isset($_GET['delete_item'])) {
     $id  = (int)$_GET['delete_item'];
     $rc  = $pdo->prepare("SELECT COUNT(*) FROM stock_receiving WHERE item_id=?"); $rc->execute([$id]);
     $ic  = $pdo->prepare("SELECT COUNT(*) FROM stock_issuing WHERE item_id=?");   $ic->execute([$id]);
-    if ($rc->fetch()['COUNT(*)'] > 0 || $ic->fetch()['COUNT(*)'] > 0) {
+    if ($rc->fetchColumn() > 0 || $ic->fetchColumn() > 0) {
         $error = 'Cannot delete an item with transaction history.';
     } else {
         $pdo->prepare("DELETE FROM items WHERE id=?")->execute([$id]);
@@ -131,100 +131,135 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="page-header">
     <h1>Manage Items</h1>
-    <div style="display:flex; gap:8px;">
-        <button onclick="document.getElementById('categoryModal').style.display='flex'" class="btn btn-sm">Manage Categories</button>
-        <button onclick="document.getElementById('addItemModal').style.display='flex'" class="btn btn-sm btn-primary">Add Item</button>
+    <div style="display: flex; gap: 12px;">
+        <button onclick="document.getElementById('categoryModal').style.display='flex'" class="btn btn-outline btn-sm">
+            🗂️ Manage Categories
+        </button>
+        <button onclick="document.getElementById('addItemModal').style.display='flex'" class="btn btn-primary btn-sm">
+            ➕ Add Item
+        </button>
     </div>
 </div>
 
-<!-- Category filter -->
-<div class="pill-tabs">
-    <a href="manage_items.php" class="pill-tab <?php echo $filter_category==0?'active':''; ?>">All</a>
+<!-- Category Filter Tabs -->
+<div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; padding: 8px 0;">
+    <a href="manage_items.php" class="pill-tab <?php echo $filter_category==0?'active':''; ?>" style="padding: 8px 20px; background: <?php echo $filter_category==0?'#2563eb':'#f1f5f9'; ?>; color: <?php echo $filter_category==0?'white':'#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500;">
+        All
+    </a>
     <?php foreach ($categories as $cat): ?>
-    <a href="?category_id=<?php echo $cat['id']; ?>" class="pill-tab <?php echo $filter_category==$cat['id']?'active':''; ?>">
+    <a href="?category_id=<?php echo $cat['id']; ?>" class="pill-tab <?php echo $filter_category==$cat['id']?'active':''; ?>" style="padding: 8px 20px; background: <?php echo $filter_category==$cat['id']?'#2563eb':'#f1f5f9'; ?>; color: <?php echo $filter_category==$cat['id']?'white':'#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500;">
         <?php echo htmlspecialchars($cat['name']); ?>
     </a>
     <?php endforeach; ?>
 </div>
 
-<?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
-<?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
+<?php if (isset($success)): ?>
+    <div class="alert alert-success"><?php echo $success; ?></div>
+<?php endif; ?>
+<?php if (isset($error)): ?>
+    <div class="alert alert-danger"><?php echo $error; ?></div>
+<?php endif; ?>
 
-<!-- Edit Item inline form -->
+<!-- Edit Item Inline Form -->
 <?php if ($edit_item): ?>
-<div class="card" style="border-left:3px solid var(--warning); margin-bottom:16px;">
-    <div class="form-title">Edit: <?php echo htmlspecialchars($edit_item['item_name']); ?></div>
-    <form method="POST">
-        <input type="hidden" name="item_id" value="<?php echo $edit_item['id']; ?>">
-        <div class="form-row">
-            <div class="form-group">
-                <label>Item Name</label>
-                <input type="text" name="item_name" value="<?php echo htmlspecialchars($edit_item['item_name']); ?>" required>
+<div class="card" style="margin-bottom: 24px; border-left: 4px solid #f59e0b;">
+    <div class="card-header">
+        <h3>✏️ Edit Item: <?php echo htmlspecialchars($edit_item['item_name']); ?></h3>
+    </div>
+    <div class="card-body">
+        <form method="POST">
+            <input type="hidden" name="item_id" value="<?php echo $edit_item['id']; ?>">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="form-group">
+                    <label>Item Name</label>
+                    <input type="text" name="item_name" value="<?php echo htmlspecialchars($edit_item['item_name']); ?>" required>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select name="category_id" required>
+                        <?php foreach ($categories as $cat): ?>
+                        <option value="<?php echo $cat['id']; ?>" <?php echo ($edit_item['category_id']==$cat['id'])?'selected':''; ?>><?php echo htmlspecialchars($cat['name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="form-group">
+                    <label>Unit Price (K)</label>
+                    <input type="number" name="unit_price" step="0.01" min="0" value="<?php echo $edit_item['unit_price']; ?>" required>
+                </div>
+                <div class="form-group">
+                    <label>Reorder Level</label>
+                    <input type="number" name="reorder_level" min="0" value="<?php echo $edit_item['reorder_level']; ?>" required>
+                </div>
             </div>
             <div class="form-group">
-                <label>Category</label>
-                <select name="category_id" required>
-                    <?php foreach ($categories as $cat): ?>
-                    <option value="<?php echo $cat['id']; ?>" <?php echo ($edit_item['category_id']==$cat['id'])?'selected':''; ?>><?php echo htmlspecialchars($cat['name']); ?></option>
-                    <?php endforeach; ?>
-                </select>
+                <label>Description</label>
+                <textarea name="description" rows="2"><?php echo htmlspecialchars($edit_item['description']??''); ?></textarea>
             </div>
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label>Unit Price (K)</label>
-                <input type="number" name="unit_price" step="0.01" min="0" value="<?php echo $edit_item['unit_price']; ?>" required>
+            <div style="display: flex; gap: 12px; margin-top: 20px;">
+                <button type="submit" name="edit_item" class="btn btn-warning">💾 Update Item</button>
+                <a href="manage_items.php<?php echo $filter_category?'?category_id='.$filter_category:''; ?>" class="btn btn-outline">Cancel</a>
             </div>
-            <div class="form-group">
-                <label>Reorder Level</label>
-                <input type="number" name="reorder_level" min="0" value="<?php echo $edit_item['reorder_level']; ?>" required>
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Description</label>
-            <textarea name="description" rows="2"><?php echo htmlspecialchars($edit_item['description']??''); ?></textarea>
-        </div>
-        <div class="form-actions">
-            <button type="submit" name="edit_item" class="btn btn-warning">Update Item</button>
-            <a href="manage_items.php<?php echo $filter_category?'?category_id='.$filter_category:''; ?>" class="btn">Cancel</a>
-        </div>
-    </form>
+        </form>
+    </div>
 </div>
 <?php endif; ?>
 
-<!-- Items table -->
+<!-- Items Table -->
 <div class="card">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
-        <h3 style="margin:0">Items <span style="font-weight:400; color:var(--muted)">(<?php echo count($items); ?>)</span></h3>
+    <div class="card-header">
+        <h3>Items <span style="font-weight: 400; color: #94a3b8;">(<?php echo count($items); ?> total)</span></h3>
     </div>
 
     <?php if (count($items) > 0): ?>
     <div class="table-container">
-        <table>
+        <table style="width: 100%;">
             <thead>
-                <tr><th>Item Name</th><th>Category</th><th>Stock</th><th>Price</th><th>Value</th><th>Reorder</th><th>Status</th><th></th></tr>
+                <tr>
+                    <th>Item Name</th>
+                    <th>Category</th>
+                    <th>Stock</th>
+                    <th>Price</th>
+                    <th>Value</th>
+                    <th>Reorder</th>
+                    <th>Status</th>
+                    <th style="text-align: center;">Actions</th>
+                </tr>
             </thead>
             <tbody>
-                <?php foreach ($items as $item): ?>
+                <?php foreach ($items as $item): 
+                    $total_value = $item['current_quantity'] * $item['unit_price'];
+                    $is_low = $item['current_quantity'] <= $item['reorder_level'];
+                    $is_out = $item['current_quantity'] == 0;
+                ?>
                 <tr>
-                    <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
-                    <td><span class="cat-pill"><?php echo htmlspecialchars($item['category']); ?></span></td>
-                    <td><?php echo $item['current_quantity']; ?></td>
-                    <td style="font-family:var(--mono); font-size:.78rem">K<?php echo number_format($item['unit_price'],2); ?></td>
-                    <td style="font-family:var(--mono); font-size:.78rem">K<?php echo number_format($item['current_quantity']*$item['unit_price'],2); ?></td>
-                    <td><?php echo $item['reorder_level']; ?></td>
+                    <td style="font-weight: 500;"><?php echo htmlspecialchars($item['item_name']); ?></td>
                     <td>
-                        <?php if ($item['current_quantity'] <= $item['reorder_level']): ?>
-                            <span class="status-pending">Low</span>
+                        <span style="padding: 4px 12px; background: #f1f5f9; border-radius: 20px; font-size: 12px;">
+                            <?php echo htmlspecialchars($item['category']); ?>
+                        </span>
+                    </td>
+                    <td style="font-weight: 600;"><?php echo $item['current_quantity']; ?> </td>
+                    <td style="font-family: monospace;">K<?php echo number_format($item['unit_price'], 2); ?> </td>
+                    <td style="font-family: monospace;">K<?php echo number_format($total_value, 2); ?> </td>
+                    <td><?php echo $item['reorder_level']; ?> </td>
+                    <td>
+                        <?php if ($is_out): ?>
+                            <span class="status-badge status-out-stock">Out of Stock</span>
+                        <?php elseif ($is_low): ?>
+                            <span class="status-badge status-low-stock">Low Stock</span>
                         <?php else: ?>
-                            <span class="status-receiving">OK</span>
+                            <span class="status-badge status-in-stock">In Stock</span>
                         <?php endif; ?>
                     </td>
-                    <td style="white-space:nowrap">
-                        <a href="?edit_item=<?php echo $item['id']; ?><?php echo $filter_category?'&category_id='.$filter_category:''; ?>" class="btn btn-sm">Edit</a>
-                        <a href="?delete_item=<?php echo $item['id']; ?>" class="btn btn-sm" onclick="return confirm('Delete this item?')">Delete</a>
-                        <a href="receive_stock.php?item=<?php echo $item['id']; ?>" class="btn btn-sm">Receive</a>
-                        <a href="issue_stock.php?item=<?php echo $item['id']; ?>" class="btn btn-sm">Issue</a>
+                    <td>
+                        <div class="action-buttons" style="justify-content: center;">
+                            <a href="?edit_item=<?php echo $item['id']; ?><?php echo $filter_category?'&category_id='.$filter_category:''; ?>" class="btn-icon" style="background: #2563eb; color: white; border: none;">✏️ Edit</a>
+                            <a href="?delete_item=<?php echo $item['id']; ?>" class="btn-icon" style="background: #dc2626; color: white; border: none;" onclick="return confirm('Delete this item? This cannot be undone.')">🗑️ Delete</a>
+                            <a href="receive_stock.php?item=<?php echo $item['id']; ?>" class="btn-icon" style="background: #10b981; color: white; border: none;">📥 Receive</a>
+                            <a href="issue_stock.php?item=<?php echo $item['id']; ?>" class="btn-icon" style="background: #f59e0b; color: white; border: none;">📤 Issue</a>
+                        </div>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -232,7 +267,11 @@ include __DIR__ . '/../includes/header.php';
         </table>
     </div>
     <?php else: ?>
-    <div class="empty-state"><p>No items found. Add items using the button above.</p></div>
+    <div class="card-body" style="text-align: center; padding: 48px; color: #94a3b8;">
+        <div style="font-size: 48px; margin-bottom: 16px;"></div>
+        <p>No items found in this category.</p>
+        <p style="font-size: 13px; margin-top: 8px;">Click "Add Item" to get started.</p>
+    </div>
     <?php endif; ?>
 </div>
 
@@ -243,65 +282,69 @@ include __DIR__ . '/../includes/header.php';
             <h3>Manage Categories</h3>
             <button class="modal-close" onclick="document.getElementById('categoryModal').style.display='none'">&times;</button>
         </div>
-
-        <div class="section-divider">Add Category</div>
-        <form method="POST">
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" name="category_name" required placeholder="Category name">
-                </div>
-                <div class="form-group">
-                    <label>Description</label>
-                    <input type="text" name="category_desc" placeholder="Optional">
+        <div class="modal-body">
+            <div style="margin-bottom: 24px;">
+                <h4 style="margin-bottom: 16px; font-size: 14px;">Add New Category</h4>
+                <form method="POST">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div class="form-group">
+                            <label>Category Name</label>
+                            <input type="text" name="category_name" required placeholder="e.g., Electronics">
+                        </div>
+                        <div class="form-group">
+                            <label>Description (Optional)</label>
+                            <input type="text" name="category_desc" placeholder="Brief description">
+                        </div>
+                    </div>
+                    <button type="submit" name="add_category" class="btn btn-primary btn-sm"> Add Category</button>
+                </form>
+            </div>
+            
+            <div>
+                <h4 style="margin-bottom: 16px; font-size: 14px;">Existing Categories</h4>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <?php foreach ($categories as $cat):
+                        $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM items WHERE category_id=?");
+                        $count_stmt->execute([$cat['id']]);
+                        $count = $count_stmt->fetchColumn();
+                    ?>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #f8fafc; border-radius: 8px;">
+                        <div>
+                            <span style="font-weight: 500;"><?php echo htmlspecialchars($cat['name']); ?></span>
+                            <span style="font-size: 11px; color: #94a3b8; margin-left: 8px;"><?php echo $count; ?> items</span>
+                        </div>
+                        <div style="display: flex; gap: 6px;">
+                            <a href="?edit_category=<?php echo $cat['id']; ?>" class="btn-icon" style="background: #f59e0b; color: white; border: none;">✏️ Edit</a>
+                            <?php if ($count == 0): ?>
+                            <a href="?delete_category=<?php echo $cat['id']; ?>" class="btn-icon" style="background: #dc2626; color: white; border: none;" onclick="return confirm('Delete category?')">🗑️ Delete</a>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
                 </div>
             </div>
-            <button type="submit" name="add_category" class="btn btn-primary btn-sm">Add Category</button>
-        </form>
 
-        <div class="section-divider" style="margin-top:18px">Existing Categories</div>
-        <div>
-            <?php foreach ($categories as $cat): ?>
-            <?php
-            $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM items WHERE category_id=?");
-            $count_stmt->execute([$cat['id']]);
-            $count = $count_stmt->fetchColumn();
-            ?>
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border);">
-                <div>
-                    <span style="font-weight:500; font-size:.84rem"><?php echo htmlspecialchars($cat['name']); ?></span>
-                    <span style="font-size:.72rem; color:var(--muted); margin-left:6px"><?php echo $count; ?> items</span>
-                </div>
-                <div style="display:flex; gap:6px;">
-                    <a href="?edit_category=<?php echo $cat['id']; ?>" class="btn btn-sm">Edit</a>
-                    <?php if ($count == 0): ?>
-                    <a href="?delete_category=<?php echo $cat['id']; ?>" class="btn btn-sm" onclick="return confirm('Delete category?')">Delete</a>
-                    <?php endif; ?>
-                </div>
+            <?php if ($edit_category): ?>
+            <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+                <h4 style="margin-bottom: 16px; font-size: 14px;">Edit Category</h4>
+                <form method="POST">
+                    <input type="hidden" name="category_id" value="<?php echo $edit_category['id']; ?>">
+                    <div class="form-group">
+                        <label>Category Name</label>
+                        <input type="text" name="category_name" value="<?php echo htmlspecialchars($edit_category['name']); ?>" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <input type="text" name="category_desc" value="<?php echo htmlspecialchars($edit_category['description']??''); ?>">
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="submit" name="edit_category" class="btn btn-warning btn-sm">Update</button>
+                        <a href="manage_items.php" class="btn btn-outline btn-sm">Cancel</a>
+                    </div>
+                </form>
             </div>
-            <?php endforeach; ?>
+            <?php endif; ?>
         </div>
-
-        <?php if ($edit_category): ?>
-        <div class="section-divider" style="margin-top:18px">Edit Category</div>
-        <form method="POST">
-            <input type="hidden" name="category_id" value="<?php echo $edit_category['id']; ?>">
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" name="category_name" value="<?php echo htmlspecialchars($edit_category['name']); ?>" required>
-                </div>
-                <div class="form-group">
-                    <label>Description</label>
-                    <input type="text" name="category_desc" value="<?php echo htmlspecialchars($edit_category['description']??''); ?>">
-                </div>
-            </div>
-            <div class="form-actions">
-                <button type="submit" name="edit_category" class="btn btn-warning btn-sm">Update</button>
-                <a href="manage_items.php" class="btn btn-sm">Cancel</a>
-            </div>
-        </form>
-        <?php endif; ?>
     </div>
 </div>
 
@@ -309,56 +352,74 @@ include __DIR__ . '/../includes/header.php';
 <div id="addItemModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>Add New Item</h3>
+            <h3>➕ Add New Item</h3>
             <button class="modal-close" onclick="document.getElementById('addItemModal').style.display='none'">&times;</button>
         </div>
-        <form method="POST">
-            <div class="form-group">
-                <label>Item Name *</label>
-                <input type="text" name="item_name" required placeholder="e.g., A4 Paper Ream">
-            </div>
-            <div class="form-group">
-                <label>Category *</label>
-                <select name="category_id" required>
-                    <option value="">— Select —</option>
-                    <?php foreach ($categories as $cat): ?>
-                    <option value="<?php echo $cat['id']; ?>" <?php echo ($filter_category==$cat['id'])?'selected':''; ?>><?php echo htmlspecialchars($cat['name']); ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-row">
+        <div class="modal-body">
+            <form method="POST">
                 <div class="form-group">
-                    <label>Unit Price (K)</label>
-                    <input type="number" name="unit_price" step="0.01" min="0" required placeholder="0.00">
+                    <label>Item Name *</label>
+                    <input type="text" name="item_name" required placeholder="e.g., A4 Paper Ream">
                 </div>
                 <div class="form-group">
-                    <label>Reorder Level</label>
-                    <input type="number" name="reorder_level" min="0" required value="10">
+                    <label>Category *</label>
+                    <select name="category_id" required>
+                        <option value="">— Select Category —</option>
+                        <?php foreach ($categories as $cat): ?>
+                        <option value="<?php echo $cat['id']; ?>" <?php echo ($filter_category==$cat['id'])?'selected':''; ?>><?php echo htmlspecialchars($cat['name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
-            </div>
-            <div class="form-group">
-                <label>Initial Quantity</label>
-                <input type="number" name="initial_quantity" min="0" value="0">
-                <small>Set to 0 if item has no initial stock</small>
-            </div>
-            <div class="form-group">
-                <label>Description</label>
-                <textarea name="description" rows="2" placeholder="Optional description"></textarea>
-            </div>
-            <div class="form-actions">
-                <button type="submit" name="add_item" class="btn btn-success">Add Item</button>
-                <button type="button" onclick="document.getElementById('addItemModal').style.display='none'" class="btn">Cancel</button>
-            </div>
-        </form>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
+                        <label>Unit Price (K)</label>
+                        <input type="number" name="unit_price" step="0.01" min="0" required placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label>Reorder Level</label>
+                        <input type="number" name="reorder_level" min="0" required value="10">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Initial Quantity</label>
+                    <input type="number" name="initial_quantity" min="0" value="0">
+                    <small>Set to 0 if item has no initial stock</small>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea name="description" rows="2" placeholder="Optional description"></textarea>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button type="submit" name="add_item" class="btn btn-success">Add Item</button>
+                    <button type="button" onclick="document.getElementById('addItemModal').style.display='none'" class="btn btn-outline">Cancel</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
+<style>
+.pill-tab.active {
+    background: #2563eb !important;
+    color: white !important;
+}
+.pill-tab:not(.active):hover {
+    background: #e2e8f0 !important;
+}
+.modal {
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+}
+</style>
+
 <script>
 window.addEventListener('click', function(e) {
-    ['categoryModal','addItemModal'].forEach(function(id) {
-        var m = document.getElementById(id);
-        if (e.target === m) m.style.display = 'none';
-    });
+    if (e.target === document.getElementById('categoryModal')) {
+        document.getElementById('categoryModal').style.display = 'none';
+    }
+    if (e.target === document.getElementById('addItemModal')) {
+        document.getElementById('addItemModal').style.display = 'none';
+    }
 });
 <?php if ($edit_item || $edit_category): ?>
 document.getElementById('categoryModal').style.display = 'flex';
