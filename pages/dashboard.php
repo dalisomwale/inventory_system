@@ -16,7 +16,7 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <div class="stats-grid">
-    <div class="stat-card">       
+    <div class="stat-card">
         <div class="stat-value"><?php echo $total_items; ?></div>
         <div class="stat-label">Total Stock Items</div>
     </div>

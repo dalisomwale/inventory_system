@@ -133,10 +133,10 @@ include __DIR__ . '/../includes/header.php';
     <h1>Manage Items</h1>
     <div style="display: flex; gap: 12px;">
         <button onclick="document.getElementById('categoryModal').style.display='flex'" class="btn btn-outline btn-sm">
-            🗂️ Manage Categories
+            Manage Categories
         </button>
         <button onclick="document.getElementById('addItemModal').style.display='flex'" class="btn btn-primary btn-sm">
-            ➕ Add Item
+            Add Item
         </button>
     </div>
 </div>
@@ -164,7 +164,7 @@ include __DIR__ . '/../includes/header.php';
 <?php if ($edit_item): ?>
 <div class="card" style="margin-bottom: 24px; border-left: 4px solid #f59e0b;">
     <div class="card-header">
-        <h3>✏️ Edit Item: <?php echo htmlspecialchars($edit_item['item_name']); ?></h3>
+        <h3>Edit Item: <?php echo htmlspecialchars($edit_item['item_name']); ?></h3>
     </div>
     <div class="card-body">
         <form method="POST">
@@ -198,7 +198,7 @@ include __DIR__ . '/../includes/header.php';
                 <textarea name="description" rows="2"><?php echo htmlspecialchars($edit_item['description']??''); ?></textarea>
             </div>
             <div style="display: flex; gap: 12px; margin-top: 20px;">
-                <button type="submit" name="edit_item" class="btn btn-warning">💾 Update Item</button>
+                <button type="submit" name="edit_item" class="btn btn-warning">Update Item</button>
                 <a href="manage_items.php<?php echo $filter_category?'?category_id='.$filter_category:''; ?>" class="btn btn-outline">Cancel</a>
             </div>
         </form>
@@ -314,7 +314,7 @@ include __DIR__ . '/../includes/header.php';
                             <span style="font-size: 11px; color: #94a3b8; margin-left: 8px;"><?php echo $count; ?> items</span>
                         </div>
                         <div style="display: flex; gap: 6px;">
-                            <a href="?edit_category=<?php echo $cat['id']; ?>" class="btn-icon" style="background: #f59e0b; color: white; border: none;">✏️ Edit</a>
+                            <a href="?edit_category=<?php echo $cat['id']; ?>" class="btn-icon" style="background: #f59e0b; color: white; border: none;">Edit</a>
                             <?php if ($count == 0): ?>
                             <a href="?delete_category=<?php echo $cat['id']; ?>" class="btn-icon" style="background: #dc2626; color: white; border: none;" onclick="return confirm('Delete category?')">🗑️ Delete</a>
                             <?php endif; ?>
@@ -352,7 +352,7 @@ include __DIR__ . '/../includes/header.php';
 <div id="addItemModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>➕ Add New Item</h3>
+            <h3>Add New Item</h3>
             <button class="modal-close" onclick="document.getElementById('addItemModal').style.display='none'">&times;</button>
         </div>
         <div class="modal-body">

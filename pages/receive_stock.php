@@ -123,10 +123,10 @@ include __DIR__ . '/../includes/header.php';
 <!-- Mode Toggle Buttons -->
 <div style="display: flex; gap: 12px; margin-bottom: 24px;">
     <a href="receive_stock.php?category_id=<?php echo $selected_cat_id; ?>" class="btn <?php echo !$show_new_item ? 'btn-primary' : 'btn-outline'; ?>" style="<?php echo !$show_new_item ? '' : 'border: 1px solid #e2e8f0;'; ?>">
-        📦 Receive Existing Item
+        Receive Existing Item
     </a>
     <a href="receive_stock.php?category_id=<?php echo $selected_cat_id; ?>&new_item=1" class="btn <?php echo $show_new_item ? 'btn-primary' : 'btn-outline'; ?>" style="<?php echo $show_new_item ? '' : 'border: 1px solid #e2e8f0;'; ?>">
-        ➕ Add New Item
+        Add New Item
     </a>
 </div>
 
@@ -193,7 +193,7 @@ include __DIR__ . '/../includes/header.php';
             </div>
             
             <div style="display: flex; gap: 12px; margin-top: 20px;">
-                <button type="submit" class="btn btn-success">➕ Add Item & Receive Stock</button>
+                <button type="submit" class="btn btn-success">Add Item & Receive Stock</button>
                 <a href="receive_stock.php?category_id=<?php echo $selected_cat_id; ?>" class="btn btn-outline">Cancel</a>
             </div>
         </form>
