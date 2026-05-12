@@ -367,7 +367,7 @@ label {
         <div class="left-overlay"></div>
         <div class="wave-bg"></div>
         <div class="left-content">
-            <h1>Welcome Back to<br> <span class="brand-name">Inventory Manament System</span></h1>
+            <h1>Welcome Back to<br> <span class="brand-name">Inventory Management System</span></h1>
             <p class="tagline">Manage your inventory seamlessly with Zambia's most trusted airline.</p>
         </div>
     </div>

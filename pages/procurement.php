@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isFrontDesk()) {
     $success = 'Request submitted.';
 }
 
-// Build query for SQLite
+// Build query for MySQL - use DATE_FORMAT instead of strftime
 $query  = "SELECT p.*, u1.full_name as requester, u2.full_name as approver, c.name as category_name
            FROM procurement p
            LEFT JOIN users u1 ON p.requested_by = u1.id
@@ -51,7 +51,7 @@ $query  = "SELECT p.*, u1.full_name as requester, u2.full_name as approver, c.na
 $params = [];
 if (isFrontDesk()) { $query .= " AND p.requested_by = ?"; $params[] = $_SESSION['user_id']; }
 if ($filter_cat)   { $query .= " AND p.category_id = ?"; $params[] = $filter_cat; }
-if ($filter_month) { $query .= " AND strftime('%Y-%m', p.created_at) = ?"; $params[] = $filter_month; }
+if ($filter_month) { $query .= " AND DATE_FORMAT(p.created_at, '%Y-%m') = ?"; $params[] = $filter_month; }
 $query .= " ORDER BY CASE p.status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 WHEN 'rejected' THEN 3 END, p.created_at DESC";
 
 $requests      = $pdo->prepare($query);
@@ -59,18 +59,16 @@ $requests->execute($params);
 $requests      = $requests->fetchAll();
 $pending_count = isManager() ? $pdo->query("SELECT COUNT(*) FROM procurement WHERE status='pending'")->fetchColumn() : 0;
 
-// Get available months for filter
-$available_months = $pdo->query("SELECT DISTINCT strftime('%Y-%m', created_at) as month FROM procurement ORDER BY month DESC")->fetchAll(PDO::FETCH_COLUMN);
+// Get available months for filter - use DATE_FORMAT for MySQL
+$available_months = $pdo->query("SELECT DISTINCT DATE_FORMAT(created_at, '%Y-%m') as month FROM procurement ORDER BY month DESC")->fetchAll(PDO::FETCH_COLUMN);
 
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
     <h1>Procurement Requests</h1>
-    <?php if (isManager() && $pending_count > 0): ?>
-    <span style="background:#fef3c7; color:#d97706; padding:4px 12px; border-radius:20px;"><?php echo $pending_count; ?> pending</span>
-    <?php endif; ?>
 </div>
+
 
 <!-- Filters -->
 <div class="card" style="margin-bottom:16px;">

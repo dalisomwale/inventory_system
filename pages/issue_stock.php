@@ -79,7 +79,7 @@ include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
-    <h1>Issue Stock</h1>
+    <h1>Issue Out Stock</h1>
     <a href="dashboard.php" class="btn btn-outline btn-sm">← Back to Dashboard</a>
 </div>
 
@@ -122,7 +122,8 @@ include __DIR__ . '/../includes/header.php';
                 </select>
                 <?php if (empty($items) && $selected_cat_id > 0): ?>
                 <small style="display: block; margin-top: 8px; color: #dc2626;">
-                    ⚠️ No items with available stock in this category.
+                    No items with available stock in this category.
+
                 </small>
                 <?php endif; ?>
             </div>
@@ -145,7 +146,7 @@ include __DIR__ . '/../includes/header.php';
                     <?php echo $selected_item['current_quantity']; ?>
                 </div>
                 <?php if ($selected_item['current_quantity'] <= $selected_item['reorder_level']): ?>
-                <div style="font-size: 11px; color: #dc2626; margin-top: 4px;">⚠️ Low Stock Alert</div>
+                <div style="font-size: 11px; color: #dc2626; margin-top: 4px;">Low Stock Alert</div>
                 <?php endif; ?>
             </div>
             <div>
@@ -200,13 +201,13 @@ function updateNewStock() {
     var qty = parseInt(document.getElementById('qty').value) || 0;
     var msg = document.getElementById('newStockMsg');
     if (qty > current) {
-        msg.innerHTML = '⚠️ Cannot issue more than available stock. Maximum: ' + current;
+        msg.innerHTML = 'Cannot issue more than available stock. Maximum: ' + current;
         msg.style.color = '#dc2626';
     } else if (qty > 0) {
         var newStock = current - qty;
         msg.innerHTML = '✓ After issue, remaining stock: <strong>' + newStock + '</strong> units';
         if (newStock <= <?php echo $selected_item['reorder_level']; ?>) {
-            msg.innerHTML += ' ⚠️ This will trigger a low stock alert!';
+            msg.innerHTML += 'This will trigger a low stock alert!';
             msg.style.color = '#f59e0b';
         } else {
             msg.style.color = '#10b981';
