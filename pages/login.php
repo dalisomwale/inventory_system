@@ -10,7 +10,7 @@ if (isset($_SESSION['user_id'])) {
 // Just came from creating an account
 $prefill_email = '';
 if (!empty($_SESSION['signup_done'])) {
-    $welcome       = 'Account created for ' . htmlspecialchars($_SESSION['signup_done']) . '. Sign in with your new password.';
+    $welcome       = 'Account created, please log in.';
     $prefill_email = $_SESSION['signup_email'] ?? '';
     unset($_SESSION['signup_done'], $_SESSION['signup_email']);
 }
