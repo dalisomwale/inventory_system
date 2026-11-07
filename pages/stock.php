@@ -126,8 +126,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="action-tiles">
     <?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive')); ?>
     <?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue')); ?>
-    <?php echo action_tile('adjust_stock.php', 'Adjust stock', 'Correct a stock count', icon('adjust')); ?>
-    <?php echo action_tile('procurement.php', 'Purchase list', 'What needs buying', icon('request')); ?>
+    <?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request')); ?>
 </div>
 
 <!-- Totals; each one is also a quick filter -->
@@ -273,9 +272,8 @@ include __DIR__ . '/../includes/header.php';
                         <?php else: ?>
                         <span class="btn btn-sm" aria-disabled="true" data-tip="Nothing in stock to issue">Issue</span>
                         <?php endif; ?>
-                        <a href="adjust_stock.php?item_id=<?php echo $r['id']; ?>" class="btn btn-sm">Adjust</a>
                         <?php if ($r['state'] !== 'ok'): ?>
-                        <a href="procurement.php?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm" data-tip="Add to the purchase list">Buy</a>
+                        <a href="requisitions.php?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm" data-tip="Raise a requisition to buy more">Requisition</a>
                         <?php endif; ?>
                     </div></td>
                 </tr>

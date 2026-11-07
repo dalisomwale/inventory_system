@@ -139,17 +139,6 @@ function ins_idle_items(PDO $pdo, int $days = 60, int $limit = 6): array {
     return $st->fetchAll();
 }
 
-/** Latest manual stock adjustments, with who made them. */
-function ins_recent_adjustments(PDO $pdo, int $limit = 5): array {
-    return $pdo->query("
-        SELECT a.created_at, a.quantity, a.details, u.full_name, i.item_name
-        FROM audit_trail a
-        LEFT JOIN users u ON u.id = a.user_id
-        LEFT JOIN items i ON i.id = a.item_id
-        WHERE a.action = 'ADJUST_STOCK'
-        ORDER BY a.created_at DESC LIMIT " . (int)$limit)->fetchAll();
-}
-
 /** Days since the oldest pending procurement request was made. */
 function ins_oldest_pending_days(PDO $pdo): ?int {
     $d = $pdo->query("SELECT DATEDIFF(NOW(), MIN(created_at)) FROM procurement WHERE status='pending'")->fetchColumn();
@@ -449,7 +438,6 @@ function icon(string $name): string {
         'report'   => '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="13" y2="18"/>',
         'chart'    => '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
         'box'      => '<path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/>',
-        'adjust'   => '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
         'list'     => '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
     ];
     return $i[$name] ?? '';

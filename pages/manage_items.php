@@ -155,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_item'])) {
         $rc = $pdo->prepare("SELECT COUNT(*) FROM stock_receiving WHERE item_id=?"); $rc->execute([$item['id']]);
         $ic = $pdo->prepare("SELECT COUNT(*) FROM stock_issuing WHERE item_id=?");   $ic->execute([$item['id']]);
         if ($rc->fetchColumn() > 0 || $ic->fetchColumn() > 0) {
-            $v->fail("\"{$item['item_name']}\" has stock history, so it can't be deleted. Adjust its stock to 0 instead.");
+            $v->fail("\"{$item['item_name']}\" has stock history, so it can't be deleted.");
         }
     }
     if ($v->ok()) {

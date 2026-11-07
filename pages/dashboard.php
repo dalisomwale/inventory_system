@@ -35,7 +35,6 @@ $by_category   = ins_value_by_category($pdo);
 $top_issued    = ins_top_issued($pdo, 30, 6);
 $top_users     = ins_top_recipients($pdo, 30, 6);
 $idle          = ins_idle_items($pdo, 60, 6);
-$adjustments   = ins_recent_adjustments($pdo, 5);
 $week_recv     = array_sum(array_column($weekly, 'received'));
 $week_issued   = array_sum(array_column($weekly, 'issued'));
 $idle_value    = array_sum(array_column($idle, 'value'));
@@ -89,7 +88,7 @@ include __DIR__ . '/../includes/header.php';
         </div>
     </div>
     <div class="kpi">
-        <div class="kpi-label">Purchase list</div>
+        <div class="kpi-label">Requisitions</div>
         <div class="kpi-value <?php echo $to_order ? 'is-warn' : ''; ?>"><?php echo $to_order; ?> <span class="kpi-unit">to order</span></div>
         <div class="kpi-note"><?php echo $on_order; ?> on order &middot; today <?php echo number_format($today['received']); ?> received, <?php echo number_format($today['issued']); ?> issued</div>
     </div>
@@ -100,7 +99,7 @@ include __DIR__ . '/../includes/header.php';
     <?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive')); ?>
     <?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue')); ?>
     <?php echo action_tile('stock.php', 'Manage stock', 'All items and levels', icon('box')); ?>
-    <?php echo action_tile('procurement.php', 'Purchase list', 'What needs buying', icon('request'), $to_order ? $to_order . ' to order' : ''); ?>
+    <?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), $to_order ? $to_order . ' to order' : ''); ?>
     <?php echo action_tile('reports.php', 'Monthly reports', $submitted_count . ' of ' . $total_cats . ' submitted', icon('report')); ?>
 </div>
 
@@ -188,7 +187,7 @@ include __DIR__ . '/../includes/header.php';
                     <td><span class="<?php echo $urgent ? 'status-issuing' : 'status-pending'; ?>"><?php echo $urgent ? '&#9888; ' : ''; ?><?php echo days_left_label($r['days_left'], (int)$r['current_quantity']); ?></span></td>
                     <td class="num"><strong><?php echo number_format($r['suggest']); ?></strong></td>
                     <td><div class="row-actions">
-                        <a href="procurement.php?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm">Add to purchase list</a>
+                        <a href="requisitions.php?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm">Raise requisition</a>
                         <a href="receive_stock.php?category_id=<?php echo (int)$r['category_id']; ?>&item_id=<?php echo $r['id']; ?>" class="btn btn-sm">Receive</a>
                     </div></td>
                 </tr>
@@ -202,14 +201,14 @@ include __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 </div>
 
-<!-- Purchase list -->
+<!-- Requisitions -->
 <?php if ($to_order + $on_order > 0):
 $open_purchases = $pdo->query("SELECT * FROM procurement WHERE status IN ('needed','ordered')
                                ORDER BY FIELD(status,'needed','ordered'), created_at LIMIT 6")->fetchAll(); ?>
 <div class="card">
     <div class="card-head">
-        <h3>Purchase list &mdash; <?php echo $to_order; ?> to order, <?php echo $on_order; ?> on order</h3>
-        <a href="procurement.php" class="btn btn-sm">Open purchase list</a>
+        <h3>Open requisitions &mdash; <?php echo $to_order; ?> to order, <?php echo $on_order; ?> on order</h3>
+        <a href="requisitions.php" class="btn btn-sm">All requisitions</a>
     </div>
     <table class="compact">
         <thead><tr><th>Item</th><th class="num">Qty</th><th>Supplier</th><th>Status</th><th></th></tr></thead>
@@ -222,7 +221,7 @@ $open_purchases = $pdo->query("SELECT * FROM procurement WHERE status IN ('neede
                 <td><?php echo $p['status'] === 'needed' ? '<span class="status-pending">To order</span>' : '<span class="status-ordered">Ordered</span>'; ?></td>
                 <td><div class="row-actions">
                     <?php if ($p['status'] === 'needed'): ?>
-                    <form method="POST" action="procurement.php" class="inline-form"
+                    <form method="POST" action="requisitions.php" class="inline-form"
                           data-confirm-title="Mark as ordered"
                           data-confirm="Mark <?php echo htmlspecialchars($p['quantity'] . ' × ' . $p['item_name']); ?> as ordered?"
                           data-confirm-ok="Mark ordered">
@@ -270,49 +269,27 @@ $open_purchases = $pdo->query("SELECT * FROM procurement WHERE status IN ('neede
 </div>
 
 <!-- Housekeeping -->
-<div class="grid-2">
-    <div class="card">
-        <div class="card-head">
-            <h3>Not moving &mdash; 60+ days</h3>
-            <?php if ($idle): ?><span class="card-hint"><?php echo kwacha($idle_value, true); ?> tied up</span><?php endif; ?>
-        </div>
-        <?php if ($idle): ?>
-        <table class="compact">
-            <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Value</th><th>Last issued</th></tr></thead>
-            <tbody>
-            <?php foreach ($idle as $r): ?>
-                <tr><td><?php echo htmlspecialchars($r['item_name']); ?></td><td class="num"><?php echo number_format($r['current_quantity']); ?></td>
-                    <td class="num"><?php echo kwacha((float)$r['value']); ?></td>
-                    <td class="muted"><?php echo $r['last_issued'] ? date('d M Y', strtotime($r['last_issued'])) : 'Never'; ?></td></tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-        <?php else: ?>
-        <div class="empty-state"><p>Every item in stock has been used in the last 60 days.</p></div>
-        <?php endif; ?>
+<div class="card">
+    <div class="card-head">
+        <h3>Not moving &mdash; 60+ days</h3>
+        <?php if ($idle): ?><span class="card-hint"><?php echo kwacha($idle_value, true); ?> tied up</span><?php endif; ?>
     </div>
-    <div class="card">
-        <div class="card-head"><h3>Recent stock adjustments</h3><a href="adjust_stock.php" class="btn btn-sm">Adjust stock</a></div>
-        <?php if ($adjustments): ?>
-        <table class="compact">
-            <thead><tr><th>When</th><th>Item</th><th class="num">Change</th><th>By</th></tr></thead>
-            <tbody>
-            <?php foreach ($adjustments as $a):
-                $reason = preg_match('/Reason:\s*(.*)$/s', $a['details'] ?? '', $m) ? $m[1] : ''; ?>
-                <tr data-tip="<?php echo htmlspecialchars($reason ? 'Reason: ' . $reason : ($a['details'] ?? '')); ?>" tabindex="0">
-                    <td class="muted" style="white-space:nowrap"><?php echo date('d M, H:i', strtotime($a['created_at'])); ?></td>
-                    <td><?php echo htmlspecialchars($a['item_name'] ?? 'Deleted item'); ?></td>
-                    <td class="num <?php echo $a['quantity'] < 0 ? 'neg' : 'pos'; ?>"><?php echo ($a['quantity'] > 0 ? '+' : '') . number_format($a['quantity']); ?></td>
-                    <td class="muted"><?php echo htmlspecialchars($a['full_name'] ?? '—'); ?></td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-        <?php else: ?>
-        <div class="empty-state"><p>No manual adjustments yet.</p></div>
-        <?php endif; ?>
-    </div>
+    <?php if ($idle): ?>
+    <table class="compact">
+        <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Value</th><th>Last issued</th></tr></thead>
+        <tbody>
+        <?php foreach ($idle as $r): ?>
+            <tr><td><?php echo htmlspecialchars($r['item_name']); ?></td><td class="num"><?php echo number_format($r['current_quantity']); ?></td>
+                <td class="num"><?php echo kwacha((float)$r['value']); ?></td>
+                <td class="muted"><?php echo $r['last_issued'] ? date('d M Y', strtotime($r['last_issued'])) : 'Never'; ?></td></tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    <?php else: ?>
+    <div class="empty-state"><p>Every item in stock has been used in the last 60 days.</p></div>
+    <?php endif; ?>
 </div>
+
 
 <!-- Report Submission Progress -->
 <div class="card" style="margin-bottom:16px;">

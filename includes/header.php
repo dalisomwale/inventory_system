@@ -37,13 +37,9 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 17 12 13 8 17"/><line x1="12" y1="13" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
     Issue Stock
 </a>
-<a href="adjust_stock.php" class="nav-link <?php echo ($cur==='adjust_stock.php')?'active':'';?>">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-    Adjust Stock
-</a>
-<a href="procurement.php" class="nav-link <?php echo ($cur==='procurement.php')?'active':'';?>">
+<a href="requisitions.php" class="nav-link <?php echo ($cur==='requisitions.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-    Purchase List
+    Requisitions
 </a>
 <div class="nav-section-label">Records</div>
 <a href="manage_items.php" class="nav-link <?php echo ($cur==='manage_items.php')?'active':'';?>">

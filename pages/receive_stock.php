@@ -10,7 +10,7 @@ $show_new_item     = isset($_GET['new_item']);
 $items         = [];
 $selected_item = null;
 
-// Receiving something from the purchase list
+// Receiving a requisition
 $purchase = null;
 $pid = (int)($_POST['purchase_id'] ?? $_GET['purchase_id'] ?? 0);
 if ($pid > 0) {
@@ -36,12 +36,12 @@ if ($pid > 0) {
     }
 }
 
-/** Mark the purchase as received once its stock is in. */
+/** Mark the requisition as received once its stock is in. */
 function complete_purchase(PDO $pdo, ?array $purchase, int $item_id): void {
     if (!$purchase) return;
     $pdo->prepare("UPDATE procurement SET status='received', received_at=NOW(), item_id=? WHERE id=? AND status IN ('needed','ordered')")
         ->execute([$item_id, $purchase['id']]);
-    logAudit($pdo, $_SESSION['user_id'], 'PURCHASE_RECEIVED', $item_id, $purchase['quantity'], "Received purchase: {$purchase['item_name']}");
+    logAudit($pdo, $_SESSION['user_id'], 'REQUISITION_RECEIVED', $item_id, $purchase['quantity'], "Requisition received: {$purchase['item_name']}");
 }
 
 if ($selected_cat_id > 0) {
@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_new_item'])) {
 }
 if (isset($_GET['added']) && $selected_item) {
     $success = 'Item "' . htmlspecialchars($selected_item['item_name']) . '" added and stock received.'
-             . (isset($_GET['purchase_done']) ? ' The purchase is marked as received.' : '');
+             . (isset($_GET['purchase_done']) ? ' The requisition is marked as received.' : '');
 }
 
 // Receive Existing
@@ -130,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['receive_existing'])) 
                  "Received $quantity of {$item_data['item_name']}. Old: $old_stock, New: $new_stock. Supplier: $supplier");
         $pdo->commit();
         complete_purchase($pdo, $purchase, $item_id);
-        $success = "Stock received. Previous: $old_stock &rarr; New: $new_stock" . ($purchase ? '. The purchase is marked as received.' : '');
+        $success = "Stock received. Previous: $old_stock &rarr; New: $new_stock" . ($purchase ? '. The requisition is marked as received.' : '');
         $purchase = null;
         $stmt = $pdo->prepare("SELECT * FROM items WHERE id = ?");
         $stmt->execute([$item_id]);
@@ -173,7 +173,7 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <?php if ($purchase): ?>
-<div class="info-note">Receiving from the purchase list: <strong><?php echo htmlspecialchars($purchase['quantity'] . ' × ' . $purchase['item_name']); ?></strong><?php echo $purchase['supplier'] ? ' from ' . htmlspecialchars($purchase['supplier']) : ''; ?>. Check the quantity that actually arrived.</div>
+<div class="info-note">Receiving requisition: <strong><?php echo htmlspecialchars($purchase['quantity'] . ' × ' . $purchase['item_name']); ?></strong><?php echo $purchase['supplier'] ? ' from ' . htmlspecialchars($purchase['supplier']) : ''; ?>. Check the quantity that actually arrived.</div>
 <?php endif; ?>
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
