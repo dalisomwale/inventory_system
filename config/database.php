@@ -37,12 +37,12 @@ try {
             
             // Insert default categories
             $pdo->exec("INSERT IGNORE INTO categories (name, description) VALUES
-                ('Caterriage', 'Catering supplies and equipment - trays, cutlery, serving items'),
-                ('Stationery', 'Paper, pens, office supplies, printer consumables'),
-                ('Dry Stores', 'Non-perishable food items - coffee, sugar, tea, snacks'),
-                ('Catering', 'Food service and kitchen supplies - preparation equipment'),
-                ('Uniforms', 'Staff uniforms, hats, aprons, clothing items'),
-                ('Flight Documents', 'Boarding passes, tickets, baggage tags, forms'),
+                ('IT Equipment', 'Laptops, desktops, monitors, peripherals'),
+                ('Networking', 'Switches, routers, cables, access points'),
+                ('Printer Consumables', 'Toner, ink cartridges, drums'),
+                ('Stationery', 'Paper, pens, files, office supplies'),
+                ('Furniture', 'Desks, chairs, cabinets'),
+                ('Kitchen & Cleaning', 'Tea, coffee, sugar, cleaning supplies'),
                 ('Other', 'Miscellaneous items not fitting other categories')");
         }
         

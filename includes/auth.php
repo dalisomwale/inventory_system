@@ -24,13 +24,13 @@ function logAudit(PDO $pdo, int $user_id, string $action, ?int $item_id = null, 
 function catClass(?string $cat): string {
     // Map your categories to specific colors for better visual consistency
     $color_map = [
-        'Caterriage' => 0,
-        'Stationery' => 1,
-        'Dry Stores' => 2,
-        'Catering' => 3,
-        'Uniforms' => 4,
-        'Flight Documents' => 5,
-        'Other' => 6
+        'IT Equipment'        => 0,
+        'Stationery'          => 1,
+        'Kitchen & Cleaning'  => 2,
+        'Printer Consumables' => 3,
+        'Networking'          => 4,
+        'Furniture'           => 5,
+        'Other'               => 6
     ];
     
     if ($cat && isset($color_map[$cat])) {

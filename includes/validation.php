@@ -13,6 +13,16 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// ── SIGN-IN EMAIL DOMAINS ────────────────────────────────────
+// Only these email domains can create an account. Add the other
+// Altus Group company domains here if they use different ones.
+const ALLOWED_EMAIL_DOMAINS = ['altus.co.zm'];
+
+function email_domain_allowed(string $email): bool {
+    $domain = strtolower(substr(strrchr($email, '@') ?: '', 1));
+    return in_array($domain, ALLOWED_EMAIL_DOMAINS, true);
+}
+
 // ── CSRF ─────────────────────────────────────────────────────
 // Every POST must carry the session token. script.js adds it to
 // each form automatically from the <meta name="csrf-token"> tag.
@@ -96,6 +106,16 @@ class Validator
         }
         if (mb_strlen($v) < $min)     $this->errors[] = "$label must be at least $min characters.";
         elseif (mb_strlen($v) > $max) $this->errors[] = "$label must be $max characters or fewer.";
+        return $v;
+    }
+
+    /** Email address, returned in lower case. */
+    public function email(string $key, string $label = 'Email address'): string {
+        $v = strtolower($this->raw($key));
+        if ($v === '') { $this->errors[] = "$label is required."; return ''; }
+        if (mb_strlen($v) > 190 || !filter_var($v, FILTER_VALIDATE_EMAIL)) {
+            $this->errors[] = "Enter a valid email address, like name@altus.co.zm.";
+        }
         return $v;
     }
 

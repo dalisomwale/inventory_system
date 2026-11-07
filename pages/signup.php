@@ -10,7 +10,7 @@ if (isset($_SESSION['user_id'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $v         = new Validator($_POST);
     $full_name = $v->text('full_name', 'Full name', 150, true, 3);
-    $username  = $v->text('username', 'Username', 50, true, 3);
+    $email     = $v->email('email', 'Work email');
     $role      = $v->choice('role', 'role', ['manager', 'front_desk']);
     $password  = (string)($_POST['password'] ?? '');
     $confirm   = (string)($_POST['confirm_password'] ?? '');
@@ -18,8 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($full_name !== '' && !preg_match("/^[\p{L} .'-]+$/u", $full_name)) {
         $v->fail('Full name can only contain letters, spaces, hyphens and apostrophes.');
     }
-    if ($username !== '' && !preg_match('/^[A-Za-z0-9._-]+$/', $username)) {
-        $v->fail('Username can only contain letters, numbers, dots, dashes and underscores.');
+    if ($v->ok() && !email_domain_allowed($email)) {
+        $v->fail('Use your Altus work email (' . implode(', ', array_map(fn($d) => '@' . $d, ALLOWED_EMAIL_DOMAINS)) . ').');
     }
     if (strlen($password) < 8) {
         $v->fail('Password must be at least 8 characters.');
@@ -33,14 +33,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = $v->message();
     } else {
         try {
-            $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
-            $stmt->execute([$username]);
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+            $stmt->execute([$email]);
             if ($stmt->fetch()) {
-                $error = 'Username already taken. Please choose another.';
+                $error = 'An account with this email already exists. <a href="login.php">Sign in</a> instead.';
             } else {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $pdo->prepare("INSERT INTO users (full_name, username, password, role) VALUES (?, ?, ?, ?)")
-                    ->execute([$full_name, $username, $hash, $role]);
+                $pdo->prepare("INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, ?)")
+                    ->execute([$full_name, $email, $hash, $role]);
                 $success = 'Account created. You can now <a href="login.php">sign in</a>.';
             }
         } catch (PDOException $e) {
@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="POST" novalidate
               data-confirm-title="Create account"
-              data-confirm="Create a {role} account for {full_name} with the username {username}?"
+              data-confirm="Create a {role} account for {full_name} ({email})?"
               data-confirm-ok="Create account">
             <div class="form-group">
                 <label for="full_name">Full Name</label>
@@ -86,10 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        value="<?php echo htmlspecialchars($_POST['full_name'] ?? ''); ?>">
             </div>
             <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required minlength="3" maxlength="50" pattern="[A-Za-z0-9._\-]+"
-                       title="Letters, numbers, dots, dashes and underscores only." placeholder="Choose a username"
-                       value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>" autocomplete="username">
+                <label for="email">Work email</label>
+                <input type="email" id="email" name="email" required maxlength="190" placeholder="name@altus.co.zm"
+                       value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" autocomplete="email">
             </div>
             <div class="form-group">
                 <label for="role">Role</label>

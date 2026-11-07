@@ -23,6 +23,10 @@ BEGIN
 END //
 DELIMITER ;
 
+-- Users sign in with email; username is kept only for old records
+CALL add_column_if_missing('users', 'email', 'VARCHAR(190) NULL AFTER full_name');
+ALTER TABLE users MODIFY username VARCHAR(80) NULL;
+
 -- Stock movements record the before/after stock level
 CALL add_column_if_missing('stock_receiving', 'old_stock', 'INT NULL AFTER received_by');
 CALL add_column_if_missing('stock_receiving', 'new_stock', 'INT NULL AFTER old_stock');
@@ -39,7 +43,26 @@ CALL add_column_if_missing('category_monthly_reports', 'updated_at',  'TIMESTAMP
 
 DROP PROCEDURE IF EXISTS add_column_if_missing;
 
+-- One account per email (case-insensitive collation)
+DROP PROCEDURE IF EXISTS add_email_index;
+DELIMITER //
+CREATE PROCEDURE add_email_index()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'email' AND NON_UNIQUE = 0
+    ) THEN
+        ALTER TABLE users ADD UNIQUE KEY uq_users_email (email);
+    END IF;
+END //
+DELIMITER ;
+CALL add_email_index();
+DROP PROCEDURE IF EXISTS add_email_index;
+
 -- Give total_value a default so older code paths can't fail on insert
 ALTER TABLE category_monthly_reports MODIFY total_value DECIMAL(15,2) NOT NULL DEFAULT 0.00;
 
 SELECT 'Schema is up to date.' AS result;
+
+-- Accounts that can't sign in until an email is set:
+SELECT id, full_name, username, role FROM users WHERE email IS NULL OR email = '';

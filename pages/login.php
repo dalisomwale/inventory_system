@@ -8,15 +8,17 @@ if (isset($_SESSION['user_id'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
+    $email    = strtolower(trim((string)($_POST['email'] ?? '')));
+    $password = (string)($_POST['password'] ?? '');
 
-    if ($username === '' || $password === '') {
-        $error = 'Please enter username and password.';
+    if ($email === '' || $password === '') {
+        $error = 'Please enter your email and password.';
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = 'Sign in with your work email address, like name@altus.co.zm.';
     } else {
         try {
-            $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
-            $stmt->execute([$username]);
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
+            $stmt->execute([$email]);
             $user = $stmt->fetch();
 
             $valid = false;
@@ -35,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($valid) {
                 session_regenerate_id(true);
                 $_SESSION['user_id']   = $user['id'];
-                $_SESSION['username']  = $user['username'];
+                $_SESSION['email']     = $user['email'];
                 $_SESSION['full_name'] = $user['full_name'];
                 $_SESSION['role']      = $user['role'];
 
@@ -46,7 +48,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header($user['role'] === 'manager' ? 'Location: manager_dashboard.php' : 'Location: dashboard.php');
                 exit();
             } else {
-                $error = 'Invalid username or password.';
+                $error = 'Incorrect email or password.';
+                usleep(400000); // slow down password guessing
             }
         } catch (PDOException $e) {
             $error = 'Database error. Please try again.';
@@ -80,9 +83,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="POST" novalidate>
             <div class="form-group">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required placeholder="Enter username"
-                       value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>" autocomplete="username">
+                <label for="email">Work email</label>
+                <input type="email" id="email" name="email" required maxlength="190" placeholder="name@altus.co.zm"
+                       value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" autocomplete="username" autofocus>
             </div>
             <div class="form-group">
                 <label for="password">Password</label>
