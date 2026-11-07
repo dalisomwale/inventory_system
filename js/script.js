@@ -224,6 +224,19 @@
         });
         document.addEventListener('submit', onSubmit, true);
 
+        // Links that need confirming, e.g. <a href="logout.php" data-confirm="...">
+        document.addEventListener('click', function (e) {
+            var link = e.target.closest && e.target.closest('a[data-confirm]');
+            if (!link || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            openDialog({
+                title:  link.dataset.confirmTitle || 'Please confirm',
+                text:   link.dataset.confirm,
+                ok:     link.dataset.confirmOk || 'Confirm',
+                danger: link.dataset.confirmDanger === '1'
+            }, function () { window.location.href = link.href; });
+        });
+
         // Re-check a field once the user fixes it
         document.addEventListener('input', function (e) {
             if (e.target.classList && e.target.classList.contains('is-invalid')) checkField(e.target);

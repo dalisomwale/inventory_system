@@ -74,7 +74,10 @@
         <div class="user-name"><?php echo htmlspecialchars($_SESSION['full_name']??'User');?></div>
         <div class="user-role"><?php echo htmlspecialchars(ucfirst(str_replace('_',' ',$_SESSION['role']??'')));?></div>
     </div>
-    <a href="logout.php" class="logout-btn" title="Logout">
+    <a href="logout.php" class="logout-btn" title="Log out" aria-label="Log out"
+       data-confirm-title="Log out"
+       data-confirm="Log out of the inventory system? Anything you haven't saved will be lost."
+       data-confirm-ok="Log out">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
     </a>
 </div>
