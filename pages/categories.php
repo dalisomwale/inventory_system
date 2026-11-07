@@ -1,6 +1,7 @@
 <?php
 // Categories — add, rename and delete stock categories.
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/insights.php';
 redirectIfNotLoggedIn();
 
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
@@ -176,18 +177,18 @@ include __DIR__ . '/../includes/header.php';
                     <td class="num"><?php echo 'K' . number_format($c['value']); ?></td>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($c['created_at'])); ?></td>
                     <td><div class="row-actions">
-                        <a href="stock.php?category_id=<?php echo $c['id']; ?>" class="btn btn-sm">View items</a>
-                        <a href="categories.php?edit=<?php echo $c['id']; ?>#edit" class="btn btn-sm">Edit</a>
+                        <a href="stock.php?category_id=<?php echo $c['id']; ?>" class="btn btn-icon" aria-label="View items in <?php echo htmlspecialchars($c['name']); ?>" data-tip="View items"><?php echo row_icon('view'); ?></a>
+                        <a href="categories.php?edit=<?php echo $c['id']; ?>#edit" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($c['name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
                         <?php if ((int)$c['items'] === 0): ?>
                         <form method="POST" class="inline-form"
                               data-confirm-title="Delete category"
                               data-confirm="Delete the <?php echo htmlspecialchars($c['name']); ?> category? This cannot be undone."
                               data-confirm-ok="Delete" data-confirm-danger="1">
                             <input type="hidden" name="category_id" value="<?php echo $c['id']; ?>">
-                            <button type="submit" name="delete_category" value="1" class="btn btn-sm btn-danger-outline">Delete</button>
+                            <button type="submit" name="delete_category" value="1" class="btn btn-icon btn-icon-danger" aria-label="Delete <?php echo htmlspecialchars($c['name']); ?>" data-tip="Delete"><?php echo row_icon('delete'); ?></button>
                         </form>
                         <?php else: ?>
-                        <span class="btn btn-sm" aria-disabled="true" data-tip="Has items, so it can't be deleted">Delete</span>
+                        <span class="btn btn-icon" aria-disabled="true" role="img" aria-label="Can't delete: has items" data-tip="Can't delete: has items"><?php echo row_icon('delete'); ?></span>
                         <?php endif; ?>
                     </div></td>
                 </tr>

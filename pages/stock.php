@@ -184,8 +184,8 @@ include __DIR__ . '/../includes/header.php';
                     <td class="num"><?php echo kwacha_whole($r['value']); ?></td>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($r['created_at'])); ?></td>
                     <td><div class="row-actions">
-                        <a href="stock_item.php?id=<?php echo $r['id']; ?>" class="btn btn-sm">View</a>
-                        <a href="stock_edit.php?id=<?php echo $r['id']; ?>" class="btn btn-sm">Edit</a>
+                        <a href="stock_item.php?id=<?php echo $r['id']; ?>" class="btn btn-icon" aria-label="View <?php echo htmlspecialchars($r['item_name']); ?>" data-tip="View"><?php echo row_icon('view'); ?></a>
+                        <a href="stock_edit.php?id=<?php echo $r['id']; ?>" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($r['item_name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
                         <?php if ((int)$r['moves'] === 0): ?>
                         <form method="POST" action="stock_edit.php" class="inline-form"
                               data-confirm-title="Delete item"
@@ -193,10 +193,10 @@ include __DIR__ . '/../includes/header.php';
                               data-confirm-ok="Delete" data-confirm-danger="1">
                             <input type="hidden" name="id" value="<?php echo $r['id']; ?>">
                             <input type="hidden" name="return" value="<?php echo htmlspecialchars(stock_url()); ?>">
-                            <button type="submit" name="delete_item" value="1" class="btn btn-sm btn-danger-outline">Delete</button>
+                            <button type="submit" name="delete_item" value="1" class="btn btn-icon btn-icon-danger" aria-label="Delete <?php echo htmlspecialchars($r['item_name']); ?>" data-tip="Delete"><?php echo row_icon('delete'); ?></button>
                         </form>
                         <?php else: ?>
-                        <span class="btn btn-sm" aria-disabled="true" data-tip="Has stock history, so it can't be deleted">Delete</span>
+                        <span class="btn btn-icon" aria-disabled="true" role="img" aria-label="Can't delete: has stock history" data-tip="Can't delete: has stock history"><?php echo row_icon('delete'); ?></span>
                         <?php endif; ?>
                     </div></td>
                 </tr>
