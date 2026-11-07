@@ -1,273 +1,202 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
 redirectIfNotLoggedIn();
+if (!isManager()) { header('Location: dashboard.php'); exit(); }
 
-$user_role = $_SESSION['role'];
-$is_front_desk = ($user_role == 'front_desk');
-$is_manager = ($user_role == 'manager');
-
-$selected_month = $_GET['month'] ?? date('Y-m');
+$selected_month       = $_GET['month']       ?? date('Y-m');
 $selected_category_id = (int)($_GET['category_id'] ?? 0);
 
-// Get start and end dates for the selected month
-$start_date = $selected_month . '-01';
-$end_date = date('Y-m-t', strtotime($start_date));
+$categories = $pdo->query("SELECT id, name, description FROM categories ORDER BY name")->fetchAll();
 
-// Get all categories
-$stmt = $pdo->query("SELECT id, name, description FROM categories ORDER BY name");
-$categories = $stmt->fetchAll();
-
-// Get existing reports for the selected month only
-$stmt = $pdo->prepare("
+$reports = $pdo->prepare("
     SELECT r.*, c.name as category_name, u.full_name as submitted_by_name
     FROM category_monthly_reports r
-    JOIN categories c ON r.category_id = c.id
-    JOIN users u ON r.submitted_by = u.id
-    WHERE DATE_FORMAT(r.report_month, '%Y-%m') = ?
+    JOIN categories c ON r.category_id=c.id
+    JOIN users u ON r.submitted_by=u.id
+    WHERE DATE_FORMAT(r.report_month,'%Y-%m')=?
     ORDER BY c.name
 ");
-$stmt->execute([$selected_month]);
-$all_reports = $stmt->fetchAll();
+$reports->execute([$selected_month]);
+$all_reports = $reports->fetchAll();
 
-$items_data = [];
-$total_received = 0;
-$total_issued = 0;
-$category_name = '';
-$has_report = false;
-
+$selected_report = null;
+$items_data      = [];
+$total_value     = 0;
 if ($selected_category_id > 0) {
-    // Get the category name
-    $cat_stmt = $pdo->prepare("SELECT name FROM categories WHERE id = ?");
-    $cat_stmt->execute([$selected_category_id]);
-    $category = $cat_stmt->fetch();
-    $category_name = $category ? $category['name'] : 'Unknown';
+    $r = $pdo->prepare("SELECT r.*,c.name as category_name,c.description as category_description,u.full_name as submitted_by_name FROM category_monthly_reports r JOIN categories c ON r.category_id=c.id JOIN users u ON r.submitted_by=u.id WHERE r.category_id=? AND DATE_FORMAT(r.report_month,'%Y-%m')=?");
+    $r->execute([$selected_category_id, $selected_month]);
+    $selected_report = $r->fetch();
 
-    // Check if report exists for this category and selected month
-    $check_report = $pdo->prepare("SELECT id FROM category_monthly_reports WHERE category_id = ? AND DATE_FORMAT(report_month, '%Y-%m') = ?");
-    $check_report->execute([$selected_category_id, $selected_month]);
-    $has_report = $check_report->fetch() ? true : false;
-
-    // Get all items in this category
-    $items = $pdo->prepare("SELECT * FROM items WHERE category_id = ? ORDER BY item_name");
-    $items->execute([$selected_category_id]);
-    $items_list = $items->fetchAll();
-    
-    foreach ($items_list as $item) {
-        // Get stock movement for this item during the selected month only
-        $movement = $pdo->prepare("
-            SELECT 
-                COALESCE(SUM(CASE WHEN movement_type = 'received' THEN quantity ELSE 0 END), 0) as total_received,
-                COALESCE(SUM(CASE WHEN movement_type = 'issued' THEN quantity ELSE 0 END), 0) as total_issued
-            FROM stock_movement 
-            WHERE item_id = ? AND DATE(created_at) BETWEEN ? AND ?
-        ");
-        $movement->execute([$item['id'], $start_date, $end_date]);
-        $movement_data = $movement->fetch();
-        
-        $received_qty = $movement_data['total_received'];
-        $issued_qty = $movement_data['total_issued'];
-        $closing_stock = $item['current_quantity'];
-        $opening_stock = $closing_stock - $received_qty + $issued_qty;
-        $status = ($closing_stock <= $item['reorder_level']) ? 'Low Stock' : 'OK';
-        
-        $items_data[] = [
-            'item_name' => $item['item_name'],
-            'opening_stock' => max(0, $opening_stock),
-            'received' => $received_qty,
-            'issued' => $issued_qty,
-            'closing_stock' => $closing_stock,
-            'status' => $status
-        ];
-        
-        $total_received += $received_qty;
-        $total_issued += $issued_qty;
+    if ($selected_report) {
+        $items_data = json_decode($selected_report['items_data'], true);
+        foreach ($items_data as $key => $item) {
+            $i = $pdo->prepare("SELECT unit_price, current_quantity FROM items WHERE item_name=? AND category_id=?");
+            $i->execute([$item['item_name'], $selected_category_id]);
+            $db_item = $i->fetch();
+            $items_data[$key]['unit_price']  = $db_item ? $db_item['unit_price'] : 0;
+            $items_data[$key]['total_value'] = $items_data[$key]['closing_stock'] * ($db_item ? $db_item['unit_price'] : 0);
+        }
+        $total_value = array_sum(array_column($items_data, 'total_value'));
+        $total_units = array_sum(array_column($items_data, 'closing_stock'));
     }
 }
 
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+<div class="page-header">
     <h1>Monthly Reports</h1>
+    <a href="manager_dashboard.php" class="btn btn-sm">Back to Dashboard</a>
 </div>
 
-<?php if ($selected_category_id > 0 && !empty($items_data)): ?>
-<!-- Detail View for a specific category - with month selector on the right -->
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
-    <a href="reports.php?month=<?php echo $selected_month; ?>" style="color: #007bff; text-decoration: none;">← Back to All Categories</a>
-    
-    <!-- Month Selector on the right -->
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <label style="font-weight: 500; color: #555;">Select Month:</label>
-        <input type="month" id="monthSelect" value="<?php echo $selected_month; ?>"
-               onchange="window.location.href='?month='+this.value<?php if($selected_category_id>0) echo '&category_id='.$selected_category_id; ?>"
-               style="padding: 6px 10px; border: 1px solid #ddd; border-radius: 5px;">
-    </div>
+<!-- Month Selector -->
+<div class="card" style="margin-bottom:14px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+    <label style="font-size:.78rem; font-weight:500; color:var(--text2)">Select Month</label>
+    <input type="month" id="monthSelect" value="<?php echo $selected_month; ?>"
+           onchange="window.location.href='?month='+this.value<?php if($selected_category_id>0) echo '&category_id='.$selected_category_id; ?>"
+           style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:.84rem; background:var(--surface);">
 </div>
 
-<div style="background: white; border-radius: 8px; overflow: hidden; border: 1px solid #e0e0e0;">
-    <div style="padding: 20px; border-bottom: 1px solid #e0e0e0; background: #fafafa;">
-        <h2 style="margin: 0 0 5px;"><?php echo htmlspecialchars($category_name); ?></h2>
-        <div style="color: #666; font-size: 14px;">
-            <?php echo date('F Y', strtotime($selected_month . '-01')); ?> |
-            Stock Movement Report
-            <?php if ($has_report): ?>
-                <span style="background: #d4edda; color: #155724; padding: 3px 10px; border-radius: 12px; font-size: 11px; margin-left: 10px;">Report Submitted</span>
-            <?php else: ?>
-                <span style="background: #f5f5f5; color: #666; padding: 3px 10px; border-radius: 12px; font-size: 11px; margin-left: 10px;">Pending Submission</span>
-            <?php endif; ?>
-        </div>
-    </div>
-    <div style="padding: 20px;">
-        <!-- Summary Stats -->
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px;">
-            <div style="background: #f5f5f5; padding: 15px; text-align: center; border-radius: 8px;">
-                <div style="font-size: 28px; font-weight: bold;"><?php echo count($items_data); ?></div>
-                <div style="color: #666;">Total Items</div>
-            </div>
-            <div style="background: #f5f5f5; padding: 15px; text-align: center; border-radius: 8px;">
-                <div style="font-size: 28px; font-weight: bold; color: #28a745;"><?php echo number_format($total_received); ?></div>
-                <div style="color: #666;">Received (<?php echo date('M', strtotime($selected_month)); ?>)</div>
-            </div>
-            <div style="background: #f5f5f5; padding: 15px; text-align: center; border-radius: 8px;">
-                <div style="font-size: 28px; font-weight: bold; color: #dc3545;"><?php echo number_format($total_issued); ?></div>
-                <div style="color: #666;">Issued (<?php echo date('M', strtotime($selected_month)); ?>)</div>
-            </div>
-        </div>
-        
-        <!-- Items Table -->
-        <div style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                    <tr style="background: #fafafa; border-bottom: 2px solid #e0e0e0;">
-                        <th style="padding: 12px; text-align: left;">Item Name</th>
-                        <th style="padding: 12px; text-align: left;">Opening Stock</th>
-                        <th style="padding: 12px; text-align: left;">Received</th>
-                        <th style="padding: 12px; text-align: left;">Issued</th>
-                        <th style="padding: 12px; text-align: left;">Closing Stock</th>
-                        <th style="padding: 12px; text-align: left;">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($items_data as $item): ?>
-                    <tr style="border-bottom: 1px solid #e0e0e0;">
-                        <td style="padding: 12px; font-weight: 500;"><?php echo htmlspecialchars($item['item_name']); ?></td>
-                        <td style="padding: 12px;"><?php echo $item['opening_stock']; ?></td>
-                        <td style="padding: 12px;"><?php echo $item['received']; ?></td>
-                        <td style="padding: 12px;"><?php echo $item['issued']; ?></td>
-                        <td style="padding: 12px;"><strong><?php echo $item['closing_stock']; ?></strong></td>
-                        <td style="padding: 12px;">
-                            <?php if ($item['status'] == 'Low Stock'): ?>
-                                <span style="background: #fef3c7; color: #856404; padding: 3px 8px; border-radius: 12px; font-size: 11px;">Low Stock</span>
-                            <?php else: ?>
-                                <span style="background: #d4edda; color: #155724; padding: 3px 8px; border-radius: 12px; font-size: 11px;">OK</span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-                <tfoot>
-                    <tr style="background: #fafafa; font-weight: bold; border-top: 2px solid #e0e0e0;">
-                        <td style="padding: 12px;">TOTAL</td>
-                        <td style="padding: 12px;"></td>
-                        <td style="padding: 12px; color: #28a745;"><?php echo number_format($total_received); ?></td>
-                        <td style="padding: 12px; color: #dc3545;"><?php echo number_format($total_issued); ?></td>
-                        <td style="padding: 12px;"></td>
-                        <td style="padding: 12px;"></td>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-        
-        <!-- Submit Report Button -->
-        <?php if ($is_front_desk && !$has_report): ?>
-        <div style="margin-top: 25px; text-align: center; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-            <a href="submit_report.php?category=<?php echo $selected_category_id; ?>&month=<?php echo $selected_month; ?>" 
-               style="display: inline-block; background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%); color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-size: 15px; font-weight: 500; transition: all 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
-               onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)';"
-               onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';">
-                Submit Monthly Report
-            </a>
-        </div>
-        <?php elseif ($is_front_desk && $has_report): ?>
-        <div style="margin-top: 25px; text-align: center; padding-top: 20px; border-top: 1px solid #e0e0e0;">
-            <span style="color: #28a745; background: #d4edda; padding: 10px 24px; border-radius: 8px; display: inline-block;">✓ Report already submitted for <?php echo date('F Y', strtotime($selected_month)); ?></span>
-        </div>
-        <?php endif; ?>
-    </div>
-</div>
+<?php if ($selected_category_id > 0 && $selected_report): ?>
+<!-- Detail View -->
+<a href="reports.php?month=<?php echo $selected_month; ?>" class="back-link">&#8592; All Categories</a>
 
-<?php elseif ($selected_category_id > 0 && empty($items_data)): ?>
-<div style="background: white; padding: 40px; text-align: center; color: #999; border-radius: 8px; border: 1px solid #e0e0e0;">
-    <p>No items found in this category for <?php echo date('F Y', strtotime($selected_month)); ?>.</p>
-    <a href="reports.php?month=<?php echo $selected_month; ?>" class="btn">Back to Categories</a>
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+        <div>
+            <h2 style="margin:0 0 4px"><?php echo htmlspecialchars($selected_report['category_name']); ?></h2>
+            <div style="font-size:.76rem; color:var(--muted)">
+                <?php echo date('F Y', strtotime($selected_report['report_month'])); ?>
+                &mdash; Submitted by <?php echo htmlspecialchars($selected_report['submitted_by_name']); ?>
+                on <?php echo date('d/m/Y H:i', strtotime($selected_report['submitted_at'])); ?>
+            </div>
+        </div>
+        <button onclick="window.print()" class="btn btn-sm btn-info">Print</button>
+    </div>
+
+    <div class="stat-row">
+        <div class="stat-box"><div class="num"><?php echo $selected_report['total_items']; ?></div><div class="lbl">Items</div></div>
+        <div class="stat-box"><div class="num"><?php echo number_format($selected_report['total_units']); ?></div><div class="lbl">Total Units</div></div>
+        <div class="stat-box"><div class="num" style="font-size:1.2rem">K<?php echo number_format($total_value,2); ?></div><div class="lbl">Total Value</div></div>
+        <div class="stat-box"><div class="num" style="color:<?php echo $selected_report['low_stock_count']>0?'var(--danger)':'var(--success)'; ?>"><?php echo $selected_report['low_stock_count']; ?></div><div class="lbl">Low Stock</div></div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr><th>Item</th><th>Opening</th><th>Closing</th><th>Unit Price</th><th>Total Value</th><th>Reorder</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                <?php foreach ($items_data as $item): ?>
+                <tr>
+                    <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
+                    <td style="color:var(--muted)"><?php echo $item['opening_stock']; ?></td>
+                    <td><strong><?php echo $item['closing_stock']; ?></strong></td>
+                    <td style="font-family:var(--mono); font-size:.76rem">K<?php echo number_format($item['unit_price'],2); ?></td>
+                    <td style="font-family:var(--mono); font-size:.76rem">K<?php echo number_format($item['total_value'],2); ?></td>
+                    <td><?php echo $item['reorder_level']; ?></td>
+                    <td>
+                        <?php if ($item['status']=='Low Stock'): ?>
+                            <span class="status-pending">Low Stock</span>
+                        <?php else: ?>
+                            <span class="status-receiving">OK</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="4" style="text-align:right; font-size:.76rem; color:var(--muted)">Total Value</td>
+                    <td style="font-family:var(--mono)">K<?php echo number_format($total_value,2); ?></td>
+                    <td colspan="2"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <?php if ($selected_report['notes']): ?>
+    <div class="info-note" style="margin-top:16px">
+        <strong>Notes from Reception:</strong><br>
+        <?php echo nl2br(htmlspecialchars($selected_report['notes'])); ?>
+    </div>
+    <?php endif; ?>
 </div>
 
 <?php else: ?>
-<!-- Overview - Categories Grid -->
-<div style="margin-bottom: 15px;">
-    <h3 style="margin-bottom: 10px;">Reports for <?php echo date('F Y', strtotime($selected_month . '-01')); ?></h3>
-    <p style="color: #666; font-size: 14px;">Click on any category below to review stock movement for <?php echo date('F Y', strtotime($selected_month)); ?></p>
-</div>
-
-<div style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <label style="font-weight: 500; color: #555;">Select Month:</label>
-        <input type="month" id="monthSelect" value="<?php echo $selected_month; ?>"
-               onchange="window.location.href='?month='+this.value<?php if($selected_category_id>0) echo '&category_id='.$selected_category_id; ?>"
-               style="padding: 6px 10px; border: 1px solid #ddd; border-radius: 5px;">
-    </div>
-</div>
-
-<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
-    <?php foreach ($categories as $cat):
+<!-- Grid Overview -->
+<div class="report-grid">
+    <?php
+    $submitted_ids = array_column($all_reports, 'category_id');
+    foreach ($categories as $cat):
         $report = null;
-        foreach ($all_reports as $r) {
-            if ($r['category_id'] == $cat['id']) {
-                $report = $r;
-                break;
-            }
-        }
+        foreach ($all_reports as $r) { if ($r['category_id']==$cat['id']) { $report=$r; break; } }
     ?>
-    <div style="background: white; border-radius: 8px; cursor: pointer; border: 1px solid #e0e0e0; transition: all 0.3s;" 
-         onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.1)';"
-         onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';"
-         onclick="window.location.href='?category_id=<?php echo $cat['id']; ?>&month=<?php echo $selected_month; ?>'">
-        <div style="padding: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <h3 style="margin: 0;"><?php echo htmlspecialchars($cat['name']); ?></h3>
-                <?php if ($report): ?>
-                    <span style="background: #d4edda; color: #155724; padding: 3px 10px; border-radius: 12px; font-size: 11px;">Submitted</span>
-                <?php else: ?>
-                    <span style="background: #f5f5f5; color: #666; padding: 3px 10px; border-radius: 12px; font-size: 11px;">Pending</span>
-                <?php endif; ?>
-            </div>
-            
+    <a href="?category_id=<?php echo $cat['id']; ?>&month=<?php echo $selected_month; ?>"
+       class="report-card-item <?php echo $report?'submitted':'pending'; ?>">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <span style="font-weight:600; font-size:.88rem"><?php echo htmlspecialchars($cat['name']); ?></span>
             <?php if ($report): ?>
-                <div style="display: flex; gap: 15px; font-size: 13px; color: #666; margin: 10px 0;">
-                    <span><?php echo $report['total_items']; ?> items</span>
-                    <span><?php echo number_format($report['total_units']); ?> units</span>
-                    <?php if ($report['low_stock_count'] > 0): ?>
-                        <span><?php echo $report['low_stock_count']; ?> low</span>
-                    <?php endif; ?>
-                </div>
-                <div style="font-size: 11px; color: #999; padding-top: 10px; border-top: 1px solid #e0e0e0;">
-                    By: <?php echo htmlspecialchars($report['submitted_by_name']); ?><br>
-                    On: <?php echo date('d/m/Y', strtotime($report['submitted_at'])); ?>
-                </div>
+            <span class="status-receiving" style="font-size:.68rem">Submitted</span>
             <?php else: ?>
-                <div style="color: #999; margin: 15px 0;">Click to view stock movement for <?php echo date('F', strtotime($selected_month)); ?></div>
+            <span class="status-pending" style="font-size:.68rem">Pending</span>
             <?php endif; ?>
         </div>
-    </div>
+        <?php if ($report): ?>
+        <div style="display:flex; gap:16px; font-size:.76rem; color:var(--muted); margin-bottom:8px;">
+            <span><?php echo $report['total_items']; ?> items</span>
+            <span><?php echo number_format($report['total_units']); ?> units</span>
+            <?php if ($report['low_stock_count']>0): ?>
+            <span style="color:var(--danger)"><?php echo $report['low_stock_count']; ?> low</span>
+            <?php endif; ?>
+        </div>
+        <div style="font-size:.72rem; color:var(--muted); padding-top:8px; border-top:1px solid var(--border)">
+            <?php echo date('d/m/Y', strtotime($report['submitted_at'])); ?>
+        </div>
+        <?php else: ?>
+        <div style="font-size:.76rem; color:var(--muted)">Not yet submitted</div>
+        <?php endif; ?>
+    </a>
     <?php endforeach; ?>
 </div>
 
-<?php if (empty($all_reports) && !$is_front_desk): ?>
-<div style="background: white; padding: 40px; text-align: center; color: #999; border-radius: 8px; border: 1px solid #e0e0e0; margin-top: 20px;">
-    <p>No reports available for <?php echo date('F Y', strtotime($selected_month . '-01')); ?>.</p>
-    <p>Front desk staff need to submit monthly reports.</p>
+<!-- Summary Table -->
+<?php if (count($all_reports) > 0): ?>
+<div class="card">
+    <h3 style="margin-bottom:12px">Summary &mdash; <?php echo date('F Y', strtotime($selected_month.'-01')); ?></h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr><th>Category</th><th>Items</th><th>Units</th><th>Low Stock</th><th>Submitted By</th><th>Submitted On</th></tr>
+            </thead>
+            <tbody>
+                <?php foreach ($all_reports as $r): ?>
+                <tr style="cursor:pointer" onclick="window.location.href='?category_id=<?php echo $r['category_id']; ?>&month=<?php echo $selected_month; ?>'">
+                    <td style="font-weight:500"><?php echo htmlspecialchars($r['category_name']); ?></td>
+                    <td><?php echo $r['total_items']; ?></td>
+                    <td><?php echo number_format($r['total_units']); ?></td>
+                    <td><?php echo $r['low_stock_count']>0 ? '<span style="color:var(--danger)">'.$r['low_stock_count'].' items</span>' : '<span style="color:var(--success)">None</span>'; ?></td>
+                    <td style="color:var(--muted)"><?php echo htmlspecialchars($r['submitted_by_name']); ?></td>
+                    <td style="color:var(--muted); font-size:.76rem"><?php echo date('d/m/Y H:i', strtotime($r['submitted_at'])); ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td>Total</td>
+                    <td><?php echo array_sum(array_column($all_reports,'total_items')); ?></td>
+                    <td><?php echo number_format(array_sum(array_column($all_reports,'total_units'))); ?></td>
+                    <td colspan="3"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if (count($all_reports)==0): ?>
+<div class="empty-state" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);">
+    <p>No reports submitted for <?php echo date('F Y', strtotime($selected_month.'-01')); ?> yet.</p>
 </div>
 <?php endif; ?>
 <?php endif; ?>

@@ -1,149 +1,186 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
 redirectIfNotLoggedIn();
+if (isManager()) { header('Location: manager_dashboard.php'); exit(); }
 
-// If user is manager, redirect to manager dashboard
-if (isManager()) {
-    header('Location: manager_dashboard.php');
-    exit();
-}
+$total_items = $pdo->query("SELECT COUNT(*) FROM items")->fetchColumn();
 
-$user_role = $_SESSION['role'];
-$is_front_desk = ($user_role == 'front_desk');
+$low_stmt = $pdo->prepare("
+    SELECT * FROM items
+    WHERE current_quantity <= reorder_level
+    ORDER BY CASE WHEN current_quantity = 0 THEN 1 WHEN current_quantity <= reorder_level/2 THEN 2 ELSE 3 END, current_quantity ASC
+");
+$low_stmt->execute();
+$low_stock = $low_stmt->fetchAll();
 
-// Get statistics
-$stmt = $pdo->query("SELECT COUNT(*) as total_items, SUM(current_quantity * unit_price) as total_value FROM items");
-$summary = $stmt->fetch();
+$healthy_count = $pdo->query("SELECT COUNT(*) FROM items WHERE current_quantity > reorder_level")->fetchColumn();
+$critical_count = $pdo->query("SELECT COUNT(*) FROM items WHERE current_quantity = 0 OR current_quantity <= reorder_level/2")->fetchColumn();
+$pending_procurement = $pdo->query("SELECT COUNT(*) FROM procurement WHERE status = 'pending'")->fetchColumn();
 
-// Get low stock items
-$stmt = $pdo->prepare("SELECT * FROM items WHERE current_quantity <= reorder_level AND current_quantity > 0 ORDER BY current_quantity ASC LIMIT 10");
-$stmt->execute();
-$low_stock = $stmt->fetchAll();
+$current_month = date('Y-m');
+$submitted_reports = $pdo->prepare("SELECT COUNT(*) FROM category_monthly_reports WHERE DATE_FORMAT(report_month, '%Y-%m') = ? AND submitted_by = ?");
+$submitted_reports->execute([$current_month, $_SESSION['user_id']]);
+$reports_submitted = $submitted_reports->fetchColumn();
+$total_categories = $pdo->query("SELECT COUNT(*) FROM categories")->fetchColumn();
 
-// Get out of stock items
-$stmt = $pdo->prepare("SELECT * FROM items WHERE current_quantity = 0 ORDER BY item_name LIMIT 10");
-$stmt->execute();
-$out_of_stock = $stmt->fetchAll();
-
-// Get user's pending requests
-$stmt = $pdo->prepare("SELECT COUNT(*) as total FROM procurement WHERE requested_by = ? AND status = 'pending'");
-$stmt->execute([$_SESSION['user_id']]);
-$my_pending_requests = $stmt->fetchColumn();
+$stmt = $pdo->prepare("
+    (SELECT 'Received' as type, i.item_name, i.category, s.quantity, s.created_at, s.supplier
+     FROM stock_receiving s JOIN items i ON s.item_id=i.id WHERE s.received_by=? ORDER BY s.created_at DESC LIMIT 5)
+    UNION ALL
+    (SELECT 'Issued' as type, i.item_name, i.category, s.quantity, s.created_at, s.issued_to as supplier
+     FROM stock_issuing s JOIN items i ON s.item_id=i.id WHERE s.issued_by=? ORDER BY s.created_at DESC LIMIT 5)
+    ORDER BY created_at DESC LIMIT 10
+");
+$stmt->execute([$_SESSION['user_id'], $_SESSION['user_id']]);
+$recent = $stmt->fetchAll();
 
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h1>Front Desk Dashboard</h1>
-    <div style="color: #666; font-size: 14px;">
-        <?php echo date('l, d F Y'); ?>
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <div style="font-size:.78rem; color:var(--muted)"><?php echo date('l, d F Y'); ?></div>
+</div>
+
+<!-- Stats -->
+<div class="dashboard">
+    <div class="card">
+        <div class="stat"><?php echo $total_items; ?></div>
+        <div class="stat-label">Total Items</div>
+    </div>
+    <div class="card">
+        <div class="stat" style="color:<?php echo count($low_stock) > 0 ? 'var(--danger)' : 'var(--success)'; ?>"><?php echo count($low_stock); ?></div>
+        <div class="stat-label">Low Stock</div>
+    </div>
+    <div class="card">
+        <div class="stat" style="color:<?php echo $critical_count > 0 ? 'var(--danger)' : 'inherit'; ?>"><?php echo $critical_count; ?></div>
+        <div class="stat-label">Critical Items</div>
+    </div>
+    <div class="card">
+        <div class="stat" style="color:var(--success)"><?php echo $healthy_count; ?></div>
+        <div class="stat-label">Healthy Stock</div>
+    </div>
+    <div class="card">
+        <div class="stat"><?php echo $reports_submitted; ?>/<?php echo $total_categories; ?></div>
+        <div class="stat-label">Reports This Month</div>
     </div>
 </div>
 
-<!-- Stats Grid -->
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
-    <div class="card" style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0;">
-        <div style="color: #666; font-size: 14px;">Total Stock Items</div>
-        <div style="font-size: 32px; font-weight: bold;"><?php echo $summary['total_items'] ?? 0; ?></div>
-    </div>
-    <div class="card" style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0;">
-        <div style="color: #666; font-size: 14px;">Low Stock Alerts</div>
-        <div style="font-size: 32px; font-weight: bold; color: <?php echo count($low_stock) > 0 ? '#dc3545' : '#28a745'; ?>">
-            <?php echo count($low_stock); ?>
-        </div>
-    </div>
-    <div class="card" style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0;">
-        <div style="color: #666; font-size: 14px;">Out of Stock Items</div>
-        <div style="font-size: 32px; font-weight: bold; color: <?php echo count($out_of_stock) > 0 ? '#dc3545' : '#28a745'; ?>">
-            <?php echo count($out_of_stock); ?>
-        </div>
-    </div>
-    <div class="card" style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0;">
-        <div style="color: #666; font-size: 14px;">Pending My Requests</div>
-        <div style="font-size: 32px; font-weight: bold;"><?php echo $my_pending_requests; ?></div>
-    </div>
+<!-- Quick Actions -->
+<div class="action-group">
+    <a href="receive_stock.php" class="btn btn-success">Receive Stock</a>
+    <a href="issue_stock.php" class="btn btn-primary">Issue Stock</a>
+    <a href="procurement.php" class="btn btn-warning">Request Procurement</a>
+    <a href="submit_category_report.php" class="btn btn-info">Submit Monthly Report</a>
+    <a href="category_reports.php" class="btn">View Reports</a>
 </div>
 
-<!-- Quick Actions (Left) + Welcome Message (Right) - Side by Side -->
-<div style="display: flex; gap: 20px; margin-bottom: 30px; flex-wrap: wrap;">
-    <!-- Quick Actions - Left Side -->
-    <div class="card" style="background: white; border-radius: 8px; border: 1px solid #e0e0e0; flex: 2; min-width: 300px;">
-        <div style="padding: 15px 20px; border-bottom: 1px solid #e0e0e0;">
-            <h3 style="margin: 0;">Quick Actions</h3>
-        </div>
-        <div style="padding: 20px; display: flex; gap: 15px; flex-wrap: wrap;">
-            <a href="receive_stock.php" class="btn" style="background: #28a745; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500;">Receive Stock</a>
-            <a href="issue_stock.php" class="btn" style="background: #007bff; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500;">Issue Out Items</a>
-            <a href="procurement.php" class="btn" style="background: #ffc107; color: #000000; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500;">Request Procurements</a>
-            <a href="inventory.php" class="btn" style="background: #048b26; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500;">View Stock</a>
-        </div>
+<!-- Low Stock -->
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+        <h3 style="margin:0">
+            <?php if (count($low_stock) > 0): ?>
+                Low Stock Alert &mdash; <?php echo count($low_stock); ?> item<?php echo count($low_stock) != 1 ? 's' : ''; ?>
+            <?php else: ?>
+                Stock Levels
+            <?php endif; ?>
+        </h3>
+        <?php if (count($low_stock) > 0): ?>
+        <a href="procurement.php" class="btn btn-sm btn-warning">Request Multiple</a>
+        <?php endif; ?>
     </div>
-    
-    <!-- Welcome Message - Right Side (keep original style) -->
-    <div class="card" style="background: white; border-radius: 8px; border: 1px solid #e0e0e0; flex: 1; min-width: 250px; display: flex; align-items: left; justify-content: left;">
-        <div style="padding: 20px; text-align: left;">
-            <div style="color: #555;">Welcome</div>
-            <div style="font-size: 18px; font-weight: 600;">Welcome back, <?php echo htmlspecialchars($_SESSION['full_name']); ?>!</div>
-            <div style="color: #666; font-size: 12px; margin-top: 5px;">Altus Financial Services Inventory System</div>
-        </div>
-    </div>
-</div>
 
-<!-- Recent Activity -->
-<div style="background: white; border-radius: 8px; border: 1px solid #e0e0e0;">
-    <div style="padding: 15px 20px; border-bottom: 1px solid #e0e0e0;">
-        <h3 style="margin: 0;">Recent Activity</h3>
-    </div>
-    <div style="padding: 20px; overflow-x: auto;">
-        <?php
-        $recent = $pdo->prepare("
-            (SELECT 'Received' as type, i.item_name, r.quantity, r.created_at 
-             FROM stock_receiving r JOIN items i ON r.item_id = i.id 
-             WHERE r.received_by = ? ORDER BY r.created_at DESC LIMIT 10)
-            UNION ALL
-            (SELECT 'Issued' as type, i.item_name, s.quantity, s.created_at 
-             FROM stock_issuing s JOIN items i ON s.item_id = i.id 
-             WHERE s.issued_by = ? ORDER BY s.created_at DESC LIMIT 10)
-            ORDER BY created_at DESC LIMIT 15
-        ");
-        $recent->execute([$_SESSION['user_id'], $_SESSION['user_id']]);
-        $recent_activity = $recent->fetchAll();
-        ?>
-        
-        <?php if (count($recent_activity) > 0): ?>
-        <table style="width: 100%; border-collapse: collapse;">
+    <?php if (count($low_stock) > 0): ?>
+    <div class="table-container">
+        <table>
             <thead>
-                <tr style="background: #fafafa; border-bottom: 2px solid #e0e0e0;">
-                    <th style="padding: 12px; text-align: left;">Type</th>
-                    <th style="padding: 12px; text-align: left;">Item</th>
-                    <th style="padding: 12px; text-align: left;">Quantity</th>
-                    <th style="padding: 12px; text-align: left;">Date/Time</th>
+                <tr>
+                    <th>Item</th>
+                    <th>Category</th>
+                    <th>Current</th>
+                    <th>Reorder Level</th>
+                    <th>Status</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($recent_activity as $activity): ?>
-                <tr style="border-bottom: 1px solid #e0e0e0;">
-                    <td style="padding: 12px;">
-                        <?php if ($activity['type'] == 'Received'): ?>
-                            <span style="background: #d4edda; color: #155724; padding: 3px 10px; border-radius: 12px; font-size: 11px;">Received</span>
-                        <?php else: ?>
-                            <span style="background: #f8d7da; color: #721c24; padding: 3px 10px; border-radius: 12px; font-size: 11px;">Issued</span>
+                <?php foreach ($low_stock as $item): ?>
+                <tr>
+                    <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
+                    <td><span class="cat-pill <?php echo catClass($item['category']??'Other');?>"><?php echo htmlspecialchars($item['category']??'Other');?></span></td>
+                    <td>
+                        <strong><?php echo $item['current_quantity']; ?></strong>
+                        <?php if ($item['current_quantity'] == 0): ?>
+                            &nbsp;<span class="status-issuing" style="font-size:.68rem">Out of Stock</span>
                         <?php endif; ?>
                     </td>
-                    <td style="padding: 12px;"><?php echo htmlspecialchars($activity['item_name']); ?></td>
-                    <td style="padding: 12px;"><?php echo $activity['quantity']; ?></td>
-                    <td style="padding: 12px; color: #666; font-size: 12px;"><?php echo date('d/m/Y H:i', strtotime($activity['created_at'])); ?></td>
+                    <td><?php echo $item['reorder_level']; ?></td>
+                    <td>
+                        <?php
+                        $pct = $item['reorder_level'] > 0 ? ($item['current_quantity'] / $item['reorder_level']) * 100 : 0;
+                        if ($item['current_quantity'] == 0): ?><span class="status-issuing">Critical</span>
+                        <?php elseif ($pct <= 25): ?><span class="status-issuing">Very Low</span>
+                        <?php elseif ($pct <= 50): ?><span class="status-pending">Low</span>
+                        <?php else: ?><span class="status-pending">Below Reorder</span>
+                        <?php endif; ?>
+                    </td>
+                    <td style="white-space:nowrap">
+                        <a href="receive_stock.php?item=<?php echo $item['id']; ?>" class="btn btn-sm">Receive</a>
+                        <a href="procurement.php?item_name=<?php echo urlencode($item['item_name']); ?>&qty=<?php echo $item['reorder_level'] * 2; ?>" class="btn btn-sm">Request</a>
+                    </td>
                 </tr>
                 <?php endforeach; ?>
             </tbody>
         </table>
-        <?php else: ?>
-        <div style="text-align: center; padding: 40px; color: #999;">
-            No recent activity found.
-        </div>
-        <?php endif; ?>
     </div>
+    <?php else: ?>
+    <div class="empty-state">
+        <p style="color:var(--success); font-weight:500">All <?php echo $healthy_count; ?> items are above reorder levels.</p>
+        <div style="display:flex; gap:8px; justify-content:center; margin-top:12px;">
+            <a href="receive_stock.php" class="btn btn-sm btn-success">Receive Stock</a>
+            <a href="issue_stock.php" class="btn btn-sm btn-primary">Issue Stock</a>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display:flex; gap:18px; flex-wrap:wrap; font-size:.76rem; color:var(--muted)">
+        <span>Total: <strong style="color:var(--text)"><?php echo $total_items; ?></strong></span>
+        <span>Healthy: <strong style="color:var(--success)"><?php echo $healthy_count; ?></strong></span>
+        <?php if (count($low_stock) > 0): ?><span>Need Attention: <strong style="color:var(--danger)"><?php echo count($low_stock); ?></strong></span><?php endif; ?>
+        <?php if ($pending_procurement > 0): ?><span>Pending Requests: <strong style="color:var(--warning)"><?php echo $pending_procurement; ?></strong></span><?php endif; ?>
+    </div>
+</div>
+
+<!-- Recent Transactions -->
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h3 style="margin:0">Recent Transactions</h3>
+        <a href="view_transactions.php" class="btn btn-sm">View All</a>
+    </div>
+
+    <?php if (!empty($recent)): ?>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr><th>Type</th><th>Item</th><th>Category</th><th>Qty</th><th>Details</th><th>Date</th></tr>
+            </thead>
+            <tbody>
+                <?php foreach ($recent as $t): ?>
+                <tr>
+                    <td><span class="status-<?php echo strtolower($t['type']);?>"><?php echo $t['type'];?></span></td>
+                    <td style="font-weight:500"><?php echo htmlspecialchars($t['item_name']);?></td>
+                    <td><span class="cat-pill <?php echo catClass($t['category']??'Other');?>"><?php echo htmlspecialchars($t['category']??'Other');?></span></td>
+                    <td><?php echo $t['quantity'];?></td>
+                    <td style="color:var(--muted); font-size:.76rem"><?php echo $t['type'] === 'Received' ? 'From: '.htmlspecialchars($t['supplier']??'') : 'To: '.htmlspecialchars($t['supplier']??''); ?></td>
+                    <td style="white-space:nowrap; color:var(--muted); font-size:.76rem"><?php echo date('d/m/Y H:i', strtotime($t['created_at']));?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php else: ?>
+    <div class="empty-state"><p>No transactions yet. Start by receiving or issuing stock.</p></div>
+    <?php endif; ?>
 </div>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

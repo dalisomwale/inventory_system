@@ -1,5 +1,4 @@
-</div><!-- /content-body -->
-</div><!-- /main-content -->
+</main>
 <script src="../js/script.js"></script>
 </body>
 </html>
