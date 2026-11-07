@@ -10,7 +10,7 @@
 
     // ── Alerts fade out after a few seconds (errors stay) ──────
     function autoDismissAlerts() {
-        document.querySelectorAll('.alert-success').forEach(function (el) {
+        document.querySelectorAll('.alert-success:not([data-keep])').forEach(function (el) {
             setTimeout(function () {
                 el.style.opacity = '0';
                 setTimeout(function () { el.remove(); }, 400);

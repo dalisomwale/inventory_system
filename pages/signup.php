@@ -41,7 +41,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
                 $pdo->prepare("INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, ?)")
                     ->execute([$full_name, $email, $hash, $role]);
-                $success = 'Account created. You can now <a href="login.php">sign in</a>.';
+                try {
+                    $new_id = (int)$pdo->lastInsertId();
+                    $pdo->prepare("INSERT INTO audit_trail (user_id, action, details) VALUES (?, 'CREATE_ACCOUNT', ?)")
+                        ->execute([$new_id, "Account created for $email ($role)"]);
+                } catch (Exception $e) {}
+                $_SESSION['signup_done']  = $full_name;
+                $_SESSION['signup_email'] = $email;
+                header('Location: login.php');
+                exit();
             }
         } catch (PDOException $e) {
             $error = 'Registration failed. Please try again.';

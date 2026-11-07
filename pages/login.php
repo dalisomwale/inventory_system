@@ -7,6 +7,14 @@ if (isset($_SESSION['user_id'])) {
     exit();
 }
 
+// Just came from creating an account
+$prefill_email = '';
+if (!empty($_SESSION['signup_done'])) {
+    $welcome       = 'Account created for ' . htmlspecialchars($_SESSION['signup_done']) . '. Sign in with your new password.';
+    $prefill_email = $_SESSION['signup_email'] ?? '';
+    unset($_SESSION['signup_done'], $_SESSION['signup_email']);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email    = strtolower(trim((string)($_POST['email'] ?? '')));
     $password = (string)($_POST['password'] ?? '');
@@ -77,6 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="sub">Sign in with your staff account</div>
         </div>
 
+        <?php if (isset($welcome)): ?>
+            <div class="alert alert-success" data-keep="1"><?php echo $welcome; ?></div>
+        <?php endif; ?>
         <?php if (isset($error)): ?>
             <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
@@ -85,11 +96,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="form-group">
                 <label for="email">Work email</label>
                 <input type="email" id="email" name="email" required maxlength="190" placeholder="name@altus.co.zm"
-                       value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" autocomplete="username" autofocus>
+                       value="<?php echo htmlspecialchars($_POST['email'] ?? $prefill_email); ?>" autocomplete="username" <?php echo $prefill_email ? '' : 'autofocus'; ?>>
             </div>
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" required placeholder="Enter password" autocomplete="current-password">
+                <input type="password" id="password" name="password" required <?php echo $prefill_email ? 'autofocus' : ''; ?> placeholder="Enter password" autocomplete="current-password">
             </div>
             <button type="submit" class="btn btn-primary login-submit">Sign In</button>
         </form>
