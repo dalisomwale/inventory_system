@@ -215,8 +215,38 @@
         });
     }
 
+    // ── Hover / focus tooltips for chart marks: data-tip="..." ──
+    function initTooltips() {
+        var tip = null;
+        function show(el, x, y) {
+            if (!tip) { tip = document.createElement('div'); tip.className = 'tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+            tip.textContent = el.getAttribute('data-tip');
+            tip.style.display = 'block';
+            var r = tip.getBoundingClientRect();
+            var left = Math.min(window.innerWidth - r.width - 8, Math.max(8, x - r.width / 2));
+            var top = y - r.height - 12;
+            if (top < 8) top = y + 16;
+            tip.style.left = left + 'px';
+            tip.style.top = top + 'px';
+        }
+        function hide() { if (tip) tip.style.display = 'none'; }
+        document.addEventListener('mousemove', function (e) {
+            var el = e.target.closest && e.target.closest('[data-tip]');
+            if (el && el.getAttribute('data-tip')) show(el, e.clientX, e.clientY); else hide();
+        });
+        document.addEventListener('focusin', function (e) {
+            var el = e.target.closest && e.target.closest('[data-tip]');
+            if (!el || !el.getAttribute('data-tip')) return hide();
+            var r = el.getBoundingClientRect();
+            show(el, r.left + r.width / 2, r.top);
+        });
+        document.addEventListener('focusout', hide);
+        window.addEventListener('scroll', hide, true);
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         autoDismissAlerts();
+        initTooltips();
         addCsrfTokens();
 
         document.querySelectorAll('form').forEach(function (form) {

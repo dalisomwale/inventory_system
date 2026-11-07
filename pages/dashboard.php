@@ -5,13 +5,23 @@ if (isManager()) { header('Location: manager_dashboard.php'); exit(); }
 
 $total_items = $pdo->query("SELECT COUNT(*) FROM items")->fetchColumn();
 
-$low_stmt = $pdo->prepare("
-    SELECT * FROM items
-    WHERE current_quantity <= reorder_level
-    ORDER BY CASE WHEN current_quantity = 0 THEN 1 WHEN current_quantity <= reorder_level/2 THEN 2 ELSE 3 END, current_quantity ASC
-");
-$low_stmt->execute();
-$low_stock = $low_stmt->fetchAll();
+require_once __DIR__ . '/../includes/insights.php';
+$forecast  = ins_item_forecast($pdo, 30);
+$low_stock = ins_running_low($forecast, 14);
+$out_count = count(array_filter($forecast, fn($r) => $r['current_quantity'] <= 0));
+$top_issued = ins_top_issued($pdo, 30, 5);
+
+$today = $pdo->prepare("
+    SELECT
+      (SELECT COALESCE(SUM(quantity),0) FROM stock_issuing   WHERE DATE(created_at)=CURDATE()) AS issued_all,
+      (SELECT COUNT(*)                  FROM stock_issuing   WHERE DATE(created_at)=CURDATE() AND issued_by=?)   AS issued_mine,
+      (SELECT COALESCE(SUM(quantity),0) FROM stock_receiving WHERE DATE(created_at)=CURDATE()) AS received_all");
+$today->execute([$_SESSION['user_id']]);
+$today = $today->fetch();
+
+$my_pending = $pdo->prepare("SELECT COUNT(*) FROM procurement WHERE status='pending' AND requested_by=?");
+$my_pending->execute([$_SESSION['user_id']]);
+$my_pending = (int)$my_pending->fetchColumn();
 
 $healthy_count = $pdo->query("SELECT COUNT(*) FROM items WHERE current_quantity > reorder_level")->fetchColumn();
 $critical_count = $pdo->query("SELECT COUNT(*) FROM items WHERE current_quantity = 0 OR current_quantity <= reorder_level/2")->fetchColumn();
@@ -42,27 +52,27 @@ include __DIR__ . '/../includes/header.php';
     <div style="font-size:.78rem; color:var(--muted)"><?php echo date('l, d F Y'); ?></div>
 </div>
 
-<!-- Stats -->
-<div class="dashboard">
-    <div class="card">
-        <div class="stat"><?php echo $total_items; ?></div>
-        <div class="stat-label">Total Items</div>
+<!-- Headline numbers -->
+<div class="kpi-row">
+    <div class="kpi">
+        <div class="kpi-label">Need reordering</div>
+        <div class="kpi-value <?php echo count($low_stock) ? 'is-bad' : ''; ?>"><?php echo count($low_stock); ?></div>
+        <div class="kpi-note"><?php echo count($low_stock) ? 'Below reorder level or under 2 weeks left' : 'All items have at least 2 weeks of stock'; ?></div>
     </div>
-    <div class="card">
-        <div class="stat" style="color:<?php echo count($low_stock) > 0 ? 'var(--danger)' : 'var(--success)'; ?>"><?php echo count($low_stock); ?></div>
-        <div class="stat-label">Low Stock</div>
+    <div class="kpi">
+        <div class="kpi-label">Out of stock</div>
+        <div class="kpi-value <?php echo $out_count ? 'is-bad' : ''; ?>"><?php echo $out_count; ?></div>
+        <div class="kpi-note">of <?php echo $total_items; ?> items</div>
     </div>
-    <div class="card">
-        <div class="stat" style="color:<?php echo $critical_count > 0 ? 'var(--danger)' : 'inherit'; ?>"><?php echo $critical_count; ?></div>
-        <div class="stat-label">Critical Items</div>
+    <div class="kpi">
+        <div class="kpi-label">Today</div>
+        <div class="kpi-value"><?php echo number_format($today['issued_all']); ?> <span class="kpi-unit">issued</span></div>
+        <div class="kpi-note"><?php echo number_format($today['received_all']); ?> received &middot; <?php echo (int)$today['issued_mine']; ?> issue<?php echo $today['issued_mine'] == 1 ? '' : 's'; ?> by you</div>
     </div>
-    <div class="card">
-        <div class="stat" style="color:var(--success)"><?php echo $healthy_count; ?></div>
-        <div class="stat-label">Healthy Stock</div>
-    </div>
-    <div class="card">
-        <div class="stat"><?php echo $reports_submitted; ?>/<?php echo $total_categories; ?></div>
-        <div class="stat-label">Reports This Month</div>
+    <div class="kpi">
+        <div class="kpi-label">Reports this month</div>
+        <div class="kpi-value"><?php echo $reports_submitted; ?><span class="kpi-unit">/ <?php echo $total_categories; ?></span></div>
+        <div class="kpi-note"><?php echo $my_pending; ?> of your requests awaiting approval</div>
     </div>
 </div>
 
@@ -80,14 +90,12 @@ include __DIR__ . '/../includes/header.php';
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0">
             <?php if (count($low_stock) > 0): ?>
-                Low Stock Alert &mdash; <?php echo count($low_stock); ?> item<?php echo count($low_stock) != 1 ? 's' : ''; ?>
+                Running low &mdash; <?php echo count($low_stock); ?> item<?php echo count($low_stock) != 1 ? 's' : ''; ?>
             <?php else: ?>
                 Stock Levels
             <?php endif; ?>
         </h3>
-        <?php if (count($low_stock) > 0): ?>
-        <a href="procurement.php" class="btn btn-sm btn-warning">Request Multiple</a>
-        <?php endif; ?>
+        <span class="card-hint">"Days left" is based on how much was issued in the last 30 days</span>
     </div>
 
     <?php if (count($low_stock) > 0): ?>
@@ -97,9 +105,10 @@ include __DIR__ . '/../includes/header.php';
                 <tr>
                     <th>Item</th>
                     <th>Category</th>
-                    <th>Current</th>
-                    <th>Reorder Level</th>
-                    <th>Status</th>
+                    <th class="num">In stock</th>
+                    <th class="num">Reorder at</th>
+                    <th>Days left</th>
+                    <th class="num">Suggested order</th>
                     <th></th>
                 </tr>
             </thead>
@@ -108,25 +117,16 @@ include __DIR__ . '/../includes/header.php';
                 <tr>
                     <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
                     <td><span class="cat-pill <?php echo catClass($item['category']??'Other');?>"><?php echo htmlspecialchars($item['category']??'Other');?></span></td>
+                    <td class="num"><strong><?php echo number_format($item['current_quantity']); ?></strong></td>
+                    <td class="num muted"><?php echo number_format($item['reorder_level']); ?></td>
                     <td>
-                        <strong><?php echo $item['current_quantity']; ?></strong>
-                        <?php if ($item['current_quantity'] == 0): ?>
-                            &nbsp;<span class="status-issuing" style="font-size:.68rem">Out of Stock</span>
-                        <?php endif; ?>
+                        <?php $urgent = $item['current_quantity'] <= 0 || ($item['days_left'] !== null && $item['days_left'] < 7); ?>
+                        <span class="<?php echo $urgent ? 'status-issuing' : 'status-pending'; ?>"><?php echo $urgent ? '&#9888; ' : ''; ?><?php echo days_left_label($item['days_left'], (int)$item['current_quantity']); ?></span>
                     </td>
-                    <td><?php echo $item['reorder_level']; ?></td>
-                    <td>
-                        <?php
-                        $pct = $item['reorder_level'] > 0 ? ($item['current_quantity'] / $item['reorder_level']) * 100 : 0;
-                        if ($item['current_quantity'] == 0): ?><span class="status-issuing">Critical</span>
-                        <?php elseif ($pct <= 25): ?><span class="status-issuing">Very Low</span>
-                        <?php elseif ($pct <= 50): ?><span class="status-pending">Low</span>
-                        <?php else: ?><span class="status-pending">Below Reorder</span>
-                        <?php endif; ?>
-                    </td>
+                    <td class="num"><?php echo number_format($item['suggest']); ?></td>
                     <td style="white-space:nowrap">
-                        <a href="receive_stock.php?item=<?php echo $item['id']; ?>" class="btn btn-sm">Receive</a>
-                        <a href="procurement.php?item_name=<?php echo urlencode($item['item_name']); ?>&qty=<?php echo $item['reorder_level'] * 2; ?>" class="btn btn-sm">Request</a>
+                        <a href="receive_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>" class="btn btn-sm">Receive</a>
+                        <a href="procurement.php?item_name=<?php echo urlencode($item['item_name']); ?>&qty=<?php echo max(1, $item['suggest']); ?>&category_id=<?php echo (int)$item['category_id']; ?>" class="btn btn-sm">Request</a>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -152,6 +152,7 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Recent Transactions -->
+<div class="grid-2 wide-left">
 <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <h3 style="margin:0">Recent Transactions</h3>
@@ -181,6 +182,12 @@ include __DIR__ . '/../includes/header.php';
     <?php else: ?>
     <div class="empty-state"><p>No transactions yet. Start by receiving or issuing stock.</p></div>
     <?php endif; ?>
+</div>
+
+<div class="card">
+    <div class="card-head"><h3>Most issued &mdash; last 30 days</h3></div>
+    <?php echo $top_issued ? chart_hbars($top_issued, fn($v) => number_format($v) . ' units') : '<div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>'; ?>
+</div>
 </div>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

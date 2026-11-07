@@ -144,7 +144,7 @@ include __DIR__ . '/../includes/header.php';
             <div class="form-group">
                 <label>Item Name *</label>
                 <input type="text" name="item_name" required minlength="2" maxlength="200" placeholder="Item you need"
-                       value="<?php echo isset($error) ? htmlspecialchars($_POST['item_name'] ?? '') : ''; ?>">
+                       value="<?php echo htmlspecialchars(isset($error) ? ($_POST['item_name'] ?? '') : (is_string($_GET['item_name'] ?? null) ? $_GET['item_name'] : '')); ?>">
             </div>
             <div class="form-group">
                 <label>Category *</label>
@@ -159,7 +159,8 @@ include __DIR__ . '/../includes/header.php';
         <div class="form-row">
             <div class="form-group">
                 <label>Quantity *</label>
-                <input type="number" name="quantity" min="1" max="100000" step="1" required value="1">
+                <input type="number" name="quantity" min="1" max="100000" step="1" required
+                       value="<?php echo max(1, min(100000, (int)($_POST['quantity'] ?? $_GET['qty'] ?? 1))); ?>">
             </div>
         </div>
         <div class="form-group">
