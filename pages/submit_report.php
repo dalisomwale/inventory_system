@@ -12,16 +12,21 @@ if ($user_role != 'front_desk') {
 $message = '';
 $error = '';
 $selected_category = (int)($_GET['category'] ?? 0);
-$selected_month = $_GET['month'] ?? date('Y-m');
+$selected_month = safe_month($_GET['month'] ?? null);
 
 $categories = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $category_id = (int)$_POST['category_id'];
-    $report_month = $_POST['report_month'];
-    $notes = trim($_POST['notes'] ?? '');
-    
+    $v = new Validator($_POST);
+    $cat_row = $v->exists($pdo, 'category_id', 'category', 'categories', 'id');
+    $report_month = $v->month('report_month', 'Month');
+    $notes = $v->textarea('notes', 'Notes', 1000);
+    $category_id = $cat_row ? (int)$cat_row['id'] : 0;
+
     // Check if report already exists
+    if (!$v->ok()) {
+        $error = $v->message();
+    } else {
     $check = $pdo->prepare("SELECT id FROM category_monthly_reports WHERE category_id = ? AND DATE_FORMAT(report_month, '%Y-%m') = ?");
     $check->execute([$category_id, $report_month]);
     if ($check->fetch()) {
@@ -37,6 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $items_data = [];
             $total_units = 0;
+            $total_value = 0;
             $low_stock_count = 0;
             
             foreach ($items_list as $item) {
@@ -51,18 +57,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'status' => $status
                 ];
                 $total_units += $closing_stock;
+                $total_value += $closing_stock * $item['unit_price'];
             }
             
-            $stmt = $pdo->prepare("INSERT INTO category_monthly_reports (category_id, report_month, items_data, total_items, total_units, low_stock_count, notes, submitted_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-            $result = $stmt->execute([$category_id, $report_month . '-01', json_encode($items_data), count($items_data), $total_units, $low_stock_count, $notes, $_SESSION['user_id']]);
+            $stmt = $pdo->prepare("INSERT INTO category_monthly_reports (category_id, report_month, items_data, total_items, total_units, total_value, low_stock_count, notes, submitted_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $result = $stmt->execute([$category_id, $report_month . '-01', json_encode($items_data), count($items_data), $total_units, $total_value, $low_stock_count, $notes, $_SESSION['user_id']]);
             
             if ($result) {
                 $message = "Monthly report submitted successfully!";
-                echo "<script>setTimeout(function(){ window.location.href='reports.php?month=$report_month'; }, 1500);</script>";
+                header('Refresh: 2; url=reports.php?month=' . $report_month);
             } else {
                 $error = "Failed to submit report.";
             }
         }
+    }
     }
 }
 
@@ -82,8 +90,11 @@ include __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0;">
-    <form method="POST">
-        <div style="margin-bottom: 15px;">
+    <form method="POST"
+          data-confirm-title="Submit report"
+          data-confirm="Submit the {category_id} report for {report_month}? It will be sent to the manager."
+          data-confirm-ok="Submit report">
+        <div class="form-group" style="margin-bottom: 15px;">
             <label style="display: block; margin-bottom: 5px; font-weight: 500;">Category:</label>
             <select name="category_id" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
                 <option value="">-- Select Category --</option>
@@ -95,7 +106,7 @@ include __DIR__ . '/../includes/header.php';
         
         <div style="margin-bottom: 15px;">
             <label style="display: block; margin-bottom: 5px; font-weight: 500;">Month:</label>
-            <input type="month" name="report_month" value="<?php echo $selected_month; ?>" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <input type="month" name="report_month" value="<?php echo $selected_month; ?>" max="<?php echo date('Y-m'); ?>" required style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
         </div>
         
         <div style="margin-bottom: 15px;">

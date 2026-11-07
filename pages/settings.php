@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/auth.php';
 redirectIfNotLoggedIn();
 
 $message = '';
@@ -7,24 +7,29 @@ $error = '';
 
 // Update password
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_password'])) {
-    $current = $_POST['current_password'] ?? '';
-    $new = $_POST['new_password'] ?? '';
-    $confirm = $_POST['confirm_password'] ?? '';
-    
+    $current = (string)($_POST['current_password'] ?? '');
+    $new     = (string)($_POST['new_password'] ?? '');
+    $confirm = (string)($_POST['confirm_password'] ?? '');
+
     $stmt = $pdo->prepare("SELECT password FROM users WHERE id = ?");
     $stmt->execute([$_SESSION['user_id']]);
     $user = $stmt->fetch();
-    
-    if (password_verify($current, $user['password'])) {
-        if ($new === $confirm && strlen($new) >= 6) {
-            $hash = password_hash($new, PASSWORD_DEFAULT);
-            $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")->execute([$hash, $_SESSION['user_id']]);
-            $message = "Password updated successfully!";
-        } else {
-            $error = "New password must match and be at least 6 characters.";
-        }
-    } else {
+
+    if (!$user || !password_verify($current, $user['password'])) {
         $error = "Current password is incorrect.";
+    } elseif (strlen($new) < 8) {
+        $error = "New password must be at least 8 characters.";
+    } elseif (!preg_match('/[A-Za-z]/', $new) || !preg_match('/\d/', $new)) {
+        $error = "New password must contain at least one letter and one number.";
+    } elseif ($new !== $confirm) {
+        $error = "The new passwords do not match.";
+    } elseif ($new === $current) {
+        $error = "New password must be different from your current password.";
+    } else {
+        $hash = password_hash($new, PASSWORD_DEFAULT);
+        $pdo->prepare("UPDATE users SET password = ? WHERE id = ?")->execute([$hash, $_SESSION['user_id']]);
+        logAudit($pdo, $_SESSION['user_id'], 'CHANGE_PASSWORD', null, null, 'Password changed');
+        $message = "Password updated.";
     }
 }
 
@@ -50,15 +55,17 @@ include __DIR__ . '/../includes/header.php';
         <form method="POST">
             <div class="form-group">
                 <label>Current Password</label>
-                <input type="password" name="current_password" required>
+                <input type="password" name="current_password" required autocomplete="current-password">
             </div>
             <div class="form-group">
                 <label>New Password</label>
-                <input type="password" name="new_password" required>
+                <input type="password" name="new_password" required minlength="8" maxlength="128" autocomplete="new-password"
+                       pattern="(?=.*[A-Za-z])(?=.*\d).{8,}" title="At least 8 characters, with a letter and a number.">
+                <small>At least 8 characters, with a letter and a number.</small>
             </div>
             <div class="form-group">
                 <label>Confirm New Password</label>
-                <input type="password" name="confirm_password" required>
+                <input type="password" name="confirm_password" required data-match="new_password" autocomplete="new-password">
             </div>
             <button type="submit" name="update_password" class="btn btn-primary">Update Password</button>
         </form>

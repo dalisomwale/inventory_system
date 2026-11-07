@@ -5,10 +5,12 @@ redirectIfNotLoggedIn();
 
 $categories           = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 $selected_category_id = (int)($_GET['category_id'] ?? 0);
-$start_date           = $_GET['start_date'] ?? date('Y-m-01');
-$end_date             = $_GET['end_date']   ?? date('Y-m-d');
+$start_date           = safe_date($_GET['start_date'] ?? null, date('Y-m-01'));
+$end_date             = safe_date($_GET['end_date']   ?? null, date('Y-m-d'));
+if ($end_date < $start_date) { [$start_date, $end_date] = [$end_date, $start_date]; }
 $current_month        = date('Y-m');
-$selected_month       = $_GET['month'] ?? $current_month;
+$selected_month       = safe_month($_GET['month'] ?? null);
+if ($selected_month > $current_month) $selected_month = $current_month;
 
 $category_data     = null;
 $items_in_category = [];
@@ -32,7 +34,7 @@ if ($selected_category_id > 0) {
     $cat_stmt->execute([$selected_category_id]);
     $category_data = $cat_stmt->fetch();
 
-    $items_stmt = $pdo->prepare("SELECT id, item_name, current_quantity, reorder_level FROM items WHERE category_id=? ORDER BY item_name");
+    $items_stmt = $pdo->prepare("SELECT id, item_name, current_quantity, reorder_level, unit_price FROM items WHERE category_id=? ORDER BY item_name");
     $items_stmt->execute([$selected_category_id]);
     $items_in_category = $items_stmt->fetchAll();
 
@@ -51,12 +53,27 @@ if ($selected_category_id > 0) {
 
 $low_stock_count = 0;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_report'])) {
-    $category_id  = (int)$_POST['category_id'];
-    $report_month = $_POST['report_month'];
-    $notes        = trim($_POST['notes']);
+    $v            = new Validator($_POST);
+    $cat_row      = $v->exists($pdo, 'category_id', 'category', 'categories', 'id, name');
+    $report_month = $v->month('report_month', 'Report month');
+    $notes        = $v->textarea('notes', 'Notes', 1000);
+    $category_id  = $cat_row ? (int)$cat_row['id'] : 0;
+    if ($v->ok() && ($category_id !== $selected_category_id || $report_month !== $selected_month)) {
+        $v->fail('The page changed while you were working. Refresh and submit again.');
+    }
+    if ($v->ok() && empty($items_in_category)) {
+        $v->fail('There are no items in this category to report on.');
+    }
+    $openings = [];
+    foreach ($items_in_category as $item) {
+        $openings[$item['id']] = $v->int('opening_'.$item['id'], 'Opening stock for ' . $item['item_name'], 0, 1000000);
+    }
+    if (!$v->ok()) {
+        $error = $v->message();
+    } else {
     $items_data   = [];
     foreach ($items_in_category as $item) {
-        $opening      = isset($_POST['opening_'.$item['id']]) ? (int)$_POST['opening_'.$item['id']] : 0;
+        $opening      = $openings[$item['id']];
         $closing      = $item['current_quantity'];
         $items_data[] = ['item_name'=>$item['item_name'], 'opening_stock'=>$opening, 'closing_stock'=>$closing, 'reorder_level'=>$item['reorder_level'], 'status'=>($closing<=$item['reorder_level']?'Low Stock':'OK')];
     }
@@ -64,18 +81,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_report'])) {
     $total_items  = count($items_in_category);
     $total_units  = array_sum(array_column($items_in_category, 'current_quantity'));
     $low_count    = count(array_filter($items_in_category, fn($i)=>$i['current_quantity']<=$i['reorder_level']));
+    $total_value  = array_sum(array_map(fn($i)=>$i['current_quantity']*$i['unit_price'], $items_in_category));
 
     $pdo->beginTransaction();
     try {
         $check = $pdo->prepare("SELECT id FROM category_monthly_reports WHERE category_id=? AND DATE_FORMAT(report_month,'%Y-%m')=?");
         $check->execute([$category_id, $report_month]);
         if ($check->fetch()) {
-            $pdo->prepare("UPDATE category_monthly_reports SET items_data=?,total_items=?,total_units=?,low_stock_count=?,notes=?,submitted_by=?,submitted_at=NOW() WHERE category_id=? AND DATE_FORMAT(report_month,'%Y-%m')=?")
-                ->execute([$items_json, $total_items, $total_units, $low_count, $notes, $_SESSION['user_id'], $category_id, $report_month]);
+            $pdo->prepare("UPDATE category_monthly_reports SET items_data=?,total_items=?,total_units=?,total_value=?,low_stock_count=?,notes=?,submitted_by=?,submitted_at=NOW() WHERE category_id=? AND DATE_FORMAT(report_month,'%Y-%m')=?")
+                ->execute([$items_json, $total_items, $total_units, $total_value, $low_count, $notes, $_SESSION['user_id'], $category_id, $report_month]);
             $success = "Report updated.";
         } else {
-            $pdo->prepare("INSERT INTO category_monthly_reports (category_id,report_month,items_data,total_items,total_units,low_stock_count,notes,submitted_by) VALUES (?,?,?,?,?,?,?,?)")
-                ->execute([$category_id, $report_month.'-01', $items_json, $total_items, $total_units, $low_count, $notes, $_SESSION['user_id']]);
+            $pdo->prepare("INSERT INTO category_monthly_reports (category_id,report_month,items_data,total_items,total_units,total_value,low_stock_count,notes,submitted_by) VALUES (?,?,?,?,?,?,?,?,?)")
+                ->execute([$category_id, $report_month.'-01', $items_json, $total_items, $total_units, $total_value, $low_count, $notes, $_SESSION['user_id']]);
             $success = "Report submitted.";
         }
         logAudit($pdo, $_SESSION['user_id'], 'SUBMIT_CATEGORY_REPORT', null, null, "Submitted monthly report for: {$category_data['name']} ($report_month)");
@@ -84,7 +102,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_report'])) {
         exit();
     } catch (Exception $e) {
         $pdo->rollBack();
-        $error = "Error: " . $e->getMessage();
+        error_log($e->getMessage());
+        $error = 'Could not save the report. Please try again.';
+    }
     }
 }
 
@@ -101,7 +121,7 @@ include __DIR__ . '/../includes/header.php';
 <!-- Month Selector -->
 <div class="card" style="margin-bottom:14px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
     <label style="font-size:.78rem; font-weight:500; color:var(--text2)">Report Month</label>
-    <input type="month" id="monthSelect" value="<?php echo $selected_month; ?>"
+    <input type="month" id="monthSelect" value="<?php echo $selected_month; ?>" max="<?php echo $current_month; ?>"
            onchange="window.location.href='?category_id=<?php echo $selected_category_id; ?>&start_date=<?php echo $start_date; ?>&end_date=<?php echo $end_date; ?>&month='+this.value"
            style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:.84rem; background:var(--surface);">
 </div>
@@ -141,7 +161,12 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Report Form -->
-<form method="POST">
+<form method="POST"
+      data-confirm-title="<?php echo $existing_report ? 'Update report' : 'Submit report'; ?>"
+      data-confirm="<?php echo $existing_report
+          ? 'Replace the ' . htmlspecialchars($category_data['name']) . ' report for ' . date('F Y', strtotime($selected_month.'-01')) . ' with these figures? The earlier version will be overwritten.'
+          : 'Submit the ' . htmlspecialchars($category_data['name']) . ' report for ' . date('F Y', strtotime($selected_month.'-01')) . '? It will be sent to the manager.'; ?>"
+      data-confirm-ok="<?php echo $existing_report ? 'Update report' : 'Submit report'; ?>">
     <input type="hidden" name="category_id"  value="<?php echo $selected_category_id; ?>">
     <input type="hidden" name="report_month" value="<?php echo $selected_month; ?>">
 
@@ -165,7 +190,7 @@ include __DIR__ . '/../includes/header.php';
                         <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
                         <td>
                             <input type="number" name="opening_<?php echo $item['id']; ?>"
-                                   value="<?php echo $opening; ?>" min="0" required
+                                   value="<?php echo isset($error) ? htmlspecialchars($_POST['opening_'.$item['id']] ?? $opening) : $opening; ?>" min="0" max="1000000" step="1" required aria-label="Opening stock for <?php echo htmlspecialchars($item['item_name']); ?>"
                                    style="width:90px; padding:5px 8px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:.82rem; font-family:var(--mono);">
                         </td>
                         <td><strong><?php echo $closing; ?></strong></td>
@@ -211,7 +236,7 @@ include __DIR__ . '/../includes/header.php';
     <div class="card">
         <div class="form-group">
             <label>Notes for Manager (Optional)</label>
-            <textarea name="notes" rows="3" placeholder="Any observations about this month's stock..."><?php echo htmlspecialchars($existing_report['notes']??''); ?></textarea>
+            <textarea name="notes" rows="3" maxlength="1000" placeholder="Any observations about this month's stock..."><?php echo htmlspecialchars($existing_report['notes']??''); ?></textarea>
         </div>
         <div class="form-actions">
             <?php if ($existing_report): ?>

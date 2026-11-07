@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/validation.php';
 
 if (isset($_SESSION['user_id'])) {
     header('Location: dashboard.php');
@@ -7,18 +8,29 @@ if (isset($_SESSION['user_id'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $full_name = trim($_POST['full_name'] ?? '');
-    $username  = trim($_POST['username'] ?? '');
-    $password  = $_POST['password'] ?? '';
-    $confirm   = $_POST['confirm_password'] ?? '';
-    $role      = $_POST['role'] ?? 'front_desk';
+    $v         = new Validator($_POST);
+    $full_name = $v->text('full_name', 'Full name', 150, true, 3);
+    $username  = $v->text('username', 'Username', 50, true, 3);
+    $role      = $v->choice('role', 'role', ['manager', 'front_desk']);
+    $password  = (string)($_POST['password'] ?? '');
+    $confirm   = (string)($_POST['confirm_password'] ?? '');
 
+    if ($full_name !== '' && !preg_match("/^[\p{L} .'-]+$/u", $full_name)) {
+        $v->fail('Full name can only contain letters, spaces, hyphens and apostrophes.');
+    }
+    if ($username !== '' && !preg_match('/^[A-Za-z0-9._-]+$/', $username)) {
+        $v->fail('Username can only contain letters, numbers, dots, dashes and underscores.');
+    }
     if (strlen($password) < 8) {
-        $error = 'Password must be at least 8 characters.';
+        $v->fail('Password must be at least 8 characters.');
+    } elseif (!preg_match('/[A-Za-z]/', $password) || !preg_match('/\d/', $password)) {
+        $v->fail('Password must contain at least one letter and one number.');
     } elseif ($password !== $confirm) {
-        $error = 'Passwords do not match.';
-    } elseif (!in_array($role, ['manager', 'front_desk'])) {
-        $error = 'Invalid role selected.';
+        $v->fail('Passwords do not match.');
+    }
+
+    if (!$v->ok()) {
+        $error = $v->message();
     } else {
         try {
             $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ?");
@@ -43,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
+<?php echo csrf_meta(); ?>
 <title>Create account · Altus Inventory</title>
 <link rel="icon" type="image/png" href="../images/favicon.png">
 <link rel="stylesheet" href="../css/style.css">
@@ -63,15 +76,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="alert alert-success"><?php echo $success; ?></div>
         <?php endif; ?>
 
-        <form method="POST" novalidate>
+        <form method="POST" novalidate
+              data-confirm-title="Create account"
+              data-confirm="Create a {role} account for {full_name} with the username {username}?"
+              data-confirm-ok="Create account">
             <div class="form-group">
                 <label for="full_name">Full Name</label>
-                <input type="text" id="full_name" name="full_name" required placeholder="Your full name"
+                <input type="text" id="full_name" name="full_name" required minlength="3" maxlength="150" placeholder="Your full name"
                        value="<?php echo htmlspecialchars($_POST['full_name'] ?? ''); ?>">
             </div>
             <div class="form-group">
                 <label for="username">Username</label>
-                <input type="text" id="username" name="username" required placeholder="Choose a username"
+                <input type="text" id="username" name="username" required minlength="3" maxlength="50" pattern="[A-Za-z0-9._\-]+"
+                       title="Letters, numbers, dots, dashes and underscores only." placeholder="Choose a username"
                        value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>" autocomplete="username">
             </div>
             <div class="form-group">
@@ -83,11 +100,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" required placeholder="Min. 8 characters" autocomplete="new-password">
+                <input type="password" id="password" name="password" required minlength="8" maxlength="128" placeholder="Min. 8 characters, with a letter and a number" autocomplete="new-password"
+                       pattern="(?=.*[A-Za-z])(?=.*\d).{8,}" title="At least 8 characters, with a letter and a number.">
             </div>
             <div class="form-group">
                 <label for="confirm_password">Confirm Password</label>
-                <input type="password" id="confirm_password" name="confirm_password" required placeholder="Repeat password" autocomplete="new-password">
+                <input type="password" id="confirm_password" name="confirm_password" required data-match="password" placeholder="Repeat password" autocomplete="new-password">
             </div>
             <button type="submit" class="btn btn-primary login-submit">Create Account</button>
         </form>

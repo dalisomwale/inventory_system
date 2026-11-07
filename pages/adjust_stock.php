@@ -4,25 +4,35 @@ redirectIfNotLoggedIn();
 if (!isManager()) { header('Location: dashboard.php'); exit(); }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $item_id      = (int)$_POST['item_id'];
-    $new_quantity = (int)$_POST['new_quantity'];
-    $reason       = trim($_POST['reason']);
+    $v            = new Validator($_POST);
+    $item         = $v->exists($pdo, 'item_id', 'item', 'items', 'id, item_name, current_quantity');
+    $new_quantity = $v->int('new_quantity', 'New quantity', 0, 1000000);
+    $reason       = $v->textarea('reason', 'Reason for adjustment', 500, true, 5);
+    $item_id      = $item ? (int)$item['id'] : 0;
 
-    $row = $pdo->prepare("SELECT current_quantity, item_name FROM items WHERE id=?");
-    $row->execute([$item_id]); $item = $row->fetch();
-    $old_qty = $item['current_quantity'];
-    $diff    = $new_quantity - $old_qty;
+    if ($v->ok() && $new_quantity === (int)$item['current_quantity']) {
+        $v->fail('The new quantity is the same as the current quantity. Nothing to adjust.');
+    }
 
+    if (!$v->ok()) {
+        $error = $v->message();
+    } else {
     $pdo->beginTransaction();
     try {
+        $lock = $pdo->prepare("SELECT current_quantity FROM items WHERE id=? FOR UPDATE");
+        $lock->execute([$item_id]);
+        $old_qty = (int)$lock->fetchColumn();
+        $diff    = $new_quantity - $old_qty;
         $pdo->prepare("UPDATE items SET current_quantity=? WHERE id=?")->execute([$new_quantity, $item_id]);
         logAudit($pdo, $_SESSION['user_id'], 'ADJUST_STOCK', $item_id, $diff,
                  "Adjusted from $old_qty to $new_quantity. Reason: $reason");
         $pdo->commit();
-        $success = 'Stock adjusted successfully.';
+        $success = 'Stock for ' . htmlspecialchars($item['item_name']) . " adjusted from $old_qty to $new_quantity.";
     } catch (Exception $e) {
         $pdo->rollBack();
-        $error = 'Error: ' . $e->getMessage();
+        error_log($e->getMessage());
+        $error = 'Could not adjust stock. Please try again.';
+    }
     }
 }
 
@@ -42,9 +52,13 @@ include __DIR__ . '/../includes/header.php';
     <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
     <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
-    <form method="POST">
+    <form method="POST"
+          data-confirm-title="Adjust stock"
+          data-confirm="Change the stock of {item_id} to {new_quantity}? This overrides the current count and is recorded in the audit trail."
+          data-confirm-ok="Adjust stock"
+          data-confirm-danger="1">
         <div class="form-group">
-            <label>Select Item</label>
+            <label>Select Item *</label>
             <select name="item_id" id="itemSelect" required onchange="updateCurrent()">
                 <option value="">— Choose item —</option>
                 <?php foreach ($grouped as $cat => $items): ?>
@@ -65,15 +79,15 @@ include __DIR__ . '/../includes/header.php';
                 <input type="number" id="current_qty" readonly>
             </div>
             <div class="form-group">
-                <label>New Quantity</label>
-                <input type="number" name="new_quantity" id="new_qty" min="0" required oninput="showDiff()">
+                <label>New Quantity *</label>
+                <input type="number" name="new_quantity" id="new_qty" min="0" max="1000000" step="1" required oninput="showDiff()">
                 <small id="diffNote"></small>
             </div>
         </div>
 
         <div class="form-group">
-            <label>Reason for Adjustment</label>
-            <textarea name="reason" required rows="3" placeholder="Explain the reason for this adjustment"></textarea>
+            <label>Reason for Adjustment *</label>
+            <textarea name="reason" required minlength="5" maxlength="500" rows="3" placeholder="e.g. Stock count on 08/11 found 3 damaged reams"><?php echo isset($error) ? htmlspecialchars($_POST['reason'] ?? '') : ''; ?></textarea>
         </div>
 
         <div class="form-actions">

@@ -21,6 +21,9 @@ $reports_data    = $report_status->fetchAll();
 $total_cats      = count($reports_data);
 $submitted_count = count(array_filter($reports_data, fn($r) => $r['submitted']));
 
+if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
+if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -28,6 +31,9 @@ include __DIR__ . '/../includes/header.php';
     <h1>Manager Dashboard</h1>
     <div style="font-size:.78rem; color:var(--muted)"><?php echo date('l, d F Y'); ?></div>
 </div>
+
+<?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
+<?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
 <!-- Stats -->
 <div class="dashboard">
@@ -117,8 +123,18 @@ $pending_requests = $pdo->query("
                     <td style="color:var(--muted)"><?php echo htmlspecialchars($req['requester']); ?></td>
                     <td style="color:var(--muted); font-size:.76rem; white-space:nowrap"><?php echo date('d/m/Y', strtotime($req['created_at'])); ?></td>
                     <td style="white-space:nowrap">
-                        <a href="procurement.php?action=approve&id=<?php echo $req['id']; ?>" class="btn btn-sm btn-success" onclick="return confirm('Approve this request?')">Approve</a>
-                        <a href="procurement.php?action=reject&id=<?php echo $req['id']; ?>" class="btn btn-sm" onclick="return confirm('Reject this request?')">Reject</a>
+                        <form method="POST" action="procurement.php" class="inline-form">
+                            <input type="hidden" name="id" value="<?php echo $req['id']; ?>">
+                            <input type="hidden" name="return" value="manager_dashboard.php">
+                            <button type="submit" name="decision" value="approve" class="btn btn-sm btn-success"
+                                    data-confirm-title="Approve request"
+                                    data-confirm="Approve <?php echo htmlspecialchars($req['quantity'] . ' × ' . $req['item_name']); ?> for <?php echo htmlspecialchars($req['requester']); ?>?"
+                                    data-confirm-ok="Approve">Approve</button>
+                            <button type="submit" name="decision" value="reject" class="btn btn-sm"
+                                    data-confirm-title="Reject request"
+                                    data-confirm="Reject the request for <?php echo htmlspecialchars($req['quantity'] . ' × ' . $req['item_name']); ?> from <?php echo htmlspecialchars($req['requester']); ?>?"
+                                    data-confirm-ok="Reject" data-confirm-danger="1">Reject</button>
+                        </form>
                     </td>
                 </tr>
                 <?php endforeach; ?>

@@ -450,6 +450,36 @@ tfoot td {
     line-height: 1.7;
 }
 
+/* ── VALIDATION ───────────────────────────────────────── */
+.form-group input.is-invalid,
+.form-group select.is-invalid,
+.form-group textarea.is-invalid,
+input.is-invalid { border-color: var(--danger); }
+.form-group input.is-invalid:focus,
+.form-group select.is-invalid:focus,
+.form-group textarea.is-invalid:focus { box-shadow: 0 0 0 3px rgba(197,48,48,.12); }
+.field-error {
+    margin-top: 4px;
+    font-size: .78rem;
+    color: var(--danger);
+}
+.required { color: var(--danger); font-weight: 600; }
+
+/* ── CONFIRM DIALOG ───────────────────────────────────── */
+.confirm-modal { z-index: 300; }
+.confirm-box { max-width: 420px; padding: 22px 24px 18px; }
+.confirm-title {
+    font-family: var(--head);
+    font-size: 1rem; font-weight: 700;
+    color: var(--navy);
+    text-transform: none; letter-spacing: 0;
+    margin: 0 0 8px;
+}
+.confirm-text { font-size: .92rem; color: var(--text2); line-height: 1.55; margin-bottom: 20px; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.inline-form { display: inline; }
+.btn:disabled { opacity: .6; cursor: not-allowed; }
+
 /* ── ACTION GROUPS ────────────────────────────────────── */
 .action-group { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
 

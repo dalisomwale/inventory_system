@@ -23,20 +23,28 @@ if ($selected_item_id > 0) {
 
 // Add New Item
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_new_item'])) {
-    $item_name    = trim($_POST['item_name']);
-    $category_id  = (int)$_POST['category_id'];
-    $supplier     = trim($_POST['supplier']);
-    $quantity     = (int)$_POST['quantity'];
-    $date_received = $_POST['date_received'];
-    $reorder_level = (int)$_POST['reorder_level'];
-    $description  = trim($_POST['description']);
+    $v             = new Validator($_POST);
+    $item_name     = $v->text('item_name', 'Item name', 200, true, 2);
+    $category      = $v->exists($pdo, 'category_id', 'category', 'categories', 'id, name');
+    $description   = $v->textarea('description', 'Description', 500);
+    $supplier      = $v->text('supplier', 'Supplier', 200, true, 2);
+    $quantity      = $v->int('quantity', 'Initial quantity', 1, 1000000);
+    $reorder_level = $v->int('reorder_level', 'Reorder level', 0, 1000000);
+    $date_received = $v->date('date_received', 'Date received');
+    $category_id   = $category ? (int)$category['id'] : 0;
+    $cat_name      = $category['name'] ?? '';
 
-    if (empty($item_name) || $category_id <= 0 || empty($supplier) || $quantity <= 0) {
-        $error = 'Please fill in all required fields.';
+    if ($v->ok()) {
+        $dup = $pdo->prepare("SELECT id FROM items WHERE category_id = ? AND LOWER(item_name) = LOWER(?)");
+        $dup->execute([$category_id, $item_name]);
+        if ($dup_id = $dup->fetchColumn()) {
+            $v->fail("\"$item_name\" already exists in $cat_name. Use Receive Existing Item instead.");
+        }
+    }
+
+    if (!$v->ok()) {
+        $error = $v->message();
     } else {
-        $cat = $pdo->prepare("SELECT name FROM categories WHERE id = ?");
-        $cat->execute([$category_id]);
-        $cat_name = $cat->fetchColumn();
 
         $pdo->beginTransaction();
         try {
@@ -48,31 +56,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_new_item'])) {
             logAudit($pdo, $_SESSION['user_id'], 'ADD_NEW_ITEM_RECEIVE', $item_id, $quantity,
                      "Added new item: $item_name in category: $cat_name. Initial stock: $quantity from: $supplier");
             $pdo->commit();
-            $success = "Item '$item_name' added and stock received.";
-            header("Location: receive_stock.php?category_id=$category_id&item_id=$item_id");
+            header("Location: receive_stock.php?category_id=$category_id&item_id=$item_id&added=1");
             exit();
         } catch (Exception $e) {
             $pdo->rollBack();
-            $error = 'Error: ' . $e->getMessage();
+            error_log($e->getMessage());
+            $error = 'Could not add the item. Please try again.';
         }
     }
+}
+if (isset($_GET['added']) && $selected_item) {
+    $success = 'Item "' . htmlspecialchars($selected_item['item_name']) . '" added and stock received.';
 }
 
 // Receive Existing
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['receive_existing'])) {
-    $item_id       = (int)$_POST['item_id'];
-    $supplier      = trim($_POST['supplier']);
-    $quantity      = (int)$_POST['quantity'];
-    $date_received = $_POST['date_received'];
+    $v             = new Validator($_POST);
+    $item_data     = $v->exists($pdo, 'item_id', 'item', 'items', 'id, item_name');
+    $supplier      = $v->text('supplier', 'Supplier', 200, true, 2);
+    $quantity      = $v->int('quantity', 'Quantity received', 1, 1000000);
+    $date_received = $v->date('date_received', 'Date received');
+    $item_id       = $item_data ? (int)$item_data['id'] : 0;
 
-    $item_row = $pdo->prepare("SELECT item_name, current_quantity, category FROM items WHERE id=?");
-    $item_row->execute([$item_id]);
-    $item_data = $item_row->fetch();
-    $old_stock = $item_data['current_quantity'];
-    $new_stock = $old_stock + $quantity;
-
+    if (!$v->ok()) {
+        $error = $v->message();
+    } else {
     $pdo->beginTransaction();
     try {
+        $lock = $pdo->prepare("SELECT current_quantity FROM items WHERE id=? FOR UPDATE");
+        $lock->execute([$item_id]);
+        $old_stock = (int)$lock->fetchColumn();
+        $new_stock = $old_stock + $quantity;
         $pdo->prepare("INSERT INTO stock_receiving (item_id, supplier, quantity, unit_price, date_received, received_by, old_stock, new_stock) VALUES (?,?,?,?,?,?,?,?)")
             ->execute([$item_id, $supplier, $quantity, 0.00, $date_received, $_SESSION['user_id'], $old_stock, $new_stock]);
         $pdo->prepare("UPDATE items SET current_quantity = current_quantity + ? WHERE id = ?")->execute([$quantity, $item_id]);
@@ -85,7 +99,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['receive_existing'])) 
         $selected_item = $stmt->fetch();
     } catch (Exception $e) {
         $pdo->rollBack();
-        $error = 'Error: ' . $e->getMessage();
+        error_log($e->getMessage());
+        $error = 'Could not record the stock received. Please try again.';
+    }
     }
 }
 
@@ -131,11 +147,15 @@ include __DIR__ . '/../includes/header.php';
 <!-- Add New Item -->
 <div class="form-container">
     <div class="form-title">Add New Item to Inventory</div>
-    <form method="POST">
+    <form method="POST"
+          data-confirm-title="Add new item"
+          data-confirm="Add {item_name} to {category_id} with {quantity} units received from {supplier}?"
+          data-confirm-ok="Add item">
         <input type="hidden" name="add_new_item" value="1">
         <div class="form-group">
             <label>Item Name *</label>
-            <input type="text" name="item_name" required placeholder="e.g., A4 Paper Ream">
+            <input type="text" name="item_name" required minlength="2" maxlength="200" placeholder="e.g., A4 Paper Ream"
+                   value="<?php echo isset($error) ? htmlspecialchars($_POST['item_name'] ?? '') : ''; ?>">
         </div>
         <div class="form-group">
             <label>Category *</label>
@@ -150,27 +170,29 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="form-group">
             <label>Description</label>
-            <textarea name="description" rows="2" placeholder="Brief description (optional)"></textarea>
+            <textarea name="description" rows="2" maxlength="500" placeholder="Brief description (optional)"><?php echo isset($error) ? htmlspecialchars($_POST['description'] ?? '') : ''; ?></textarea>
         </div>
         <div class="form-row">
             <div class="form-group">
                 <label>Supplier *</label>
-                <input type="text" name="supplier" required placeholder="Supplier name">
+                <input type="text" name="supplier" required minlength="2" maxlength="200" placeholder="Supplier name"
+                       value="<?php echo isset($error) ? htmlspecialchars($_POST['supplier'] ?? '') : ''; ?>">
             </div>
             <div class="form-group">
                 <label>Initial Quantity *</label>
-                <input type="number" name="quantity" min="1" required placeholder="0">
+                <input type="number" name="quantity" min="1" max="1000000" step="1" required placeholder="0"
+                       value="<?php echo isset($error) ? htmlspecialchars($_POST['quantity'] ?? '') : ''; ?>">
             </div>
         </div>
         <div class="form-row">
             <div class="form-group">
                 <label>Reorder Level</label>
-                <input type="number" name="reorder_level" min="1" value="10">
+                <input type="number" name="reorder_level" min="0" max="1000000" step="1" value="10" required>
                 <small>Alert threshold for low stock</small>
             </div>
             <div class="form-group">
                 <label>Date Received *</label>
-                <input type="date" name="date_received" value="<?php echo date('Y-m-d'); ?>" required>
+                <input type="date" name="date_received" value="<?php echo date('Y-m-d'); ?>" max="<?php echo date('Y-m-d'); ?>" required>
             </div>
         </div>
         <div class="form-actions">
@@ -222,21 +244,24 @@ include __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
-    <form method="POST">
+    <form method="POST"
+          data-confirm-title="Receive stock"
+          data-confirm="Record {quantity} &times; <?php echo htmlspecialchars($selected_item['item_name']); ?> received from {supplier}? This will be added to stock."
+          data-confirm-ok="Receive stock">
         <input type="hidden" name="receive_existing" value="1">
         <input type="hidden" name="item_id" value="<?php echo $selected_item['id']; ?>">
         <div class="form-group">
             <label>Supplier *</label>
-            <input type="text" name="supplier" required placeholder="Supplier name">
+            <input type="text" name="supplier" required minlength="2" maxlength="200" placeholder="Supplier name">
         </div>
         <div class="form-group">
             <label>Quantity Received *</label>
-            <input type="number" name="quantity" id="qty" min="1" required placeholder="0" oninput="updateNewStock()">
+            <input type="number" name="quantity" id="qty" min="1" max="1000000" step="1" required placeholder="0" oninput="updateNewStock()">
             <small id="newStockMsg"></small>
         </div>
         <div class="form-group">
             <label>Date Received *</label>
-            <input type="date" name="date_received" value="<?php echo date('Y-m-d'); ?>" required>
+            <input type="date" name="date_received" value="<?php echo date('Y-m-d'); ?>" max="<?php echo date('Y-m-d'); ?>" required>
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-success">Receive Stock</button>

@@ -4,41 +4,61 @@ redirectIfNotLoggedIn();
 
 $categories    = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 $filter_cat    = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
-$filter_month  = $_GET['month'] ?? '';
+$filter_month  = isset($_GET['month']) && preg_match('/^\d{4}-\d{2}$/', $_GET['month']) ? $_GET['month'] : '';
 
-// Manager approve/reject
-if (isManager() && isset($_GET['action'], $_GET['id'])) {
-    $action = $_GET['action'];
-    $id     = (int)$_GET['id'];
-    if (in_array($action, ['approve', 'reject'])) {
-        $status = $action === 'approve' ? 'approved' : 'rejected';
-        $req    = $pdo->prepare("SELECT * FROM procurement WHERE id=?");
-        $req->execute([$id]);
-        $procurement = $req->fetch();
-        $pdo->prepare("UPDATE procurement SET status=?, approved_by=? WHERE id=?")->execute([$status, $_SESSION['user_id'], $id]);
-        logAudit($pdo, $_SESSION['user_id'], 'PROCUREMENT_'.strtoupper($status), null, $procurement['quantity'],
-                 "Request for {$procurement['item_name']} ($status)");
-        $parts = [];
-        if ($filter_cat)   $parts[] = 'category_id='.$filter_cat;
-        if ($filter_month) $parts[] = 'month='.$filter_month;
-        header('Location: procurement.php' . ($parts ? '?'.implode('&', $parts) : ''));
-        exit();
+// Manager approve/reject (POST only, pending requests only)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['decision'])) {
+    if (!isManager()) { http_response_code(403); exit('Only managers can approve or reject requests.'); }
+    $v      = new Validator($_POST);
+    $action = $v->choice('decision', 'action', ['approve', 'reject']);
+    $req    = $v->exists($pdo, 'id', 'request', 'procurement');
+    if ($v->ok() && $req['status'] !== 'pending') {
+        $v->fail('This request was already ' . $req['status'] . '.');
     }
+    if ($v->ok()) {
+        $status = $action === 'approve' ? 'approved' : 'rejected';
+        $upd = $pdo->prepare("UPDATE procurement SET status=?, approved_by=? WHERE id=? AND status='pending'");
+        $upd->execute([$status, $_SESSION['user_id'], $req['id']]);
+        if ($upd->rowCount() === 1) {
+            logAudit($pdo, $_SESSION['user_id'], 'PROCUREMENT_'.strtoupper($status), null, $req['quantity'],
+                     "Request for {$req['item_name']} ($status)");
+            $_SESSION['flash'] = 'Request for ' . $req['item_name'] . ' ' . $status . '.';
+        } else {
+            $_SESSION['flash_error'] = 'This request was already handled by someone else.';
+        }
+    } else {
+        $_SESSION['flash_error'] = implode(' ', $v->errors());
+    }
+    $back = $_POST['return'] ?? 'procurement.php';
+    if (!in_array(parse_url($back, PHP_URL_PATH), ['procurement.php', 'manager_dashboard.php'], true)) $back = 'procurement.php';
+    header('Location: ' . $back);
+    exit();
 }
+if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
+if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
 
 // Front desk submit request
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isFrontDesk()) {
-    $item_name   = trim($_POST['item_name']);
-    $quantity    = (int)$_POST['quantity'];
-    $reason      = trim($_POST['reason']);
-    $category_id = (int)$_POST['category_id'];
-    $cat         = $pdo->prepare("SELECT name FROM categories WHERE id = ?");
-    $cat->execute([$category_id]);
-    $cat_name    = $cat->fetchColumn();
-    $pdo->prepare("INSERT INTO procurement (item_name, quantity, reason, requested_by, category_id, category) VALUES (?,?,?,?,?,?)")
-        ->execute([$item_name, $quantity, $reason, $_SESSION['user_id'], $category_id, $cat_name]);
-    logAudit($pdo, $_SESSION['user_id'], 'PROCUREMENT_REQUEST', null, $quantity, "Requested: $item_name in category: $cat_name");
-    $success = 'Request submitted.';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isFrontDesk() && isset($_POST['request_item'])) {
+    $v         = new Validator($_POST);
+    $item_name = $v->text('item_name', 'Item name', 200, true, 2);
+    $category  = $v->exists($pdo, 'category_id', 'category', 'categories', 'id, name');
+    $quantity  = $v->int('quantity', 'Quantity', 1, 100000);
+    $reason    = $v->textarea('reason', 'Reason', 500, true, 5);
+
+    if ($v->ok()) {
+        $dup = $pdo->prepare("SELECT COUNT(*) FROM procurement WHERE requested_by=? AND LOWER(item_name)=LOWER(?) AND status='pending'");
+        $dup->execute([$_SESSION['user_id'], $item_name]);
+        if ($dup->fetchColumn() > 0) $v->fail("You already have a pending request for \"$item_name\".");
+    }
+
+    if (!$v->ok()) {
+        $error = $v->message();
+    } else {
+        $pdo->prepare("INSERT INTO procurement (item_name, quantity, reason, requested_by, category_id, category) VALUES (?,?,?,?,?,?)")
+            ->execute([$item_name, $quantity, $reason, $_SESSION['user_id'], $category['id'], $category['name']]);
+        logAudit($pdo, $_SESSION['user_id'], 'PROCUREMENT_REQUEST', null, $quantity, "Requested: $item_name in category: {$category['name']}");
+        $success = 'Request submitted.';
+    }
 }
 
 // Build query
@@ -70,6 +90,9 @@ include __DIR__ . '/../includes/header.php';
     <span class="status-pending"><?php echo $pending_count; ?> pending</span>
     <?php endif; ?>
 </div>
+
+<?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
+<?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
 <!-- Filters -->
 <div class="card" style="margin-bottom:16px;">
@@ -112,12 +135,16 @@ include __DIR__ . '/../includes/header.php';
 <!-- Request Form -->
 <div class="form-container">
     <div class="form-title">Submit Procurement Request</div>
-    <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
-    <form method="POST">
+    <form method="POST"
+          data-confirm-title="Submit request"
+          data-confirm="Request {quantity} &times; {item_name} ({category_id})? The manager will be asked to approve it."
+          data-confirm-ok="Submit request">
+        <input type="hidden" name="request_item" value="1">
         <div class="form-row">
             <div class="form-group">
                 <label>Item Name *</label>
-                <input type="text" name="item_name" required placeholder="Item you need">
+                <input type="text" name="item_name" required minlength="2" maxlength="200" placeholder="Item you need"
+                       value="<?php echo isset($error) ? htmlspecialchars($_POST['item_name'] ?? '') : ''; ?>">
             </div>
             <div class="form-group">
                 <label>Category *</label>
@@ -132,12 +159,12 @@ include __DIR__ . '/../includes/header.php';
         <div class="form-row">
             <div class="form-group">
                 <label>Quantity *</label>
-                <input type="number" name="quantity" min="1" required value="1">
+                <input type="number" name="quantity" min="1" max="100000" step="1" required value="1">
             </div>
         </div>
         <div class="form-group">
             <label>Reason *</label>
-            <textarea name="reason" required rows="2" placeholder="Why is this item needed?"></textarea>
+            <textarea name="reason" required minlength="5" maxlength="500" rows="2" placeholder="Why is this item needed?"><?php echo isset($error) ? htmlspecialchars($_POST['reason'] ?? '') : ''; ?></textarea>
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Submit Request</button>
@@ -180,8 +207,19 @@ include __DIR__ . '/../includes/header.php';
                     <?php if (isManager()): ?>
                     <td style="white-space:nowrap">
                         <?php if ($r['status'] == 'pending'): ?>
-                        <a href="?action=approve&id=<?php echo $r['id']; ?><?php if($filter_cat) echo '&category_id='.$filter_cat; if($filter_month) echo '&month='.$filter_month; ?>" class="btn btn-sm btn-success" onclick="return confirm('Approve?')">Approve</a>
-                        <a href="?action=reject&id=<?php echo $r['id']; ?><?php if($filter_cat) echo '&category_id='.$filter_cat; if($filter_month) echo '&month='.$filter_month; ?>" class="btn btn-sm" onclick="return confirm('Reject?')">Reject</a>
+                        <?php $ret = 'procurement.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''); ?>
+                        <form method="POST" class="inline-form">
+                            <input type="hidden" name="id" value="<?php echo $r['id']; ?>">
+                            <input type="hidden" name="return" value="<?php echo htmlspecialchars($ret); ?>">
+                            <button type="submit" name="decision" value="approve" class="btn btn-sm btn-success"
+                                    data-confirm-title="Approve request"
+                                    data-confirm="Approve <?php echo htmlspecialchars($r['quantity'] . ' × ' . $r['item_name']); ?> for <?php echo htmlspecialchars($r['requester']); ?>?"
+                                    data-confirm-ok="Approve">Approve</button>
+                            <button type="submit" name="decision" value="reject" class="btn btn-sm"
+                                    data-confirm-title="Reject request"
+                                    data-confirm="Reject the request for <?php echo htmlspecialchars($r['quantity'] . ' × ' . $r['item_name']); ?> from <?php echo htmlspecialchars($r['requester']); ?>?"
+                                    data-confirm-ok="Reject" data-confirm-danger="1">Reject</button>
+                        </form>
                         <?php else: ?><span style="color:var(--muted); font-size:.76rem">—</span><?php endif; ?>
                     </td>
                     <?php endif; ?>

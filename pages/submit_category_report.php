@@ -4,7 +4,8 @@ redirectIfNotLoggedIn();
 if (isManager()) { header('Location: manager_dashboard.php'); exit(); }
 
 $current_month        = date('Y-m');
-$selected_month       = $_GET['month']       ?? $current_month;
+$selected_month       = safe_month($_GET['month'] ?? null);
+if ($selected_month > $current_month) $selected_month = $current_month;
 $selected_category_id = (int)($_GET['category_id'] ?? 0);
 
 $categories = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
@@ -40,6 +41,7 @@ $stock_data       = [];
 $total_items_count = 0;
 $total_units       = 0;
 $low_stock_count   = 0;
+$total_value       = 0;
 foreach ($items as $item) {
     $opening = $prev_stock_data[$item['item_name']] ?? 0;
     $closing = $item['current_quantity'];
@@ -48,25 +50,37 @@ foreach ($items as $item) {
     $total_items_count++;
     $total_units += $closing;
     if ($closing <= $item['reorder_level']) $low_stock_count++;
+    $total_value += $closing * $item['unit_price'];
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_report'])) {
-    $category_id  = (int)$_POST['category_id'];
-    $report_month = $_POST['report_month'];
-    $notes        = trim($_POST['notes']);
+    $v            = new Validator($_POST);
+    $cat_row      = $v->exists($pdo, 'category_id', 'category', 'categories', 'id');
+    $report_month = $v->month('report_month', 'Report month');
+    $notes        = $v->textarea('notes', 'Notes', 1000);
+    $category_id  = $cat_row ? (int)$cat_row['id'] : 0;
     $items_json   = json_encode($stock_data);
+    if ($v->ok() && ($category_id !== $selected_category_id || $report_month !== $selected_month)) {
+        $v->fail('The page changed while you were working. Refresh and submit again.');
+    }
+    if ($v->ok() && empty($stock_data)) {
+        $v->fail('There are no items in this category to report on.');
+    }
 
+    if (!$v->ok()) {
+        $error = $v->message();
+    } else {
     $pdo->beginTransaction();
     try {
         $check = $pdo->prepare("SELECT id FROM category_monthly_reports WHERE category_id=? AND DATE_FORMAT(report_month,'%Y-%m')=?");
         $check->execute([$category_id, $report_month]);
         if ($check->fetch()) {
-            $pdo->prepare("UPDATE category_monthly_reports SET items_data=?,total_items=?,total_units=?,low_stock_count=?,notes=?,submitted_by=?,submitted_at=NOW() WHERE category_id=? AND DATE_FORMAT(report_month,'%Y-%m')=?")
-                ->execute([$items_json, $total_items_count, $total_units, $low_stock_count, $notes, $_SESSION['user_id'], $category_id, $report_month]);
+            $pdo->prepare("UPDATE category_monthly_reports SET items_data=?,total_items=?,total_units=?,total_value=?,low_stock_count=?,notes=?,submitted_by=?,submitted_at=NOW() WHERE category_id=? AND DATE_FORMAT(report_month,'%Y-%m')=?")
+                ->execute([$items_json, $total_items_count, $total_units, $total_value, $low_stock_count, $notes, $_SESSION['user_id'], $category_id, $report_month]);
             $message = "Report updated.";
         } else {
-            $pdo->prepare("INSERT INTO category_monthly_reports (category_id,report_month,items_data,total_items,total_units,low_stock_count,notes,submitted_by) VALUES (?,?,?,?,?,?,?,?)")
-                ->execute([$category_id, $report_month.'-01', $items_json, $total_items_count, $total_units, $low_stock_count, $notes, $_SESSION['user_id']]);
+            $pdo->prepare("INSERT INTO category_monthly_reports (category_id,report_month,items_data,total_items,total_units,total_value,low_stock_count,notes,submitted_by) VALUES (?,?,?,?,?,?,?,?,?)")
+                ->execute([$category_id, $report_month.'-01', $items_json, $total_items_count, $total_units, $total_value, $low_stock_count, $notes, $_SESSION['user_id']]);
             $message = "Report submitted.";
         }
         logAudit($pdo, $_SESSION['user_id'], 'SUBMIT_CATEGORY_REPORT', null, null, "Submitted monthly report for: $category_name ($report_month)");
@@ -75,7 +89,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_report'])) {
         exit();
     } catch (Exception $e) {
         $pdo->rollBack();
-        $error = "Error: " . $e->getMessage();
+        error_log($e->getMessage());
+        $error = 'Could not save the report. Please try again.';
+    }
     }
 }
 
@@ -91,7 +107,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="card" style="margin-bottom:14px;">
     <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
         <label style="font-size:.78rem; font-weight:500; color:var(--text2)">Report Month</label>
-        <input type="month" id="monthSelect" value="<?php echo $selected_month; ?>"
+        <input type="month" id="monthSelect" value="<?php echo $selected_month; ?>" max="<?php echo $current_month; ?>"
                onchange="window.location.href='?month='+this.value+'&category_id=<?php echo $selected_category_id; ?>'"
                style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:.84rem; background:var(--surface);">
     </div>
@@ -164,12 +180,17 @@ include __DIR__ . '/../includes/header.php';
         </table>
     </div>
 
-    <form method="POST" style="margin-top:18px;">
+    <form method="POST" style="margin-top:18px;"
+          data-confirm-title="<?php echo $existing_report ? 'Update report' : 'Submit report'; ?>"
+          data-confirm="<?php echo $existing_report
+              ? 'Replace the ' . htmlspecialchars($category_name) . ' report for ' . date('F Y', strtotime($selected_month.'-01')) . ' with the current figures? The earlier version will be overwritten.'
+              : 'Submit the ' . htmlspecialchars($category_name) . ' report for ' . date('F Y', strtotime($selected_month.'-01')) . '? It will be sent to the manager.'; ?>"
+          data-confirm-ok="<?php echo $existing_report ? 'Update report' : 'Submit report'; ?>">
         <input type="hidden" name="category_id"  value="<?php echo $selected_category_id; ?>">
         <input type="hidden" name="report_month" value="<?php echo $selected_month; ?>">
         <div class="form-group">
             <label>Notes (Optional)</label>
-            <textarea name="notes" rows="3" placeholder="Any notes about this month's stock..."><?php echo htmlspecialchars($existing_report['notes']??''); ?></textarea>
+            <textarea name="notes" rows="3" maxlength="1000" placeholder="Any notes about this month's stock..."><?php echo htmlspecialchars($existing_report['notes']??''); ?></textarea>
         </div>
         <div class="form-actions">
             <?php if ($existing_report): ?>

@@ -21,25 +21,31 @@ if ($selected_item_id > 0) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $item_id      = (int)$_POST['item_id'];
-    $quantity     = (int)$_POST['quantity'];
-    $issued_to    = trim($_POST['issued_to']);
-    $purpose      = trim($_POST['purpose']);
-    $date_issued  = $_POST['date_issued'];
+    $v           = new Validator($_POST);
+    $item        = $v->exists($pdo, 'item_id', 'item', 'items', 'id, item_name, current_quantity');
+    $quantity    = $v->int('quantity', 'Quantity to issue', 1, 1000000);
+    $issued_to   = $v->text('issued_to', 'Issued to', 150, true, 2);
+    $purpose     = $v->textarea('purpose', 'Purpose', 255);
+    $date_issued = $v->date('date_issued', 'Date issued');
+    $item_id     = $item ? (int)$item['id'] : 0;
 
-    $item_row = $pdo->prepare("SELECT current_quantity, item_name, category FROM items WHERE id=?");
-    $item_row->execute([$item_id]);
-    $item      = $item_row->fetch();
-    $old_stock = $item['current_quantity'];
-    $new_stock = $old_stock - $quantity;
+    if ($v->ok() && $quantity > $item['current_quantity']) {
+        $v->fail('Only ' . $item['current_quantity'] . ' in stock. You cannot issue ' . $quantity . '.');
+    }
 
-    if (!$item) {
-        $error = 'Item not found.';
-    } elseif ($item['current_quantity'] < $quantity) {
-        $error = 'Insufficient stock. Available: ' . $item['current_quantity'];
+    if (!$v->ok()) {
+        $error = $v->message();
     } else {
         $pdo->beginTransaction();
         try {
+            // Lock the row so two people can't issue the same units at once
+            $lock = $pdo->prepare("SELECT current_quantity FROM items WHERE id=? FOR UPDATE");
+            $lock->execute([$item_id]);
+            $old_stock = (int)$lock->fetchColumn();
+            if ($quantity > $old_stock) {
+                throw new RuntimeException("Stock changed while you were working. Only $old_stock now available.");
+            }
+            $new_stock = $old_stock - $quantity;
             $pdo->prepare("INSERT INTO stock_issuing (item_id, quantity, issued_to, purpose, date_issued, issued_by, old_stock, new_stock) VALUES (?,?,?,?,?,?,?,?)")
                 ->execute([$item_id, $quantity, $issued_to, $purpose, $date_issued, $_SESSION['user_id'], $old_stock, $new_stock]);
             $pdo->prepare("UPDATE items SET current_quantity = current_quantity - ? WHERE id=?")->execute([$quantity, $item_id]);
@@ -57,9 +63,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$selected_cat_id]);
                 $items = $stmt->fetchAll();
             }
+        } catch (RuntimeException $e) {
+            $pdo->rollBack();
+            $error = htmlspecialchars($e->getMessage());
         } catch (Exception $e) {
             $pdo->rollBack();
-            $error = 'Error: ' . $e->getMessage();
+            error_log($e->getMessage());
+            $error = 'Could not issue stock. Please try again.';
         }
     }
 }
@@ -137,28 +147,32 @@ include __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
-    <form method="POST">
+    <form method="POST"
+          data-confirm-title="Issue stock"
+          data-confirm="Issue {quantity} &times; <?php echo htmlspecialchars($selected_item['item_name']); ?> to {issued_to}? This will be deducted from stock."
+          data-confirm-ok="Issue stock">
         <input type="hidden" name="item_id" value="<?php echo $selected_item['id']; ?>">
         <div class="form-group">
             <label>Quantity to Issue *</label>
-            <input type="number" name="quantity" id="qty" min="1" max="<?php echo $selected_item['current_quantity']; ?>" required
+            <input type="number" name="quantity" id="qty" min="1" max="<?php echo $selected_item['current_quantity']; ?>" step="1" required
                    placeholder="0" oninput="updateNewStock()">
             <small id="newStockMsg"></small>
         </div>
         <div class="form-group">
             <label>Issued To *</label>
-            <input type="text" name="issued_to" required placeholder="Department, person or customer name">
+            <input type="text" name="issued_to" required minlength="2" maxlength="150" placeholder="Department, person or customer name"
+                   value="<?php echo isset($error) ? htmlspecialchars($_POST['issued_to'] ?? '') : ''; ?>">
         </div>
         <div class="form-group">
             <label>Purpose</label>
-            <textarea name="purpose" rows="2" placeholder="Reason for issue (optional)"></textarea>
+            <textarea name="purpose" rows="2" maxlength="255" placeholder="Reason for issue (optional)"><?php echo isset($error) ? htmlspecialchars($_POST['purpose'] ?? '') : ''; ?></textarea>
         </div>
         <div class="form-group">
             <label>Date Issued *</label>
-            <input type="date" name="date_issued" value="<?php echo date('Y-m-d'); ?>" required>
+            <input type="date" name="date_issued" value="<?php echo date('Y-m-d'); ?>" max="<?php echo date('Y-m-d'); ?>" required>
         </div>
         <div class="form-actions">
-            <button type="submit" class="btn btn-danger" onclick="return confirm('Confirm issue?')">Issue Stock</button>
+            <button type="submit" class="btn btn-danger">Issue Stock</button>
             <a href="issue_stock.php?category_id=<?php echo $selected_cat_id; ?>" class="btn">Cancel</a>
         </div>
     </form>

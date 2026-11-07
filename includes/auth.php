@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/validation.php';
 
 function isLoggedIn(): bool { return isset($_SESSION['user_id']); }
 function isManager(): bool  { return isset($_SESSION['role']) && $_SESSION['role'] === 'manager'; }
