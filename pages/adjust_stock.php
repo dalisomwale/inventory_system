@@ -64,7 +64,7 @@ include __DIR__ . '/../includes/header.php';
                 <?php foreach ($grouped as $cat => $items): ?>
                 <optgroup label="<?php echo htmlspecialchars($cat); ?>">
                     <?php foreach ($items as $item): ?>
-                    <option value="<?php echo $item['id']; ?>" data-current="<?php echo $item['current_quantity']; ?>">
+                    <option value="<?php echo $item['id']; ?>" data-current="<?php echo $item['current_quantity']; ?>" <?php echo (int)($_POST['item_id'] ?? $_GET['item_id'] ?? 0) === (int)$item['id'] ? 'selected' : ''; ?>>
                         <?php echo htmlspecialchars($item['item_name']); ?> (Current: <?php echo $item['current_quantity']; ?>)
                     </option>
                     <?php endforeach; ?>
@@ -98,6 +98,9 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (document.getElementById('itemSelect').selectedIndex > 0 && !document.getElementById('new_qty').value) updateCurrent();
+});
 function updateCurrent() {
     var sel = document.getElementById('itemSelect');
     var c   = document.getElementById('current_qty');
