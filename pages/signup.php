@@ -10,7 +10,7 @@ if (isset($_SESSION['user_id'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $full_name = trim($_POST['full_name'] ?? '');
-    $username  = trim($_POST['username'] ?? '');
+    $email     = strtolower(trim($_POST['email'] ?? ''));
     $password  = $_POST['password'] ?? '';
     $confirm   = $_POST['confirm_password'] ?? '';
     $role      = $_POST['role'] ?? 'front_desk';
@@ -21,8 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Full name must be at least 2 characters.';
     }
 
-    if (strlen($username) < 3) {
-        $errors[] = 'Username must be at least 3 characters.';
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'Please enter a valid email address.';
     }
 
     if (strlen($password) < 6) {
@@ -35,18 +35,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
 
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE username=?");
-        $stmt->execute([$username]);
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE email=? OR username=?");
+        $stmt->execute([$email, $email]);
 
         if ($stmt->fetch()) {
-            $errors[] = 'Username already exists.';
+            $errors[] = 'An account with this email already exists.';
         } else {
             $hash = password_hash($password, PASSWORD_DEFAULT);
 
             $pdo->prepare("
-                INSERT INTO users(full_name, username, password, role)
-                VALUES(?, ?, ?, ?)
-            ")->execute([$full_name, $username, $hash, $role]);
+                INSERT INTO users(full_name, username, email, password, role)
+                VALUES(?, ?, ?, ?, ?)
+            ")->execute([$full_name, $email, $email, $hash, $role]);
 
             $success = "Account created successfully! You can now sign in.";
         }
@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Proflight Zambia | Sign Up</title>
+<title>Altus Financial Services | Sign Up</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 * {
@@ -70,11 +70,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 :root {
-    --proflight-blue: #122FA4;
-    --proflight-orange: #F15A24;
-    --proflight-blue-dark: #0E257A;
-    --proflight-blue-light: #E8EDF9;
-    --proflight-orange-light: #FEE8E0;
+    --brand-blue: #263A8E;
+    --brand-orange: #F38C1C;
+    --brand-blue-dark: #1B2A6B;
+    --brand-blue-light: #E9ECF6;
+    --brand-orange-light: #FEF1E2;
 }
 
 body {
@@ -110,7 +110,7 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, rgba(18, 47, 164, 0.75) 0%, rgba(10, 30, 100, 0.85) 100%);
+    background: linear-gradient(135deg, rgba(38, 58, 142, 0.80) 0%, rgba(20, 31, 82, 0.90) 100%);
     z-index: 1;
 }
 
@@ -163,7 +163,7 @@ body {
 }
 
 .logo-text span {
-    color: var(--proflight-orange);
+    color: var(--brand-orange);
 }
 
 .left-content h1 {
@@ -174,7 +174,7 @@ body {
 }
 
 .left-content h1 .brand-name {
-    color: var(--proflight-orange);
+    color: var(--brand-orange);
 }
 
 .left-content .tagline {
@@ -205,6 +205,13 @@ body {
     padding: 48px 40px;
 }
 
+.auth-logo {
+    display: block;
+    max-width: 220px;
+    height: auto;
+    margin: 0 auto 24px;
+}
+
 .header {
     text-align: center;
     margin-bottom: 36px;
@@ -213,7 +220,7 @@ body {
 .header h2 {
     font-size: 32px;
     font-weight: 700;
-    color: var(--proflight-blue);
+    color: var(--brand-blue);
     margin-bottom: 8px;
 }
 
@@ -257,9 +264,9 @@ label {
 .input-group input:focus,
 .input-group select:focus {
     outline: none;
-    border-color: var(--proflight-blue);
+    border-color: var(--brand-blue);
     background: white;
-    box-shadow: 0 0 0 4px rgba(18, 47, 164, 0.08);
+    box-shadow: 0 0 0 4px rgba(38, 58, 142, 0.08);
 }
 
 .btn-signup {
@@ -267,7 +274,7 @@ label {
     padding: 15px;
     border: none;
     border-radius: 14px;
-    background: linear-gradient(135deg, var(--proflight-blue) 0%, #1a3bb5 100%);
+    background: linear-gradient(135deg, var(--brand-blue) 0%, #34489F 100%);
     color: white;
     font-weight: 700;
     font-size: 15px;
@@ -278,7 +285,7 @@ label {
 
 .btn-signup:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(18, 47, 164, 0.25);
+    box-shadow: 0 8px 20px rgba(38, 58, 142, 0.25);
 }
 
 .alert {
@@ -322,13 +329,13 @@ label {
 }
 
 .footer a {
-    color: var(--proflight-blue);
+    color: var(--brand-blue);
     text-decoration: none;
     font-weight: 700;
 }
 
 .footer a:hover {
-    color: var(--proflight-orange);
+    color: var(--brand-orange);
 }
 
 .role-hint {
@@ -386,18 +393,19 @@ label {
 <body>
 <div class="container">
     <div class="left">
-        <img class="left-bg-image" src="login-image.jpeg" alt="Proflight Zambia Background">
+        <img class="left-bg-image" src="login-image.jpeg" alt="Altus Financial Services">
         <div class="left-overlay"></div>
         <div class="wave-bg"></div>
         <div class="left-content">
             <h1>Join Our <span class="brand-name">Inventory Team</span></h1>
-            <p class="tagline">Create an account to start managing Proflight Zambia's inventory.</p>
+            <p class="tagline">Create an account to start managing Altus Financial Services' inventory.</p>
         </div>
     </div>
     <div class="right">
         <div class="form-box">
             <div class="card">
                 <div class="header">
+                    <img src="../images/altus-logo.png" alt="Altus Financial Services" class="auth-logo">
                     <h2>Create Account</h2>
                     <p>Start managing inventory today</p>
                 </div>
@@ -424,9 +432,9 @@ label {
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>Username</label>
+                        <label>Email</label>
                         <div class="input-group">
-                            <input type="text" name="username" placeholder="Choose a username" required>
+                            <input type="email" name="email" placeholder="you@altus.co.zm" autocomplete="email" required>
                         </div>
                     </div>
                     <div class="form-group">

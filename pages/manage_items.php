@@ -132,7 +132,7 @@ include __DIR__ . '/../includes/header.php';
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 15px;">
     <h1 style="margin: 0;">Manage Inventory</h1>
     <div style="display: flex; gap: 12px;">
-        <button onclick="document.getElementById('categoryModal').style.display='flex'" class="btn" style="background: #2563eb; display: flex; align-items: center; gap: 8px;">
+        <button onclick="document.getElementById('categoryModal').style.display='flex'" class="btn" style="background: #263A8E; display: flex; align-items: center; gap: 8px;">
             Manage Categories
         </button>
     </div>
@@ -140,11 +140,11 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Category Filter Tabs -->
 <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; padding: 8px 0;">
-    <a href="manage_items.php" class="pill-tab <?php echo $filter_category==0?'active':''; ?>" style="padding: 8px 20px; background: <?php echo $filter_category==0?'#2563eb':'#f1f5f9'; ?>; color: <?php echo $filter_category==0?'white':'#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500;">
+    <a href="manage_items.php" class="pill-tab <?php echo $filter_category==0?'active':''; ?>" style="padding: 8px 20px; background: <?php echo $filter_category==0?'#263A8E':'#f1f5f9'; ?>; color: <?php echo $filter_category==0?'white':'#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500;">
         All Categories
     </a>
     <?php foreach ($categories as $cat): ?>
-    <a href="?category_id=<?php echo $cat['id']; ?>" class="pill-tab <?php echo $filter_category==$cat['id']?'active':''; ?>" style="padding: 8px 20px; background: <?php echo $filter_category==$cat['id']?'#2563eb':'#f1f5f9'; ?>; color: <?php echo $filter_category==$cat['id']?'white':'#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500;">
+    <a href="?category_id=<?php echo $cat['id']; ?>" class="pill-tab <?php echo $filter_category==$cat['id']?'active':''; ?>" style="padding: 8px 20px; background: <?php echo $filter_category==$cat['id']?'#263A8E':'#f1f5f9'; ?>; color: <?php echo $filter_category==$cat['id']?'white':'#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500;">
         <?php echo htmlspecialchars($cat['name']); ?>
     </a>
     <?php endforeach; ?>
@@ -252,7 +252,7 @@ include __DIR__ . '/../includes/header.php';
                     </td>
                     <td style="padding: 12px;">
                         <div style="display: flex; gap: 6px; justify-content: center;">
-                            <a href="?edit_item=<?php echo $item['id']; ?><?php echo $filter_category?'&category_id='.$filter_category:''; ?>" class="btn-icon" style="background: #2563eb; color: white; padding: 5px 12px; border-radius: 5px; text-decoration: none; font-size: 12px;">Edit</a>
+                            <a href="?edit_item=<?php echo $item['id']; ?><?php echo $filter_category?'&category_id='.$filter_category:''; ?>" class="btn-icon" style="background: #263A8E; color: white; padding: 5px 12px; border-radius: 5px; text-decoration: none; font-size: 12px;">Edit</a>
                             <a href="?delete_item=<?php echo $item['id']; ?>" class="btn-icon" style="background: #dc2626; color: white; padding: 5px 12px; border-radius: 5px; text-decoration: none; font-size: 12px;" onclick="return confirm('Delete this item? This cannot be undone.')">Delete</a>
                         </div>
                     </td>
@@ -290,7 +290,7 @@ include __DIR__ . '/../includes/header.php';
                             <input type="text" name="category_desc" placeholder="Brief description" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
                         </div>
                     </div>
-                    <button type="submit" name="add_category" class="btn" style="background: #2563eb; margin-top: 10px;">Add Category</button>
+                    <button type="submit" name="add_category" class="btn" style="background: #263A8E; margin-top: 10px;">Add Category</button>
 
                 </form>
             </div>
@@ -346,7 +346,7 @@ include __DIR__ . '/../includes/header.php';
 
 <style>
 .pill-tab.active {
-    background: #2563eb !important;
+    background: #263A8E !important;
     color: white !important;
 }
 .pill-tab:not(.active):hover {

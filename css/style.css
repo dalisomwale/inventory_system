@@ -1,16 +1,16 @@
 /* ============================================================
-   PROFLIGHT ZAMBIA - Service Center Inventory System
-   Design: Modern, clean, airline/tech aesthetic
+   ALTUS FINANCIAL SERVICES - Inventory System
+   Design: Modern, clean, corporate aesthetic
    ============================================================ */
 
 :root {
     --bg: #f1f5f9;
     --surface: #ffffff;
-    --sidebar: #0f172a;
+    --sidebar: #1B2A6B;
     --sidebar-width: 270px;
-    --accent: #2563eb;
-    --accent-light: #eff6ff;
-    --accent-dark: #1d4ed8;
+    --accent: #263A8E;
+    --accent-light: #E9ECF6;
+    --accent-dark: #1B2A6B;
     --danger: #dc2626;
     --danger-light: #fee2e2;
     --warning: #f59e0b;
@@ -64,6 +64,19 @@ body {
 .sidebar-logo .logo-icon {
     font-size: 32px;
     margin-bottom: 12px;
+}
+
+.sidebar-logo .logo-img {
+    display: block;
+    background: #fff;
+    border-radius: 10px;
+    padding: 10px 14px;
+}
+
+.sidebar-logo .logo-img img {
+    display: block;
+    width: 100%;
+    height: auto;
 }
 
 .sidebar-logo .logo-text {
@@ -124,7 +137,7 @@ body {
 }
 
 .nav-link.active {
-    background: rgba(37,99,235,0.2);
+    background: rgba(38,58,142,0.2);
     color: white;
 }
 
@@ -694,7 +707,7 @@ tbody tr:hover {
 .form-group select:focus,
 .form-group textarea:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+    box-shadow: 0 0 0 3px rgba(38,58,142,0.1);
 }
 
 /* ===== MODALS ===== */
@@ -771,7 +784,7 @@ tbody tr:hover {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    background: linear-gradient(135deg, #1B2A6B 0%, #263A8E 100%);
     padding: 20px;
 }
 

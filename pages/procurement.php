@@ -77,9 +77,9 @@ include __DIR__ . '/../includes/header.php';
             <div>
                 <div style="font-size:.72rem; font-weight:500; color:var(--muted); margin-bottom:6px;">Category</div>
                 <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                    <a href="?<?php $p=[]; if($filter_month) $p[]='month='.$filter_month; echo implode('&',$p); ?>" style="padding:5px 12px; border-radius:20px; font-size:.78rem; text-decoration:none; background:<?php echo $filter_cat==0?'#2563eb':'#f1f5f9'; ?>; color:<?php echo $filter_cat==0?'white':'#475569'; ?>;">All</a>
+                    <a href="?<?php $p=[]; if($filter_month) $p[]='month='.$filter_month; echo implode('&',$p); ?>" style="padding:5px 12px; border-radius:20px; font-size:.78rem; text-decoration:none; background:<?php echo $filter_cat==0?'#263A8E':'#f1f5f9'; ?>; color:<?php echo $filter_cat==0?'white':'#475569'; ?>;">All</a>
                     <?php foreach ($categories as $cat): ?>
-                    <a href="?category_id=<?php echo $cat['id']; ?><?php if($filter_month) echo '&month='.$filter_month; ?>" style="padding:5px 12px; border-radius:20px; font-size:.78rem; text-decoration:none; background:<?php echo $filter_cat==$cat['id']?'#2563eb':'#f1f5f9'; ?>; color:<?php echo $filter_cat==$cat['id']?'white':'#475569'; ?>;">
+                    <a href="?category_id=<?php echo $cat['id']; ?><?php if($filter_month) echo '&month='.$filter_month; ?>" style="padding:5px 12px; border-radius:20px; font-size:.78rem; text-decoration:none; background:<?php echo $filter_cat==$cat['id']?'#263A8E':'#f1f5f9'; ?>; color:<?php echo $filter_cat==$cat['id']?'white':'#475569'; ?>;">
                         <?php echo htmlspecialchars($cat['name']); ?>
                     </a>
                     <?php endforeach; ?>

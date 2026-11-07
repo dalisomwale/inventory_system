@@ -110,11 +110,11 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Category Filter Tabs -->
 <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; padding: 8px 0;">
-    <a href="receive_stock.php" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>" style="padding: 8px 20px; background: <?php echo $selected_cat_id == 0 ? '#2563eb' : '#f1f5f9'; ?>; color: <?php echo $selected_cat_id == 0 ? 'white' : '#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500; transition: all 0.2s;">
+    <a href="receive_stock.php" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>" style="padding: 8px 20px; background: <?php echo $selected_cat_id == 0 ? '#263A8E' : '#f1f5f9'; ?>; color: <?php echo $selected_cat_id == 0 ? 'white' : '#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500; transition: all 0.2s;">
             All
         </a>
     <?php foreach ($categories as $cat): ?>
-    <a href="?category_id=<?php echo $cat['id']; ?>" class="pill-tab <?php echo $selected_cat_id == $cat['id'] ? 'active' : ''; ?>" style="padding: 8px 20px; background: <?php echo $selected_cat_id == $cat['id'] ? '#2563eb' : '#f1f5f9'; ?>; color: <?php echo $selected_cat_id == $cat['id'] ? 'white' : '#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500; transition: all 0.2s;">
+    <a href="?category_id=<?php echo $cat['id']; ?>" class="pill-tab <?php echo $selected_cat_id == $cat['id'] ? 'active' : ''; ?>" style="padding: 8px 20px; background: <?php echo $selected_cat_id == $cat['id'] ? '#263A8E' : '#f1f5f9'; ?>; color: <?php echo $selected_cat_id == $cat['id'] ? 'white' : '#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500; transition: all 0.2s;">
         <?php echo htmlspecialchars($cat['name']); ?>
     </a>
     <?php endforeach; ?>
@@ -341,7 +341,7 @@ function updateNewStock() {
 
 <style>
 .pill-tab.active {
-    background: #2563eb !important;
+    background: #263A8E !important;
     color: white !important;
 }
 .pill-tab:not(.active):hover {

@@ -13,13 +13,13 @@ if (isset($_SESSION['user_id'])) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    $username = trim($_POST['username'] ?? '');
+    $email    = strtolower(trim($_POST['email'] ?? ''));
     $password = $_POST['password'] ?? '';
 
-    if ($username && $password) {
+    if ($email && $password) {
 
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE username=?");
-        $stmt->execute([$username]);
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE email=?");
+        $stmt->execute([$email]);
 
         $user = $stmt->fetch();
 
@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['username'];
+            $_SESSION['email'] = $user['email'];
             $_SESSION['full_name'] = $user['full_name'];
             $_SESSION['role'] = $user['role'];
 
@@ -41,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit();
 
         } else {
-            $error = "Invalid username or password.";
+            $error = "Invalid email or password.";
         }
 
     } else {
@@ -55,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Proflight Zambia | Login</title>
+<title>Altus Financial Services | Login</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 * {
@@ -66,11 +67,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 :root {
-    --proflight-blue: #122FA4;
-    --proflight-orange: #F15A24;
-    --proflight-blue-dark: #0E257A;
-    --proflight-blue-light: #E8EDF9;
-    --proflight-orange-light: #FEE8E0;
+    --brand-blue: #263A8E;
+    --brand-orange: #F38C1C;
+    --brand-blue-dark: #1B2A6B;
+    --brand-blue-light: #E9ECF6;
+    --brand-orange-light: #FEF1E2;
 }
 
 body {
@@ -106,7 +107,7 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, rgba(18, 47, 164, 0.75) 0%, rgba(10, 30, 100, 0.85) 100%);
+    background: linear-gradient(135deg, rgba(38, 58, 142, 0.80) 0%, rgba(20, 31, 82, 0.90) 100%);
     z-index: 1;
 }
 
@@ -159,7 +160,7 @@ body {
 }
 
 .logo-text span {
-    color: var(--proflight-orange);
+    color: var(--brand-orange);
 }
 
 .left-content h1 {
@@ -170,7 +171,7 @@ body {
 }
 
 .left-content h1 .brand-name {
-    color: var(--proflight-orange);
+    color: var(--brand-orange);
 }
 
 .left-content .tagline {
@@ -201,6 +202,13 @@ body {
     padding: 48px 40px;
 }
 
+.auth-logo {
+    display: block;
+    max-width: 220px;
+    height: auto;
+    margin: 0 auto 24px;
+}
+
 .header {
     text-align: center;
     margin-bottom: 36px;
@@ -209,7 +217,7 @@ body {
 .header h2 {
     font-size: 32px;
     font-weight: 700;
-    color: var(--proflight-blue);
+    color: var(--brand-blue);
     margin-bottom: 8px;
 }
 
@@ -247,9 +255,9 @@ label {
 
 .input-group input:focus {
     outline: none;
-    border-color: var(--proflight-blue);
+    border-color: var(--brand-blue);
     background: white;
-    box-shadow: 0 0 0 4px rgba(18, 47, 164, 0.08);
+    box-shadow: 0 0 0 4px rgba(38, 58, 142, 0.08);
 }
 
 .btn-login {
@@ -257,7 +265,7 @@ label {
     padding: 15px;
     border: none;
     border-radius: 14px;
-    background: linear-gradient(135deg, var(--proflight-blue) 0%, #1a3bb5 100%);
+    background: linear-gradient(135deg, var(--brand-blue) 0%, #34489F 100%);
     color: white;
     font-weight: 700;
     font-size: 15px;
@@ -268,7 +276,7 @@ label {
 
 .btn-login:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(18, 47, 164, 0.25);
+    box-shadow: 0 8px 20px rgba(38, 58, 142, 0.25);
 }
 
 .btn-login:active {
@@ -306,13 +314,13 @@ label {
 }
 
 .footer a {
-    color: var(--proflight-blue);
+    color: var(--brand-blue);
     text-decoration: none;
     font-weight: 700;
 }
 
 .footer a:hover {
-    color: var(--proflight-orange);
+    color: var(--brand-orange);
 }
 
 /* Responsive */
@@ -363,18 +371,19 @@ label {
 <body>
 <div class="container">
     <div class="left">
-        <img class="left-bg-image" src="login-image.jpeg" alt="Proflight Zambia Background">
+        <img class="left-bg-image" src="login-image.jpeg" alt="Altus Financial Services">
         <div class="left-overlay"></div>
         <div class="wave-bg"></div>
         <div class="left-content">
             <h1>Welcome Back to<br> <span class="brand-name">Inventory Management System</span></h1>
-            <p class="tagline">Manage your inventory seamlessly with Zambia's most trusted airline.</p>
+            <p class="tagline">Creative financial solutions, backed by well-managed resources.</p>
         </div>
     </div>
     <div class="right">
         <div class="form-box">
             <div class="card">
                 <div class="header">
+                    <img src="../images/altus-logo.png" alt="Altus Financial Services" class="auth-logo">
                     <h2>Get Started</h2>
                     <p>Access your inventory dashboard</p>
                 </div>
@@ -387,9 +396,9 @@ label {
                 
                 <form method="POST">
                     <div class="form-group">
-                        <label>Username</label>
+                        <label>Email</label>
                         <div class="input-group">
-                            <input type="text" name="username" placeholder="Enter your username" required>
+                            <input type="email" name="email" placeholder="you@altus.co.zm" autocomplete="email" required>
                         </div>
                     </div>
                     <div class="form-group">

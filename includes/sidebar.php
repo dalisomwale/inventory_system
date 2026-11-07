@@ -1,10 +1,9 @@
 <div class="sidebar">
     <div class="sidebar-logo">
-        <div class="logo-text">Proflight</div>
-        <div class="logo-sub">ZAMBIA</div>
+        <div class="logo-img"><img src="../images/altus-logo.png" alt="Altus Financial Services"></div>
     </div>
     <nav class="sidebar-nav">
-        <div class="nav-section-label">Service Center</div>
+        <div class="nav-section-label">Inventory</div>
         <a href="dashboard.php" class="nav-link <?php echo $cur==='dashboard.php'?'active':'';?>">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="7" height="7" rx="1"/>

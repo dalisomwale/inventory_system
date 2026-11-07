@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     id         INT AUTO_INCREMENT PRIMARY KEY,
     full_name  VARCHAR(150) NOT NULL,
     username   VARCHAR(80)  NOT NULL UNIQUE,
+    email      VARCHAR(190) NULL UNIQUE,
     password   VARCHAR(255) NOT NULL,
     role       ENUM('manager','front_desk','admin','technician') NOT NULL DEFAULT 'front_desk',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -115,13 +116,13 @@ CREATE TABLE IF NOT EXISTS category_monthly_reports (
 
 -- Insert sample categories
 INSERT IGNORE INTO categories (name, description) VALUES
-    ('Aircraft Parts', 'Essential components for aircraft maintenance'),
-    ('Tools', 'Maintenance and repair tools'),
-    ('Consumables', 'Items that are used up during service'),
-    ('Safety Equipment', 'Safety gear and emergency equipment'),
-    ('Stationery', 'Paper, pens, office supplies'),
-    ('Dry Stores', 'Non-perishable food items'),
-    ('Uniforms', 'Staff uniforms and clothing');
+    ('IT Equipment',        'Laptops, desktops, monitors, peripherals'),
+    ('Networking',          'Switches, routers, cables, access points'),
+    ('Printer Consumables', 'Toner, ink cartridges, drums'),
+    ('Stationery',          'Paper, pens, files, office supplies'),
+    ('Furniture',           'Desks, chairs, cabinets'),
+    ('Kitchen & Cleaning',  'Tea, coffee, sugar, cleaning supplies'),
+    ('Other',               'Miscellaneous items not fitting other categories');
 
 -- Insert sample users (password: password123 - bcrypt hash)
 INSERT IGNORE INTO users (full_name, username, password, role) VALUES

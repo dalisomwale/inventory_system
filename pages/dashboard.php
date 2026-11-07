@@ -85,7 +85,7 @@ include __DIR__ . '/../includes/header.php';
         <div style="padding: 20px; text-align: left;">
             <div style="color: #555;">Welcome</div>
             <div style="font-size: 18px; font-weight: 600;">Welcome back, <?php echo htmlspecialchars($_SESSION['full_name']); ?>!</div>
-            <div style="color: #666; font-size: 12px; margin-top: 5px;">Proflight Zambia Service Center Inventory System</div>
+            <div style="color: #666; font-size: 12px; margin-top: 5px;">Altus Financial Services Inventory System</div>
         </div>
     </div>
 </div>

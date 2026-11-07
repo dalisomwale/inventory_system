@@ -119,7 +119,7 @@ include __DIR__ . '/../includes/header.php';
     ?>
     <a href="?category_id=<?php echo $cat['id']; ?>&start_date=<?php echo $start_date; ?>&end_date=<?php echo $end_date; ?>&month=<?php echo $selected_month; ?>"
        class="pill-tab <?php echo $selected_category_id == $cat['id'] ? 'active' : ''; ?>"
-       style="padding: 8px 20px; background: <?php echo $selected_category_id == $cat['id'] ? '#2563eb' : '#f1f5f9'; ?>; color: <?php echo $selected_category_id == $cat['id'] ? 'white' : '#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500; transition: all 0.2s;">
+       style="padding: 8px 20px; background: <?php echo $selected_category_id == $cat['id'] ? '#263A8E' : '#f1f5f9'; ?>; color: <?php echo $selected_category_id == $cat['id'] ? 'white' : '#475569'; ?>; border-radius: 40px; text-decoration: none; font-size: 13px; font-weight: 500; transition: all 0.2s;">
         <?php echo htmlspecialchars($cat['name']); ?><?php if ($has_report): ?> ✓<?php endif; ?>
     </a>
     <?php endforeach; ?>
@@ -282,7 +282,7 @@ include __DIR__ . '/../includes/header.php';
 
 <style>
 .pill-tab.active {
-    background: #2563eb !important;
+    background: #263A8E !important;
     color: white !important;
 }
 .pill-tab:not(.active):hover {

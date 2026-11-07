@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     id         INT AUTO_INCREMENT PRIMARY KEY,
     full_name  VARCHAR(150) NOT NULL,
     username   VARCHAR(80)  NOT NULL UNIQUE,
+    email      VARCHAR(190) NULL UNIQUE,
     password   VARCHAR(255) NOT NULL,
     role       ENUM('manager','front_desk') NOT NULL DEFAULT 'front_desk',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -27,13 +28,13 @@ CREATE TABLE IF NOT EXISTS categories (
 
 -- Insert default categories
 INSERT IGNORE INTO categories (name, description) VALUES
-    ('Caterriage',      'Catering supplies and equipment - trays, cutlery, serving items'),
-    ('Stationery',      'Paper, pens, office supplies, printer consumables'),
-    ('Dry Stores',      'Non-perishable food items - coffee, sugar, tea, snacks'),
-    ('Catering',        'Food service and kitchen supplies - preparation equipment'),
-    ('Uniforms',        'Staff uniforms, hats, aprons, clothing items'),
-    ('Flight Documents','Boarding passes, tickets, baggage tags, forms'),
-    ('Other',           'Miscellaneous items not fitting other categories');
+    ('IT Equipment',        'Laptops, desktops, monitors, peripherals'),
+    ('Networking',          'Switches, routers, cables, access points'),
+    ('Printer Consumables', 'Toner, ink cartridges, drums'),
+    ('Stationery',          'Paper, pens, files, office supplies'),
+    ('Furniture',           'Desks, chairs, cabinets'),
+    ('Kitchen & Cleaning',  'Tea, coffee, sugar, cleaning supplies'),
+    ('Other',               'Miscellaneous items not fitting other categories');
 
 -- ── ITEMS ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS items (
@@ -153,20 +154,3 @@ INSERT IGNORE INTO users (full_name, username, password, role) VALUES
     ('System Manager',    'manager',   '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'manager'),
     ('Front Desk Staff',  'frontdesk', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'front_desk');
 
--- ── SAMPLE ITEMS (using your categories) ───────────────────
-INSERT IGNORE INTO items (id, item_name, category, category_id, description, current_quantity, unit_price, reorder_level) VALUES
-    (1,  'A4 Paper Ream',        'Stationery',      (SELECT id FROM categories WHERE name='Stationery'), '500 sheets per ream',              50,  45.00,  20),
-    (2,  'Blue Ballpoint Pens',  'Stationery',      (SELECT id FROM categories WHERE name='Stationery'), 'Box of 50 pens',                   30,  12.50,  10),
-    (3,  'Printer Toner',        'Stationery',      (SELECT id FROM categories WHERE name='Stationery'), 'Compatible with HP printers',      8,   320.00, 3),
-    (4,  'Meal Tray',            'Caterriage',      (SELECT id FROM categories WHERE name='Caterriage'), 'Airline meal trays',               100, 15.00,  25),
-    (5,  'Cutlery Set',          'Caterriage',      (SELECT id FROM categories WHERE name='Caterriage'), 'Fork, knife, spoon set',           200, 5.00,   50),
-    (6,  'Coffee Sachets',       'Dry Stores',      (SELECT id FROM categories WHERE name='Dry Stores'), 'Instant coffee packets',           500, 2.50,   100),
-    (7,  'Sugar Sachets',        'Dry Stores',      (SELECT id FROM categories WHERE name='Dry Stores'), '5g sugar packets',                 1000, 1.00,  200),
-    (8,  'Tea Bags',             'Dry Stores',      (SELECT id FROM categories WHERE name='Dry Stores'), 'Box of 100 tea bags',              30,  25.00,  10),
-    (9,  'Flight Attendant Uniform','Uniforms',     (SELECT id FROM categories WHERE name='Uniforms'), 'Women\'s size M',                  15,  450.00, 5),
-    (10, 'Captain\'s Hat',        'Uniforms',       (SELECT id FROM categories WHERE name='Uniforms'), 'Official captain hat',             8,   120.00, 3),
-    (11, 'Boarding Pass Stock',   'Flight Documents',(SELECT id FROM categories WHERE name='Flight Documents'), 'Thermal paper rolls', 50,  35.00,  15),
-    (12, 'Baggage Tags',          'Flight Documents',(SELECT id FROM categories WHERE name='Flight Documents'), 'Self-adhesive tags', 200, 0.50,   50),
-    (13, 'Disposable Gloves',     'Catering',       (SELECT id FROM categories WHERE name='Catering'), 'Box of 100 pairs',                 40,  28.00,  15),
-    (14, 'Apron',                 'Uniforms',       (SELECT id FROM categories WHERE name='Uniforms'), 'Waist apron for servers',          25,  85.00,  10),
-    (15, 'Snack Box',             'Dry Stores',     (SELECT id FROM categories WHERE name='Dry Stores'), 'Assorted snacks for passengers',   200, 12.00,  50);

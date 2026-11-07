@@ -1,9 +1,12 @@
 <?php
 // MySQL Database Configuration
-$host = 'localhost';
-$dbname = 'inventory_system';
-$username = 'root';
-$password = 'king.dee/0306';
+// Credentials live in db_credentials.php (not committed to git).
+// Copy db_credentials.example.php to db_credentials.php and fill it in.
+$credentials_file = __DIR__ . '/db_credentials.php';
+if (!file_exists($credentials_file)) {
+    die('Missing config/db_credentials.php. Copy config/db_credentials.example.php to config/db_credentials.php and set your database login.');
+}
+require $credentials_file;
 
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);
@@ -72,7 +75,7 @@ function getOutOfStockItems($pdo) {
 }
 
 function catClass($category) {
-    $classes = ['Aircraft Parts' => 'cat-0', 'Tools' => 'cat-1', 'Consumables' => 'cat-2', 'Safety Equipment' => 'cat-3'];
+    $classes = ['IT Equipment' => 'cat-0', 'Networking' => 'cat-1', 'Printer Consumables' => 'cat-2', 'Stationery' => 'cat-3', 'Furniture' => 'cat-4', 'Kitchen & Cleaning' => 'cat-5'];
     return $classes[$category] ?? 'cat-6';
 }
 ?>
