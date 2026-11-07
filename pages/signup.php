@@ -43,20 +43,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Create Account — Inventory System</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>Create account · Altus Inventory</title>
+<link rel="icon" type="image/png" href="../images/favicon.png">
 <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
 <div class="login-wrapper">
     <div class="login-card" style="max-width: 400px;">
         <div class="login-brand">
-            <div class="logo-icon">INV</div>
-            <div>
-                <h2>Create Account</h2>
-                <div class="sub">Inventory Management System</div>
-            </div>
+            <img src="../images/altus-logo.png" alt="Altus Financial Services Limited">
+            <h2>Create an account</h2>
+            <div class="sub">Inventory System</div>
         </div>
 
         <?php if (isset($error)): ?>
@@ -98,6 +95,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="login-alt">
             Already have an account? <a href="login.php">Sign in</a>
         </div>
+    </div>
+    <div class="login-footer">
+        &copy; <?php echo date('Y'); ?> Altus Financial Services Limited<br>
+        Trouble signing in? Contact the IT department.
     </div>
 </div>
 <script src="../js/script.js"></script>

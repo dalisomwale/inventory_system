@@ -4,18 +4,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Inventory Management System</title>
+<title>Inventory System · Altus Financial Services</title>
+<link rel="icon" type="image/png" href="../images/favicon.png">
 <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
 <?php if(isset($_SESSION['user_id'])): ?>
 <aside class="sidebar">
 <div class="sidebar-logo">
-    <div class="logo-icon">&#9632;</div>
-    <span class="logo-text">InvMS</span>
+    <div>
+        <img src="../images/altus-logo.png" alt="Altus Financial Services Limited">
+        <div class="app-name">Inventory System</div>
+    </div>
 </div>
 <nav class="sidebar-nav">
-<div class="nav-section-label">Navigation</div>
+<div class="nav-section-label">Menu</div>
 <?php if(isManager()): ?>
 <a href="manager_dashboard.php" class="nav-link <?php echo $cur==='manager_dashboard.php'?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>

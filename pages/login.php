@@ -59,20 +59,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Sign In — Inventory System</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>Sign in · Altus Inventory</title>
+<link rel="icon" type="image/png" href="../images/favicon.png">
 <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
 <div class="login-wrapper">
     <div class="login-card">
         <div class="login-brand">
-            <div class="logo-icon">INV</div>
-            <div>
-                <h2>InvMS</h2>
-                <div class="sub">Inventory Management System</div>
-            </div>
+            <img src="../images/altus-logo.png" alt="Altus Financial Services Limited">
+            <h2>Inventory System</h2>
+            <div class="sub">Sign in with your staff account</div>
         </div>
 
         <?php if (isset($error)): ?>
@@ -92,17 +89,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button type="submit" class="btn btn-primary login-submit">Sign In</button>
         </form>
 
-        <div class="login-alt" style="margin-top: 14px;">
+        <div class="login-alt">
             Don't have an account? <a href="signup.php">Create one</a>
         </div>
-
-        <hr class="login-divider">
-
-        <div class="demo-box">
-            <strong>Demo credentials</strong><br>
-            Manager: <code>manager</code> / <code>password123</code><br>
-            Front Desk: <code>frontdesk</code> / <code>password123</code>
-        </div>
+    </div>
+    <div class="login-footer">
+        &copy; <?php echo date('Y'); ?> Altus Financial Services Limited<br>
+        Trouble signing in? Contact the IT department.
     </div>
 </div>
 <script src="../js/script.js"></script>
