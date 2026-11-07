@@ -7,6 +7,8 @@ if (isset($_SESSION['user_id'])) {
     exit();
 }
 
+if (!empty($_SESSION['login_notice'])) { $error = $_SESSION['login_notice']; unset($_SESSION['login_notice']); }
+
 // Just came from creating an account
 $prefill_email = '';
 if (!empty($_SESSION['signup_done'])) {
@@ -42,6 +44,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+            if ($valid && isset($user['active']) && !(int)$user['active']) {
+                $valid = false;
+                $disabled = true;
+            }
+
             if ($valid) {
                 session_regenerate_id(true);
                 $_SESSION['user_id']   = $user['id'];
@@ -50,13 +57,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['role']      = $user['role'];
 
                 try {
+                    $pdo->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?")->execute([$user['id']]);
                     $pdo->prepare("INSERT INTO audit_trail (user_id, action, details) VALUES (?, 'LOGIN', 'User logged in')")->execute([$user['id']]);
                 } catch (Exception $e) {}
 
                 header('Location: dashboard.php');
                 exit();
             } else {
-                $error = 'Incorrect email or password.';
+                $error = !empty($disabled) ? 'This account has been disabled. Contact the IT department.' : 'Incorrect email or password.';
                 usleep(400000); // slow down password guessing
             }
         } catch (PDOException $e) {

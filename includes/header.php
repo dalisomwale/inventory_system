@@ -54,12 +54,19 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     Monthly Reports
 </a>
+<?php if (isAdmin()): ?>
+<div class="nav-section-label">Admin</div>
+<a href="users.php" class="nav-link <?php echo ($cur==='users.php')?'active':'';?>">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Users
+</a>
+<?php endif; ?>
 </nav>
 <div class="sidebar-footer">
     <div class="user-avatar"><?php echo strtoupper(substr($_SESSION['full_name']??'U',0,1));?></div>
     <div class="user-details">
         <div class="user-name"><?php echo htmlspecialchars($_SESSION['full_name']??'User');?></div>
-        <div class="user-role"><?php echo htmlspecialchars($_SESSION['email'] ?? '');?></div>
+        <div class="user-role"><?php echo isAdmin() ? 'System Admin · ' : ''; ?><?php echo htmlspecialchars($_SESSION['email'] ?? '');?></div>
     </div>
     <a href="logout.php" class="logout-btn" title="Log out" aria-label="Log out"
        data-confirm-title="Log out"
@@ -86,6 +93,7 @@ if (isset($_SESSION['user_id'])) {
         'category_reports.php'       => [['Monthly Reports', 'reports.php'], ['Category activity', null]],
         'view_category_reports.php'  => [['Monthly Reports', 'reports.php'], ['Category report', null]],
         'settings.php'               => [['Settings', null]],
+        'users.php'                  => [['Users', null]],
     ];
     $crumbs = $breadcrumbs ?? ($crumb_map[$cur] ?? []);
     echo '<nav class="breadcrumb" aria-label="You are here">';

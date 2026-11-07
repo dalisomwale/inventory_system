@@ -17,7 +17,9 @@ CREATE TABLE IF NOT EXISTS users (
     email      VARCHAR(190) NOT NULL UNIQUE,
     username   VARCHAR(80)  NULL UNIQUE,     -- legacy, no longer used to sign in
     password   VARCHAR(255) NOT NULL,
-    role       ENUM('manager','front_desk') NOT NULL DEFAULT 'front_desk',
+    role       ENUM('admin','staff') NOT NULL DEFAULT 'staff',
+    active     TINYINT(1)   NOT NULL DEFAULT 1,
+    last_login_at DATETIME  NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 

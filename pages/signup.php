@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $v         = new Validator($_POST);
     $full_name = $v->text('full_name', 'Full name', 150, true, 3);
     $email     = $v->email('email', 'Work email');
-    $role      = 'manager'; // single role: everyone has full access
+    $role      = 'staff'; // new accounts are staff; the System Admin can change roles
     $password  = (string)($_POST['password'] ?? '');
     $confirm   = (string)($_POST['confirm_password'] ?? '');
 

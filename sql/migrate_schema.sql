@@ -23,6 +23,13 @@ BEGIN
 END //
 DELIMITER ;
 
+-- Roles: 'admin' (System Admin, manages users) and 'staff' (everything else)
+CALL add_column_if_missing('users', 'active',        'TINYINT(1) NOT NULL DEFAULT 1 AFTER role');
+CALL add_column_if_missing('users', 'last_login_at', 'DATETIME NULL AFTER active');
+ALTER TABLE users MODIFY role ENUM('manager','front_desk','admin','staff') NOT NULL DEFAULT 'staff';
+UPDATE users SET role = 'staff' WHERE role IN ('manager','front_desk');
+ALTER TABLE users MODIFY role ENUM('admin','staff') NOT NULL DEFAULT 'staff';
+
 -- Users sign in with email; username is kept only for old records
 CALL add_column_if_missing('users', 'email', 'VARCHAR(190) NULL AFTER full_name');
 ALTER TABLE users MODIFY username VARCHAR(80) NULL;
