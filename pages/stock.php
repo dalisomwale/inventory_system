@@ -89,7 +89,7 @@ include __DIR__ . '/../includes/header.php';
     <?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive')); ?>
     <?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue')); ?>
     <?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request')); ?>
-    <?php echo action_tile('stock_edit.php', 'Add item', 'Create a new stock item', icon('box')); ?>
+    <?php echo action_tile('categories.php?add=1#add', 'Add Categories', 'Create a new category', icon('box')); ?>
 </div>
 
 <!-- Search and filters -->

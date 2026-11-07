@@ -139,7 +139,7 @@ include __DIR__ . '/../includes/header.php';
                     <option value="<?php echo $c['id']; ?>" <?php echo (int)$val('category_id', (int)($_GET['category_id'] ?? 0)) === (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
                     <?php endforeach; ?>
                 </select>
-                <small><a href="manage_items.php">Manage categories</a></small>
+                <small><a href="categories.php">Manage categories</a></small>
             </div>
         </div>
 

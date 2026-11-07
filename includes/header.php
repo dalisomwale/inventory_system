@@ -42,9 +42,9 @@
     Requisitions
 </a>
 <div class="nav-section-label">Records</div>
-<a href="manage_items.php" class="nav-link <?php echo ($cur==='manage_items.php')?'active':'';?>">
+<a href="categories.php" class="nav-link <?php echo ($cur==='categories.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-    Items & Categories
+    Categories
 </a>
 <a href="view_transactions.php" class="nav-link <?php echo ($cur==='view_transactions.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
@@ -79,7 +79,7 @@ if (isset($_SESSION['user_id'])) {
         'receive_stock.php'          => [['Receive Stock', null]],
         'issue_stock.php'            => [['Issue Stock', null]],
         'requisitions.php'           => [['Requisitions', null]],
-        'manage_items.php'           => [['Items & Categories', null]],
+        'categories.php'             => [['Categories', null]],
         'view_transactions.php'      => [['Transactions', null]],
         'reports.php'                => [['Monthly Reports', null]],
         'submit_category_report.php' => [['Monthly Reports', 'reports.php'], ['Submit report', null]],
