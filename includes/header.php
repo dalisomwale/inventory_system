@@ -71,3 +71,31 @@
 </aside>
 <?php endif; ?>
 <main class="main-content <?php echo isset($_SESSION['user_id'])?'with-sidebar':'';?> page-<?php echo htmlspecialchars(basename($cur, '.php')); ?>">
+<?php
+// Breadcrumb: pages can set $breadcrumbs = [['Label', 'url.php'], ['Current page', null]] before including this file.
+if (isset($_SESSION['user_id'])) {
+    $crumb_map = [
+        'stock.php'                  => [['Manage Stock', null]],
+        'receive_stock.php'          => [['Receive Stock', null]],
+        'issue_stock.php'            => [['Issue Stock', null]],
+        'requisitions.php'           => [['Requisitions', null]],
+        'manage_items.php'           => [['Items & Categories', null]],
+        'view_transactions.php'      => [['Transactions', null]],
+        'reports.php'                => [['Monthly Reports', null]],
+        'submit_category_report.php' => [['Monthly Reports', 'reports.php'], ['Submit report', null]],
+        'category_reports.php'       => [['Monthly Reports', 'reports.php'], ['Category activity', null]],
+        'view_category_reports.php'  => [['Monthly Reports', 'reports.php'], ['Category report', null]],
+        'settings.php'               => [['Settings', null]],
+    ];
+    $crumbs = $breadcrumbs ?? ($crumb_map[$cur] ?? []);
+    echo '<nav class="breadcrumb" aria-label="You are here">';
+    echo $crumbs ? '<a href="dashboard.php">Dashboard</a>' : '<span aria-current="page">Dashboard</span>';
+    foreach ($crumbs as $i => [$label, $url]) {
+        echo '<span class="crumb-sep" aria-hidden="true">&rsaquo;</span>';
+        echo ($url && $i < count($crumbs) - 1)
+            ? '<a href="' . htmlspecialchars($url) . '">' . htmlspecialchars($label) . '</a>'
+            : '<span aria-current="page">' . htmlspecialchars($label) . '</span>';
+    }
+    echo '</nav>';
+}
+?>
