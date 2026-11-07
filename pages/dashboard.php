@@ -62,35 +62,18 @@ include __DIR__ . '/../includes/header.php';
     <div class="kpi">
         <div class="kpi-label">Stock value</div>
         <div class="kpi-value"><?php echo kwacha($stock_value, true); ?></div>
-        <div class="kpi-note"><?php echo kwacha($stock_value); ?> across <?php echo $total_items; ?> items</div>
     </div>
     <div class="kpi">
         <div class="kpi-label">Issued, last 30 days</div>
         <div class="kpi-value"><?php echo number_format($issued['current']); ?> <span class="kpi-unit">units</span></div>
-        <div class="kpi-note">
-            <?php if ($issued['change_pct'] === null): ?>
-                No issues in the 30 days before
-            <?php else: ?>
-                <span class="trend <?php echo $issued['change_pct'] > 0 ? 'up' : ($issued['change_pct'] < 0 ? 'down' : ''); ?>">
-                    <?php echo $issued['change_pct'] > 0 ? '&#9650;' : ($issued['change_pct'] < 0 ? '&#9660;' : '&#9644;'); ?>
-                    <?php echo abs($issued['change_pct']); ?>%
-                </span> vs previous 30 days (<?php echo number_format($issued['previous']); ?>)
-            <?php endif; ?>
-        </div>
     </div>
     <div class="kpi">
         <div class="kpi-label">Need reordering</div>
         <div class="kpi-value <?php echo count($running_low) ? 'is-bad' : ''; ?>"><?php echo count($running_low); ?></div>
-        <div class="kpi-note">
-            <?php if ($out_of_stock): ?><span class="status-issuing">&#9888; <?php echo $out_of_stock; ?> out of stock</span>
-            <?php elseif (count($running_low)): ?>Below reorder level or under 2 weeks left
-            <?php else: ?>Every item has at least 2 weeks of stock<?php endif; ?>
-        </div>
     </div>
     <div class="kpi">
         <div class="kpi-label">Requisitions</div>
         <div class="kpi-value <?php echo $to_order ? 'is-warn' : ''; ?>"><?php echo $to_order; ?> <span class="kpi-unit">to order</span></div>
-        <div class="kpi-note"><?php echo $on_order; ?> on order &middot; today <?php echo number_format($today['received']); ?> received, <?php echo number_format($today['issued']); ?> issued</div>
     </div>
 </div>
 
