@@ -83,4 +83,4 @@
 </div>
 </aside>
 <?php endif; ?>
-<main class="main-content <?php echo isset($_SESSION['user_id'])?'with-sidebar':'';?>">
+<main class="main-content <?php echo isset($_SESSION['user_id'])?'with-sidebar':'';?> page-<?php echo htmlspecialchars(basename($cur, '.php')); ?>">

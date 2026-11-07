@@ -565,6 +565,89 @@ table.compact thead th { padding: 7px 10px; }
     box-shadow: 0 2px 8px rgba(0,0,0,.18);
 }
 
+/* Action tiles (big dashboard buttons) */
+.action-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.action-tile {
+    position: relative;
+    display: flex; align-items: center; gap: 14px;
+    min-height: 76px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color .12s, background .12s;
+}
+.action-tile:hover { border-color: var(--navy); background: #fafbfe; }
+.action-tile:focus-visible { outline: 3px solid rgba(37,57,141,.3); outline-offset: 1px; }
+.at-icon {
+    flex-shrink: 0;
+    width: 42px; height: 42px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    background: var(--accent-lt);
+    color: var(--navy);
+}
+.at-icon svg { width: 22px; height: 22px; }
+.at-text { display: flex; flex-direction: column; min-width: 0; }
+.at-title { font-size: .98rem; font-weight: 700; color: var(--navy); }
+.at-desc  { font-size: .8rem; color: var(--muted); }
+.at-badge {
+    display: inline-block; vertical-align: 2px; margin-left: 4px;
+    font-size: .7rem; font-weight: 700;
+    color: #7a4a00; background: #fff4dc; border: 1px solid #f3d08a;
+    padding: 1px 7px; border-radius: 999px;
+}
+
+/* Bigger buttons on the dashboards */
+.page-dashboard .btn,
+.page-manager_dashboard .btn { padding: 9px 16px; font-size: .9rem; min-height: 38px; }
+.page-dashboard .btn-sm,
+.page-manager_dashboard .btn-sm { padding: 7px 14px; font-size: .86rem; min-height: 34px; }
+.page-dashboard td .btn-sm,
+.page-manager_dashboard td .btn-sm { min-width: 84px; justify-content: center; }
+
+/* Donut */
+.donut-wrap { display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; }
+.donut { width: 170px; height: 170px; flex-shrink: 0; }
+.donut .slice { stroke: var(--surface); stroke-width: 2; outline: none; transition: opacity .12s; }
+.donut:hover .slice { opacity: .55; }
+.donut .slice:hover, .donut .slice:focus { opacity: 1; }
+.donut-num { font-family: var(--head); font-size: 20px; font-weight: 700; fill: var(--navy); }
+.donut-sub { font-family: var(--font); font-size: 11px; fill: var(--muted); }
+.donut-legend { list-style: none; flex: 1; min-width: 230px; display: flex; flex-direction: column; gap: 6px; }
+.donut-legend li {
+    display: grid; grid-template-columns: 12px auto 1fr auto 40px;
+    align-items: center; gap: 8px; font-size: .84rem; color: var(--text2);
+    padding: 3px 4px; border-radius: 4px;
+}
+.donut-legend li:hover { background: #f5f6fa; }
+.donut-legend .lg-icon { font-size: .78rem; color: var(--text2); width: 12px; text-align: center; }
+.donut-legend li:not(:has(.lg-icon)) { grid-template-columns: 12px 1fr auto 40px; }
+.donut-legend .lg-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.donut-legend .lg-value { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.donut-legend .lg-pct { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Line graph */
+.line-chart .line { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.line-chart .line.daily { stroke: var(--series-1); stroke-width: 2; }
+.line-chart .line.avg { stroke: var(--series-2); stroke-width: 2; stroke-dasharray: 5 4; }
+.line-chart .area { fill: rgba(58,84,180,.08); }
+.line-chart .pt { outline: none; }
+.line-chart .cross { stroke: var(--border-md); stroke-width: 1; opacity: 0; }
+.line-chart .dot { fill: var(--series-1); stroke: var(--surface); stroke-width: 2; opacity: 0; }
+.line-chart .pt:hover .cross, .line-chart .pt:focus .cross,
+.line-chart .pt:hover .dot,   .line-chart .pt:focus .dot { opacity: 1; }
+.line-chart .avg-label { fill: var(--text2); font-weight: 600; }
+.chart-svg .val { fill: var(--text); font-weight: 600; }
+.swatch.line-avg { background: none; border-top: 2px dashed var(--series-2); height: 0; width: 14px; border-radius: 0; }
+
 @media (max-width: 1000px) {
     .grid-2, .grid-2.wide-left { grid-template-columns: 1fr; }
 }

@@ -245,3 +245,212 @@ function chart_weekly(array $weeks): string {
     }
     return $s . '</svg>';
 }
+
+// ── More insights ────────────────────────────────────────────
+
+/** Item counts by stock health: in stock, low, out. */
+function ins_stock_health(array $forecast): array {
+    $ok = $low = $out = 0;
+    foreach ($forecast as $r) {
+        if ($r['current_quantity'] <= 0)                 $out++;
+        elseif ($r['current_quantity'] <= $r['reorder_level']) $low++;
+        else                                             $ok++;
+    }
+    return ['ok' => $ok, 'low' => $low, 'out' => $out];
+}
+
+/** Units issued per day for the last $days days (oldest first, zero-filled). */
+function ins_daily_issued(PDO $pdo, int $days = 30): array {
+    $st = $pdo->prepare("SELECT DATE(created_at) d, SUM(quantity) q FROM stock_issuing
+                         WHERE created_at >= CURDATE() - INTERVAL ? DAY GROUP BY d");
+    $st->execute([$days - 1]);
+    $map = [];
+    foreach ($st->fetchAll() as $r) $map[$r['d']] = (int)$r['q'];
+    $out = [];
+    for ($i = $days - 1; $i >= 0; $i--) {
+        $d = new DateTime("today -$i days");
+        $out[] = ['date' => $d, 'value' => $map[$d->format('Y-m-d')] ?? 0];
+    }
+    // 7-day rolling average
+    foreach ($out as $i => &$row) {
+        $win = array_slice($out, max(0, $i - 6), min(7, $i + 1));
+        $row['avg'] = array_sum(array_column($win, 'value')) / count($win);
+    }
+    return $out;
+}
+
+/** Units and value issued per category in the last $days days. */
+function ins_issued_by_category(PDO $pdo, int $days = 30): array {
+    $st = $pdo->prepare("
+        SELECT COALESCE(c.name, i.category, 'Other') AS label, SUM(s.quantity) AS value,
+               SUM(s.quantity * i.unit_price) AS cost
+        FROM stock_issuing s JOIN items i ON i.id = s.item_id
+        LEFT JOIN categories c ON c.id = i.category_id
+        WHERE s.created_at >= NOW() - INTERVAL ? DAY
+        GROUP BY label ORDER BY value DESC");
+    $st->execute([$days]);
+    return $st->fetchAll();
+}
+
+/** Number of issue transactions per weekday over the last $days days (Mon..Sun). */
+function ins_busiest_days(PDO $pdo, int $days = 90): array {
+    $st = $pdo->prepare("SELECT WEEKDAY(created_at) wd, COUNT(*) n, SUM(quantity) q FROM stock_issuing
+                         WHERE created_at >= NOW() - INTERVAL ? DAY GROUP BY wd");
+    $st->execute([$days]);
+    $names = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    $out = [];
+    foreach ($names as $i => $n) $out[$i] = ['label' => $n, 'value' => 0, 'units' => 0];
+    foreach ($st->fetchAll() as $r) { $out[(int)$r['wd']]['value'] = (int)$r['n']; $out[(int)$r['wd']]['units'] = (int)$r['q']; }
+    // Hide the weekend if nothing ever happens then
+    if ($out[5]['value'] + $out[6]['value'] === 0) unset($out[5], $out[6]);
+    return array_values($out);
+}
+
+/** Group rows into the top $n plus "Other" for a donut. */
+function top_n_other(array $rows, int $n = 5): array {
+    if (count($rows) <= $n + 1) return $rows;
+    $top = array_slice($rows, 0, $n);
+    $rest = array_sum(array_map(fn($r) => (float)$r['value'], array_slice($rows, $n)));
+    $top[] = ['label' => 'Other', 'value' => $rest, 'other' => true];
+    return $top;
+}
+
+// ── More charts ──────────────────────────────────────────────
+
+/** Validated categorical order (brand navy, brand orange, then aqua, yellow, pink, green). */
+function series_colors(): array {
+    return ['#3a54b4', '#d0700c', '#1baf7a', '#eda100', '#e87ba4', '#008300'];
+}
+
+/**
+ * Donut chart with a legend that always shows label, value and percent.
+ * $segments: [['label'=>..., 'value'=>..., 'color'=>optional, 'icon'=>optional]]
+ */
+function chart_donut(array $segments, string $centerValue, string $centerLabel, callable $fmt): string {
+    $segments = array_values(array_filter($segments, fn($s) => (float)$s['value'] > 0));
+    $total = array_sum(array_map(fn($s) => (float)$s['value'], $segments));
+    if ($total <= 0) return '<div class="empty-state"><p>No data yet.</p></div>';
+    $colors = series_colors();
+    $R = 70; $r = 46; $cx = 90; $cy = 90; $gapDeg = count($segments) > 1 ? 1.6 : 0;
+    $pt = fn($rad, $deg) => [round($cx + $rad * cos(deg2rad($deg - 90)), 2), round($cy + $rad * sin(deg2rad($deg - 90)), 2)];
+
+    $svg = '<svg class="donut" viewBox="0 0 180 180" role="img" aria-label="' . htmlspecialchars($centerLabel) . '">';
+    $legend = '<ul class="donut-legend">';
+    $start = 0;
+    foreach ($segments as $i => $s) {
+        $color = $s['color'] ?? (!empty($s['other']) ? '#a3a9b8' : $colors[$i % count($colors)]);
+        $pct   = (float)$s['value'] / $total * 100;
+        $sweep = $pct / 100 * 360;
+        $a0 = $start + $gapDeg / 2; $a1 = $start + $sweep - $gapDeg / 2;
+        if ($sweep >= 359.9) {
+            $path = 'M' . ($cx) . ',' . ($cy - $R) . ' A' . $R . ',' . $R . ' 0 1,1 ' . ($cx - 0.01) . ',' . ($cy - $R)
+                  . ' L' . ($cx - 0.01) . ',' . ($cy - $r) . ' A' . $r . ',' . $r . ' 0 1,0 ' . $cx . ',' . ($cy - $r) . ' Z';
+        } else {
+            $large = ($a1 - $a0) > 180 ? 1 : 0;
+            [$x0, $y0] = $pt($R, $a0); [$x1, $y1] = $pt($R, $a1);
+            [$x2, $y2] = $pt($r, $a1); [$x3, $y3] = $pt($r, $a0);
+            $path = "M$x0,$y0 A$R,$R 0 $large,1 $x1,$y1 L$x2,$y2 A$r,$r 0 $large,0 $x3,$y3 Z";
+        }
+        $label = htmlspecialchars($s['label']);
+        $tip   = $label . ': ' . htmlspecialchars($fmt($s['value'])) . ' (' . round($pct) . '%)';
+        $svg  .= '<path d="' . $path . '" fill="' . $color . '" class="slice" tabindex="0" data-tip="' . $tip . '"/>';
+        $legend .= '<li data-tip="' . $tip . '"><i class="swatch" style="background:' . $color . '"></i>'
+                 . (!empty($s['icon']) ? '<span class="lg-icon">' . $s['icon'] . '</span>' : '')
+                 . '<span class="lg-label">' . $label . '</span>'
+                 . '<span class="lg-value">' . htmlspecialchars($fmt($s['value'])) . '</span>'
+                 . '<span class="lg-pct">' . round($pct) . '%</span></li>';
+        $start += $sweep;
+    }
+    $svg .= '<text x="90" y="88" text-anchor="middle" class="donut-num">' . htmlspecialchars($centerValue) . '</text>';
+    $svg .= '<text x="90" y="106" text-anchor="middle" class="donut-sub">' . htmlspecialchars($centerLabel) . '</text>';
+    $svg .= '</svg>';
+    return '<div class="donut-wrap">' . $svg . $legend . '</ul></div>';
+}
+
+/** Line graph: daily units issued plus 7-day average, one axis. */
+function chart_line(array $days): string {
+    $W = 640; $H = 200; $padL = 36; $padR = 10; $padT = 12; $padB = 26;
+    $plotW = $W - $padL - $padR; $plotH = $H - $padT - $padB;
+    $max = max(1, max(array_column($days, 'value')));
+    $step = pow(10, floor(log10($max)));
+    foreach ([1, 2, 2.5, 5, 10] as $m) { if ($max <= $step * $m) { $top = $step * $m; break; } }
+    $n = count($days);
+    $x = fn($i) => round($padL + ($n > 1 ? $i / ($n - 1) : .5) * $plotW, 1);
+    $y = fn($v) => round($padT + $plotH - $v / $top * $plotH, 1);
+
+    $s = '<svg class="chart-svg line-chart" viewBox="0 0 ' . $W . ' ' . $H . '" role="img" aria-label="Units issued per day, last ' . $n . ' days">';
+    foreach ([0, $top / 2, $top] as $t) {
+        $yy = $y($t);
+        $s .= '<line x1="' . $padL . '" x2="' . ($W - $padR) . '" y1="' . $yy . '" y2="' . $yy . '" class="grid' . ($t == 0 ? ' base' : '') . '"/>';
+        $s .= '<text x="' . ($padL - 6) . '" y="' . ($yy + 3.5) . '" class="axis" text-anchor="end">' . number_format($t) . '</text>';
+    }
+    $daily = $avg = [];
+    foreach ($days as $i => $d) { $daily[] = $x($i) . ',' . $y($d['value']); $avg[] = $x($i) . ',' . $y($d['avg']); }
+    $s .= '<polygon class="area" points="' . $x(0) . ',' . $y(0) . ' ' . implode(' ', $daily) . ' ' . $x($n - 1) . ',' . $y(0) . '"/>';
+    $s .= '<polyline class="line daily" points="' . implode(' ', $daily) . '"/>';
+    $s .= '<polyline class="line avg" points="' . implode(' ', $avg) . '"/>';
+    // x labels every 7 days, hover columns for every day
+    $colW = $plotW / max(1, $n - 1);
+    foreach ($days as $i => $d) {
+        $xx = $x($i);
+        $tip = $d['date']->format('D j M') . ' · ' . number_format($d['value']) . ' issued · 7-day avg ' . number_format($d['avg'], 1);
+        $s .= '<g class="pt" tabindex="0" data-tip="' . $tip . '">'
+            . '<rect class="hit" x="' . round($xx - $colW / 2, 1) . '" y="' . $padT . '" width="' . round($colW, 1) . '" height="' . $plotH . '"/>'
+            . '<line class="cross" x1="' . $xx . '" x2="' . $xx . '" y1="' . $padT . '" y2="' . ($padT + $plotH) . '"/>'
+            . '<circle class="dot" cx="' . $xx . '" cy="' . $y($d['value']) . '" r="4"/></g>';
+        if (($n - 1 - $i) % 7 === 0) {
+            $s .= '<text x="' . $xx . '" y="' . ($H - 8) . '" class="axis" text-anchor="middle">' . $d['date']->format('j M') . '</text>';
+        }
+    }
+    return $s . '</svg>';
+}
+
+/** Vertical single-series columns (e.g. weekdays). */
+function chart_columns(array $rows, callable $tipFmt): string {
+    $W = 320; $H = 180; $padL = 8; $padR = 8; $padT = 18; $padB = 24;
+    $plotW = $W - $padL - $padR; $plotH = $H - $padT - $padB;
+    $max = max(1, max(array_column($rows, 'value')));
+    $n = count($rows); $slot = $plotW / $n; $bw = min(30, $slot - 12);
+    $s = '<svg class="chart-svg" viewBox="0 0 ' . $W . ' ' . $H . '" role="img">';
+    $s .= '<line x1="' . $padL . '" x2="' . ($W - $padR) . '" y1="' . ($padT + $plotH) . '" y2="' . ($padT + $plotH) . '" class="grid base"/>';
+    foreach ($rows as $i => $r) {
+        $cx = $padL + $slot * $i + $slot / 2;
+        $h = $r['value'] > 0 ? max(2, $r['value'] / $max * $plotH) : 0;
+        $x0 = round($cx - $bw / 2, 1); $x1 = round($cx + $bw / 2, 1); $yb = $padT + $plotH; $yt = round($yb - $h, 1); $rr = min(4, $h);
+        $s .= '<g class="col-group" tabindex="0" data-tip="' . htmlspecialchars($tipFmt($r)) . '">'
+            . '<rect class="hit" x="' . round($cx - $slot / 2, 1) . '" y="' . $padT . '" width="' . round($slot, 1) . '" height="' . $plotH . '"/>';
+        if ($h > 0) {
+            $s .= '<path class="bar received" d="M' . $x0 . ',' . $yb . ' V' . ($yt + $rr) . ' Q' . $x0 . ',' . $yt . ' ' . ($x0 + $rr) . ',' . $yt
+                . ' H' . ($x1 - $rr) . ' Q' . $x1 . ',' . $yt . ' ' . $x1 . ',' . ($yt + $rr) . ' V' . $yb . ' Z"/>';
+        }
+        if ($r['value'] == $max) {
+            $s .= '<text x="' . round($cx, 1) . '" y="' . ($yt - 5) . '" class="axis val" text-anchor="middle">' . number_format($r['value']) . '</text>';
+        }
+        $s .= '<text x="' . round($cx, 1) . '" y="' . ($H - 7) . '" class="axis" text-anchor="middle">' . $r['label'] . '</text></g>';
+    }
+    return $s . '</svg>';
+}
+
+/** Big dashboard action tile. */
+function action_tile(string $href, string $title, string $desc, string $icon, string $badge = ''): string {
+    return '<a href="' . htmlspecialchars($href) . '" class="action-tile">'
+         . '<span class="at-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' . $icon . '</svg></span>'
+         . '<span class="at-text"><span class="at-title">' . htmlspecialchars($title)
+         . ($badge !== '' ? ' <span class="at-badge">' . htmlspecialchars($badge) . '</span>' : '')
+         . '</span><span class="at-desc">' . htmlspecialchars($desc) . '</span></span>'
+         . '</a>';
+}
+
+function icon(string $name): string {
+    $i = [
+        'receive'  => '<path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/>',
+        'issue'    => '<path d="M12 21V9"/><polyline points="7 14 12 9 17 14"/><path d="M5 3h14"/>',
+        'request'  => '<circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.6a2 2 0 0 0 2-1.6L22 7H6"/>',
+        'report'   => '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="13" y2="18"/>',
+        'chart'    => '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+        'box'      => '<path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z"/><polyline points="3.3 7 12 12 20.7 7"/><line x1="12" y1="22" x2="12" y2="12"/>',
+        'adjust'   => '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+        'list'     => '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    ];
+    return $i[$name] ?? '';
+}

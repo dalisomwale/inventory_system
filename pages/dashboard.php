@@ -9,7 +9,8 @@ require_once __DIR__ . '/../includes/insights.php';
 $forecast  = ins_item_forecast($pdo, 30);
 $low_stock = ins_running_low($forecast, 14);
 $out_count = count(array_filter($forecast, fn($r) => $r['current_quantity'] <= 0));
-$top_issued = ins_top_issued($pdo, 30, 5);
+$top_issued = ins_top_issued($pdo, 30, 6);
+$health     = ins_stock_health($forecast);
 
 $today = $pdo->prepare("
     SELECT
@@ -77,12 +78,12 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Quick Actions -->
-<div class="action-group">
-    <a href="receive_stock.php" class="btn btn-success">Receive Stock</a>
-    <a href="issue_stock.php" class="btn btn-primary">Issue Stock</a>
-    <a href="procurement.php" class="btn btn-warning">Request Procurement</a>
-    <a href="submit_category_report.php" class="btn btn-info">Submit Monthly Report</a>
-    <a href="category_reports.php" class="btn">View Reports</a>
+<div class="action-tiles">
+    <?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive')); ?>
+    <?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue')); ?>
+    <?php echo action_tile('procurement.php', 'Request items', 'Ask the manager to buy', icon('request'), $my_pending ? $my_pending . ' pending' : ''); ?>
+    <?php echo action_tile('submit_category_report.php', 'Monthly report', $reports_submitted . ' of ' . $total_categories . ' submitted', icon('report')); ?>
+    <?php echo action_tile('category_reports.php', 'View reports', 'Category activity', icon('chart')); ?>
 </div>
 
 <!-- Low Stock -->
@@ -151,8 +152,23 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<!-- Health + usage -->
+<div class="grid-2">
+<div class="card">
+    <div class="card-head"><h3>Stock health</h3><span class="card-hint">Items by stock level</span></div>
+    <?php echo chart_donut([
+        ['label' => 'In stock',      'value' => $health['ok'],  'color' => '#0ca30c', 'icon' => '&#10003;'],
+        ['label' => 'Below reorder', 'value' => $health['low'], 'color' => '#fab219', 'icon' => '&#9888;'],
+        ['label' => 'Out of stock',  'value' => $health['out'], 'color' => '#d03b3b', 'icon' => '&#10005;'],
+    ], (string)$total_items, 'items', fn($v) => number_format($v) . ' item' . ($v == 1 ? '' : 's')); ?>
+</div>
+<div class="card">
+    <div class="card-head"><h3>Most issued &mdash; last 30 days</h3></div>
+    <?php echo $top_issued ? chart_hbars($top_issued, fn($v) => number_format($v) . ' units') : '<div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>'; ?>
+</div>
+</div>
+
 <!-- Recent Transactions -->
-<div class="grid-2 wide-left">
 <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
         <h3 style="margin:0">Recent Transactions</h3>
@@ -182,12 +198,6 @@ include __DIR__ . '/../includes/header.php';
     <?php else: ?>
     <div class="empty-state"><p>No transactions yet. Start by receiving or issuing stock.</p></div>
     <?php endif; ?>
-</div>
-
-<div class="card">
-    <div class="card-head"><h3>Most issued &mdash; last 30 days</h3></div>
-    <?php echo $top_issued ? chart_hbars($top_issued, fn($v) => number_format($v) . ' units') : '<div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>'; ?>
-</div>
 </div>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

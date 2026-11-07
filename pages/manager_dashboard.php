@@ -37,6 +37,10 @@ $oldest_days   = ins_oldest_pending_days($pdo);
 $week_recv     = array_sum(array_column($weekly, 'received'));
 $week_issued   = array_sum(array_column($weekly, 'issued'));
 $idle_value    = array_sum(array_column($idle, 'value'));
+$health        = ins_stock_health($forecast);
+$daily         = ins_daily_issued($pdo, 30);
+$by_cat_issued = ins_issued_by_category($pdo, 30);
+$busiest       = ins_busiest_days($pdo, 90);
 
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
 if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
@@ -92,7 +96,16 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<!-- Movement + value -->
+<!-- Quick actions -->
+<div class="action-tiles">
+    <?php echo action_tile('manage_items.php', 'Manage items', 'Add, edit or remove items', icon('box')); ?>
+    <?php echo action_tile('procurement.php', 'Procurement', 'Approve or reject requests', icon('request'), $pending_count ? $pending_count . ' pending' : ''); ?>
+    <?php echo action_tile('adjust_stock.php', 'Adjust stock', 'Correct a stock count', icon('adjust')); ?>
+    <?php echo action_tile('reports.php', 'Monthly reports', $submitted_count . ' of ' . $total_cats . ' submitted', icon('report')); ?>
+    <?php echo action_tile('view_transactions.php', 'Transactions', 'Every stock movement', icon('list')); ?>
+</div>
+
+<!-- Movement + health -->
 <div class="grid-2 wide-left">
     <div class="card">
         <div class="card-head">
@@ -107,11 +120,11 @@ include __DIR__ . '/../includes/header.php';
             <details class="table-view">
                 <summary>Show as table</summary>
                 <table>
-                    <thead><tr><th>Week of</th><th>Received</th><th>Issued</th><th>Net</th></tr></thead>
+                    <thead><tr><th>Week of</th><th class="num">Received</th><th class="num">Issued</th><th class="num">Net</th></tr></thead>
                     <tbody>
                     <?php foreach ($weekly as $w): $net = $w['received'] - $w['issued']; ?>
-                        <tr><td><?php echo $w['week']->format('d M Y'); ?></td><td><?php echo number_format($w['received']); ?></td>
-                            <td><?php echo number_format($w['issued']); ?></td><td><?php echo ($net > 0 ? '+' : '') . number_format($net); ?></td></tr>
+                        <tr><td><?php echo $w['week']->format('d M Y'); ?></td><td class="num"><?php echo number_format($w['received']); ?></td>
+                            <td class="num"><?php echo number_format($w['issued']); ?></td><td class="num"><?php echo ($net > 0 ? '+' : '') . number_format($net); ?></td></tr>
                     <?php endforeach; ?>
                     </tbody>
                 </table>
@@ -121,13 +134,36 @@ include __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </div>
     <div class="card">
-        <div class="card-head"><h3>Stock value by category</h3></div>
-        <?php if ($by_category): ?>
-            <?php echo chart_hbars(array_slice($by_category, 0, 8), fn($v) => kwacha_whole((float)$v)); ?>
-            <div class="card-foot">Total <?php echo kwacha($stock_value); ?></div>
+        <div class="card-head"><h3>Stock health</h3><span class="card-hint">Items by stock level</span></div>
+        <?php echo chart_donut([
+            ['label' => 'In stock',     'value' => $health['ok'],  'color' => '#0ca30c', 'icon' => '&#10003;'],
+            ['label' => 'Below reorder','value' => $health['low'], 'color' => '#fab219', 'icon' => '&#9888;'],
+            ['label' => 'Out of stock', 'value' => $health['out'], 'color' => '#d03b3b', 'icon' => '&#10005;'],
+        ], (string)$total_items, 'items', fn($v) => number_format($v) . ' item' . ($v == 1 ? '' : 's')); ?>
+    </div>
+</div>
+
+<!-- Daily trend + value share -->
+<div class="grid-2 wide-left">
+    <div class="card">
+        <div class="card-head">
+            <h3>Daily usage &mdash; last 30 days</h3>
+            <div class="legend">
+                <span><i class="swatch received"></i>Units issued per day</span>
+                <span><i class="swatch line-avg"></i>7-day average <strong><?php echo number_format(end($daily)['avg'], 1); ?>/day</strong></span>
+            </div>
+        </div>
+        <?php if (array_sum(array_column($daily, 'value')) > 0): ?>
+            <?php echo chart_line($daily); ?>
         <?php else: ?>
-            <div class="empty-state"><p>Set unit prices on items to see stock value.</p></div>
+            <div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>
         <?php endif; ?>
+    </div>
+    <div class="card">
+        <div class="card-head"><h3>Where the stock value sits</h3><span class="card-hint">Share by category</span></div>
+        <?php echo $by_category
+            ? chart_donut(top_n_other($by_category, 5), kwacha($stock_value, true), 'total value', fn($v) => kwacha_whole((float)$v))
+            : '<div class="empty-state"><p>Set unit prices on items to see stock value.</p></div>'; ?>
     </div>
 </div>
 
@@ -174,6 +210,22 @@ include __DIR__ . '/../includes/header.php';
         <div class="card-head"><h3>Who uses the most &mdash; last 30 days</h3><span class="card-hint">By value issued</span></div>
         <?php echo $top_users ? chart_hbars(array_map(fn($r) => ['label' => $r['label'], 'value' => $r['cost'] > 0 ? $r['cost'] : $r['value'], 'times' => $r['times']], $top_users),
                                              fn($v) => kwacha_whole((float)$v)) : '<div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>'; ?>
+    </div>
+</div>
+
+<!-- Category usage + busiest days -->
+<div class="grid-2 wide-left">
+    <div class="card">
+        <div class="card-head"><h3>Issued by category &mdash; last 30 days</h3><span class="card-hint">Units</span></div>
+        <?php echo $by_cat_issued
+            ? chart_hbars(array_map(fn($r) => ['label' => $r['label'], 'value' => $r['value']], $by_cat_issued), fn($v) => number_format($v) . ' units')
+            : '<div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>'; ?>
+    </div>
+    <div class="card">
+        <div class="card-head"><h3>Busiest days</h3><span class="card-hint">Issues per weekday, last 90 days</span></div>
+        <?php echo array_sum(array_column($busiest, 'value')) > 0
+            ? chart_columns($busiest, fn($r) => $r['label'] . ': ' . number_format($r['value']) . ' issues, ' . number_format($r['units']) . ' units')
+            : '<div class="empty-state"><p>No issues in the last 90 days.</p></div>'; ?>
     </div>
 </div>
 
