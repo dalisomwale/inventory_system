@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 redirectIfNotLoggedIn();
-if (!isManager()) { header('Location: dashboard.php'); exit(); }
 
 $selected_month       = $_GET['month']       ?? date('Y-m');
 $selected_category_id = (int)($_GET['category_id'] ?? 0);
@@ -41,7 +40,7 @@ include __DIR__ . '/../includes/header.php';
     <h1>Category Reports</h1>
     <div style="display:flex; gap:8px;">
         <a href="reports.php" class="btn btn-sm btn-info">Full Reports</a>
-        <a href="manager_dashboard.php" class="btn btn-sm">Dashboard</a>
+        <a href="dashboard.php" class="btn btn-sm">Dashboard</a>
     </div>
 </div>
 

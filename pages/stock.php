@@ -118,7 +118,7 @@ include __DIR__ . '/../includes/header.php';
     <h1>Manage Stock</h1>
     <div style="display:flex; gap:8px; flex-wrap:wrap">
         <a href="<?php echo htmlspecialchars(stock_url(['export' => 'csv'])); ?>" class="btn">Export to Excel (CSV)</a>
-        <?php if (isManager()): ?><a href="manage_items.php" class="btn">Add or edit items</a><?php endif; ?>
+        <a href="manage_items.php" class="btn">Add or edit items</a>
     </div>
 </div>
 
@@ -126,11 +126,8 @@ include __DIR__ . '/../includes/header.php';
 <div class="action-tiles">
     <?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive')); ?>
     <?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue')); ?>
-    <?php if (isManager()): ?>
-        <?php echo action_tile('adjust_stock.php', 'Adjust stock', 'Correct a stock count', icon('adjust')); ?>
-    <?php else: ?>
-        <?php echo action_tile('procurement.php', 'Request items', 'Ask the manager to buy', icon('request')); ?>
-    <?php endif; ?>
+    <?php echo action_tile('adjust_stock.php', 'Adjust stock', 'Correct a stock count', icon('adjust')); ?>
+    <?php echo action_tile('procurement.php', 'Purchase list', 'What needs buying', icon('request')); ?>
 </div>
 
 <!-- Totals; each one is also a quick filter -->
@@ -276,10 +273,9 @@ include __DIR__ . '/../includes/header.php';
                         <?php else: ?>
                         <span class="btn btn-sm" aria-disabled="true" data-tip="Nothing in stock to issue">Issue</span>
                         <?php endif; ?>
-                        <?php if (isManager()): ?>
                         <a href="adjust_stock.php?item_id=<?php echo $r['id']; ?>" class="btn btn-sm">Adjust</a>
-                        <?php elseif ($r['state'] !== 'ok'): ?>
-                        <a href="procurement.php?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm">Request</a>
+                        <?php if ($r['state'] !== 'ok'): ?>
+                        <a href="procurement.php?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm" data-tip="Add to the purchase list">Buy</a>
                         <?php endif; ?>
                     </div></td>
                 </tr>
@@ -290,8 +286,7 @@ include __DIR__ . '/../includes/header.php';
     <?php elseif ($tot_items === 0): ?>
     <div class="empty-state">
         <p>There are no items yet.</p>
-        <?php if (isManager()): ?><a href="manage_items.php" class="btn btn-primary">Add your first item</a>
-        <?php else: ?><a href="receive_stock.php?new_item=1" class="btn btn-primary">Receive a new item</a><?php endif; ?>
+        <a href="manage_items.php" class="btn btn-primary">Add your first item</a>
     </div>
     <?php else: ?>
     <div class="empty-state"><p>No items match these filters.</p><a href="stock.php" class="btn">Clear filters</a></div>

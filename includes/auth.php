@@ -3,8 +3,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/validation.php';
 
 function isLoggedIn(): bool { return isset($_SESSION['user_id']); }
-function isManager(): bool  { return isset($_SESSION['role']) && $_SESSION['role'] === 'manager'; }
-function isFrontDesk(): bool{ return isset($_SESSION['role']) && $_SESSION['role'] === 'front_desk'; }
+// Everyone who is signed in has full access (there is a single staff role).
 
 function redirectIfNotLoggedIn(): void {
     if (!isLoggedIn()) { header('Location: login.php'); exit(); }

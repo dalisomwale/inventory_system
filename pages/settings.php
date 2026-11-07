@@ -79,7 +79,6 @@ include __DIR__ . '/../includes/header.php';
     <div class="card-body">
         <p><strong>Name:</strong> <?php echo htmlspecialchars($_SESSION['full_name']); ?></p>
         <p><strong>Email:</strong> <?php echo htmlspecialchars($_SESSION['email'] ?? ''); ?></p>
-        <p><strong>Role:</strong> <?php echo ucfirst($_SESSION['role']); ?></p>
     </div>
 </div>
 

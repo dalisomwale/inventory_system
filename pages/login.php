@@ -3,7 +3,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/validation.php';
 
 if (isset($_SESSION['user_id'])) {
-    header($_SESSION['role'] === 'manager' ? 'Location: manager_dashboard.php' : 'Location: dashboard.php');
+    header('Location: dashboard.php');
     exit();
 }
 
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->prepare("INSERT INTO audit_trail (user_id, action, details) VALUES (?, 'LOGIN', 'User logged in')")->execute([$user['id']]);
                 } catch (Exception $e) {}
 
-                header($user['role'] === 'manager' ? 'Location: manager_dashboard.php' : 'Location: dashboard.php');
+                header('Location: dashboard.php');
                 exit();
             } else {
                 $error = 'Incorrect email or password.';

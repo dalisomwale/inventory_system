@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $v         = new Validator($_POST);
     $full_name = $v->text('full_name', 'Full name', 150, true, 3);
     $email     = $v->email('email', 'Work email');
-    $role      = $v->choice('role', 'role', ['manager', 'front_desk']);
+    $role      = 'manager'; // single role: everyone has full access
     $password  = (string)($_POST['password'] ?? '');
     $confirm   = (string)($_POST['confirm_password'] ?? '');
 
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 try {
                     $new_id = (int)$pdo->lastInsertId();
                     $pdo->prepare("INSERT INTO audit_trail (user_id, action, details) VALUES (?, 'CREATE_ACCOUNT', ?)")
-                        ->execute([$new_id, "Account created for $email ($role)"]);
+                        ->execute([$new_id, "Account created for $email"]);
                 } catch (Exception $e) {}
                 $_SESSION['signup_done']  = $full_name;
                 $_SESSION['signup_email'] = $email;
@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="POST" novalidate
               data-confirm-title="Create account"
-              data-confirm="Create a {role} account for {full_name} ({email})?"
+              data-confirm="Create an account for {full_name} ({email})?"
               data-confirm-ok="Create account">
             <div class="form-group">
                 <label for="full_name">Full Name</label>
@@ -97,13 +97,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label for="email">Work email</label>
                 <input type="email" id="email" name="email" required maxlength="190" placeholder="name@altus.co.zm"
                        value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" autocomplete="email">
-            </div>
-            <div class="form-group">
-                <label for="role">Role</label>
-                <select id="role" name="role">
-                    <option value="front_desk" <?php echo (($_POST['role'] ?? '') === 'front_desk') ? 'selected' : ''; ?>>Front Desk</option>
-                    <option value="manager" <?php echo (($_POST['role'] ?? '') === 'manager') ? 'selected' : ''; ?>>Manager</option>
-                </select>
             </div>
             <div class="form-group">
                 <label for="password">Password</label>

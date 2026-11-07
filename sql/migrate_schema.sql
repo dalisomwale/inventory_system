@@ -37,6 +37,17 @@ CALL add_column_if_missing('stock_issuing',   'new_stock', 'INT NULL AFTER old_s
 CALL add_column_if_missing('procurement', 'category_id', 'INT NULL AFTER reason');
 CALL add_column_if_missing('procurement', 'category',    'VARCHAR(100) NULL AFTER category_id');
 
+-- Procurement becomes a purchase list: needed -> ordered -> received (or cancelled)
+CALL add_column_if_missing('procurement', 'supplier',    'VARCHAR(200) NULL AFTER category');
+CALL add_column_if_missing('procurement', 'ordered_at',  'DATETIME NULL');
+CALL add_column_if_missing('procurement', 'received_at', 'DATETIME NULL');
+CALL add_column_if_missing('procurement', 'item_id',     'INT NULL AFTER item_name');
+ALTER TABLE procurement MODIFY status ENUM('pending','approved','rejected','needed','ordered','received','cancelled') NOT NULL DEFAULT 'needed';
+UPDATE procurement SET status = 'needed'    WHERE status = 'pending';
+UPDATE procurement SET status = 'ordered', ordered_at = COALESCE(ordered_at, created_at) WHERE status = 'approved';
+UPDATE procurement SET status = 'cancelled' WHERE status = 'rejected';
+ALTER TABLE procurement MODIFY status ENUM('needed','ordered','received','cancelled') NOT NULL DEFAULT 'needed';
+
 -- Monthly reports store the stock value
 CALL add_column_if_missing('category_monthly_reports', 'total_value', 'DECIMAL(15,2) NOT NULL DEFAULT 0.00 AFTER total_units');
 CALL add_column_if_missing('category_monthly_reports', 'updated_at',  'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');

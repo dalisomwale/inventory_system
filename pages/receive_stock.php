@@ -10,6 +10,40 @@ $show_new_item     = isset($_GET['new_item']);
 $items         = [];
 $selected_item = null;
 
+// Receiving something from the purchase list
+$purchase = null;
+$pid = (int)($_POST['purchase_id'] ?? $_GET['purchase_id'] ?? 0);
+if ($pid > 0) {
+    $ps = $pdo->prepare("SELECT * FROM procurement WHERE id = ? AND status IN ('needed','ordered')");
+    $ps->execute([$pid]);
+    $purchase = $ps->fetch() ?: null;
+    if ($purchase && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+        $item_id = (int)$purchase['item_id'];
+        if (!$item_id) {
+            $m = $pdo->prepare("SELECT id FROM items WHERE LOWER(item_name)=LOWER(?) ORDER BY category_id = ? DESC LIMIT 1");
+            $m->execute([$purchase['item_name'], (int)$purchase['category_id']]);
+            $item_id = (int)$m->fetchColumn();
+        }
+        if ($item_id) {
+            $selected_item_id = $item_id;
+            $c = $pdo->prepare("SELECT category_id FROM items WHERE id=?"); $c->execute([$item_id]);
+            $selected_cat_id = (int)$c->fetchColumn();
+            $show_new_item = false;
+        } else {
+            $selected_cat_id = (int)$purchase['category_id'];
+            $show_new_item = true;
+        }
+    }
+}
+
+/** Mark the purchase as received once its stock is in. */
+function complete_purchase(PDO $pdo, ?array $purchase, int $item_id): void {
+    if (!$purchase) return;
+    $pdo->prepare("UPDATE procurement SET status='received', received_at=NOW(), item_id=? WHERE id=? AND status IN ('needed','ordered')")
+        ->execute([$item_id, $purchase['id']]);
+    logAudit($pdo, $_SESSION['user_id'], 'PURCHASE_RECEIVED', $item_id, $purchase['quantity'], "Received purchase: {$purchase['item_name']}");
+}
+
 if ($selected_cat_id > 0) {
     $stmt = $pdo->prepare("SELECT * FROM items WHERE category_id = ? ORDER BY item_name");
     $stmt->execute([$selected_cat_id]);
@@ -56,7 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_new_item'])) {
             logAudit($pdo, $_SESSION['user_id'], 'ADD_NEW_ITEM_RECEIVE', $item_id, $quantity,
                      "Added new item: $item_name in category: $cat_name. Initial stock: $quantity from: $supplier");
             $pdo->commit();
-            header("Location: receive_stock.php?category_id=$category_id&item_id=$item_id&added=1");
+            complete_purchase($pdo, $purchase, (int)$item_id);
+            header("Location: receive_stock.php?category_id=$category_id&item_id=$item_id&added=1" . ($purchase ? '&purchase_done=1' : ''));
             exit();
         } catch (Exception $e) {
             $pdo->rollBack();
@@ -66,7 +101,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_new_item'])) {
     }
 }
 if (isset($_GET['added']) && $selected_item) {
-    $success = 'Item "' . htmlspecialchars($selected_item['item_name']) . '" added and stock received.';
+    $success = 'Item "' . htmlspecialchars($selected_item['item_name']) . '" added and stock received.'
+             . (isset($_GET['purchase_done']) ? ' The purchase is marked as received.' : '');
 }
 
 // Receive Existing
@@ -93,7 +129,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['receive_existing'])) 
         logAudit($pdo, $_SESSION['user_id'], 'RECEIVE_STOCK', $item_id, $quantity,
                  "Received $quantity of {$item_data['item_name']}. Old: $old_stock, New: $new_stock. Supplier: $supplier");
         $pdo->commit();
-        $success = "Stock received. Previous: $old_stock &rarr; New: $new_stock";
+        complete_purchase($pdo, $purchase, $item_id);
+        $success = "Stock received. Previous: $old_stock &rarr; New: $new_stock" . ($purchase ? '. The purchase is marked as received.' : '');
+        $purchase = null;
         $stmt = $pdo->prepare("SELECT * FROM items WHERE id = ?");
         $stmt->execute([$item_id]);
         $selected_item = $stmt->fetch();
@@ -134,6 +172,9 @@ include __DIR__ . '/../includes/header.php';
     <?php endforeach; ?>
 </div>
 
+<?php if ($purchase): ?>
+<div class="info-note">Receiving from the purchase list: <strong><?php echo htmlspecialchars($purchase['quantity'] . ' × ' . $purchase['item_name']); ?></strong><?php echo $purchase['supplier'] ? ' from ' . htmlspecialchars($purchase['supplier']) : ''; ?>. Check the quantity that actually arrived.</div>
+<?php endif; ?>
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
@@ -152,10 +193,11 @@ include __DIR__ . '/../includes/header.php';
           data-confirm="Add {item_name} to {category_id} with {quantity} units received from {supplier}?"
           data-confirm-ok="Add item">
         <input type="hidden" name="add_new_item" value="1">
+        <?php if ($purchase): ?><input type="hidden" name="purchase_id" value="<?php echo $purchase['id']; ?>"><?php endif; ?>
         <div class="form-group">
             <label>Item Name *</label>
             <input type="text" name="item_name" required minlength="2" maxlength="200" placeholder="e.g., A4 Paper Ream"
-                   value="<?php echo isset($error) ? htmlspecialchars($_POST['item_name'] ?? '') : ''; ?>">
+                   value="<?php echo htmlspecialchars(isset($error) ? ($_POST['item_name'] ?? '') : ($purchase['item_name'] ?? '')); ?>">
         </div>
         <div class="form-group">
             <label>Category *</label>
@@ -176,12 +218,12 @@ include __DIR__ . '/../includes/header.php';
             <div class="form-group">
                 <label>Supplier *</label>
                 <input type="text" name="supplier" required minlength="2" maxlength="200" placeholder="Supplier name"
-                       value="<?php echo isset($error) ? htmlspecialchars($_POST['supplier'] ?? '') : ''; ?>">
+                       value="<?php echo htmlspecialchars(isset($error) ? ($_POST['supplier'] ?? '') : ($purchase['supplier'] ?? '')); ?>">
             </div>
             <div class="form-group">
                 <label>Initial Quantity *</label>
                 <input type="number" name="quantity" min="1" max="1000000" step="1" required placeholder="0"
-                       value="<?php echo isset($error) ? htmlspecialchars($_POST['quantity'] ?? '') : ''; ?>">
+                       value="<?php echo htmlspecialchars(isset($error) ? ($_POST['quantity'] ?? '') : ($purchase['quantity'] ?? '')); ?>">
             </div>
         </div>
         <div class="form-row">
@@ -249,14 +291,17 @@ include __DIR__ . '/../includes/header.php';
           data-confirm="Record {quantity} &times; <?php echo htmlspecialchars($selected_item['item_name']); ?> received from {supplier}? This will be added to stock."
           data-confirm-ok="Receive stock">
         <input type="hidden" name="receive_existing" value="1">
+        <?php if ($purchase): ?><input type="hidden" name="purchase_id" value="<?php echo $purchase['id']; ?>"><?php endif; ?>
         <input type="hidden" name="item_id" value="<?php echo $selected_item['id']; ?>">
         <div class="form-group">
             <label>Supplier *</label>
-            <input type="text" name="supplier" required minlength="2" maxlength="200" placeholder="Supplier name">
+            <input type="text" name="supplier" required minlength="2" maxlength="200" placeholder="Supplier name"
+                   value="<?php echo htmlspecialchars($purchase['supplier'] ?? ''); ?>">
         </div>
         <div class="form-group">
             <label>Quantity Received *</label>
-            <input type="number" name="quantity" id="qty" min="1" max="1000000" step="1" required placeholder="0" oninput="updateNewStock()">
+            <input type="number" name="quantity" id="qty" min="1" max="1000000" step="1" required placeholder="0" oninput="updateNewStock()"
+                   value="<?php echo htmlspecialchars($purchase['quantity'] ?? ''); ?>">
             <small id="newStockMsg"></small>
         </div>
         <div class="form-group">

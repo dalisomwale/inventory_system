@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 redirectIfNotLoggedIn();
-if (isManager()) { header('Location: manager_dashboard.php'); exit(); }
 
 $current_month        = date('Y-m');
 $selected_month       = safe_month($_GET['month'] ?? null);
@@ -100,7 +99,7 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="page-header">
     <h1>Submit Monthly Report</h1>
-    <a href="dashboard.php" class="btn btn-sm">Back to Dashboard</a>
+    <a href="reports.php" class="btn btn-sm">Back to Monthly Reports</a>
 </div>
 
 <!-- Month Selector -->
@@ -184,7 +183,7 @@ include __DIR__ . '/../includes/header.php';
           data-confirm-title="<?php echo $existing_report ? 'Update report' : 'Submit report'; ?>"
           data-confirm="<?php echo $existing_report
               ? 'Replace the ' . htmlspecialchars($category_name) . ' report for ' . date('F Y', strtotime($selected_month.'-01')) . ' with the current figures? The earlier version will be overwritten.'
-              : 'Submit the ' . htmlspecialchars($category_name) . ' report for ' . date('F Y', strtotime($selected_month.'-01')) . '? It will be sent to the manager.'; ?>"
+              : 'Submit the ' . htmlspecialchars($category_name) . ' report for ' . date('F Y', strtotime($selected_month.'-01')) . '? It will be saved as the month-end stock record.'; ?>"
           data-confirm-ok="<?php echo $existing_report ? 'Update report' : 'Submit report'; ?>">
         <input type="hidden" name="category_id"  value="<?php echo $selected_category_id; ?>">
         <input type="hidden" name="report_month" value="<?php echo $selected_month; ?>">

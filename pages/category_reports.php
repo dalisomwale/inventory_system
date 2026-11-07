@@ -113,7 +113,7 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="page-header">
     <h1>Category Reports</h1>
-    <a href="dashboard.php" class="btn btn-sm">Back to Dashboard</a>
+    <a href="reports.php" class="btn btn-sm">Back to Monthly Reports</a>
 </div>
 
 <div class="info-note">Enter the opening stock for each item (beginning of month). Closing stock is populated automatically from current quantities.</div>
@@ -165,7 +165,7 @@ include __DIR__ . '/../includes/header.php';
       data-confirm-title="<?php echo $existing_report ? 'Update report' : 'Submit report'; ?>"
       data-confirm="<?php echo $existing_report
           ? 'Replace the ' . htmlspecialchars($category_data['name']) . ' report for ' . date('F Y', strtotime($selected_month.'-01')) . ' with these figures? The earlier version will be overwritten.'
-          : 'Submit the ' . htmlspecialchars($category_data['name']) . ' report for ' . date('F Y', strtotime($selected_month.'-01')) . '? It will be sent to the manager.'; ?>"
+          : 'Submit the ' . htmlspecialchars($category_data['name']) . ' report for ' . date('F Y', strtotime($selected_month.'-01')) . '? It will be saved as the month-end stock record.'; ?>"
       data-confirm-ok="<?php echo $existing_report ? 'Update report' : 'Submit report'; ?>">
     <input type="hidden" name="category_id"  value="<?php echo $selected_category_id; ?>">
     <input type="hidden" name="report_month" value="<?php echo $selected_month; ?>">
@@ -235,7 +235,7 @@ include __DIR__ . '/../includes/header.php';
 
     <div class="card">
         <div class="form-group">
-            <label>Notes for Manager (Optional)</label>
+            <label>Notes (Optional)</label>
             <textarea name="notes" rows="3" maxlength="1000" placeholder="Any observations about this month's stock..."><?php echo htmlspecialchars($existing_report['notes']??''); ?></textarea>
         </div>
         <div class="form-actions">

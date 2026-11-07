@@ -355,6 +355,10 @@ tfoot td {
     color: #991b1b;
     border: 1px solid #fecaca;
 }
+.status-ordered {
+    display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-weight: 500;
+    background: var(--accent-lt); color: var(--navy); border: 1px solid #c7cfe8;
+}
 .status-pending {
     display: inline-block;
     padding: 2px 8px;
@@ -608,10 +612,12 @@ table.compact thead th { padding: 7px 10px; }
 /* Bigger buttons on the dashboards */
 .page-dashboard .btn,
 .page-manager_dashboard .btn,
-.page-stock .btn { padding: 9px 16px; font-size: .9rem; min-height: 38px; }
+.page-stock .btn,
+.page-procurement .btn { padding: 9px 16px; font-size: .9rem; min-height: 38px; }
 .page-dashboard .btn-sm,
 .page-manager_dashboard .btn-sm,
-.page-stock .btn-sm { padding: 7px 14px; font-size: .86rem; min-height: 34px; }
+.page-stock .btn-sm,
+.page-procurement .btn-sm { padding: 7px 14px; font-size: .86rem; min-height: 34px; }
 .page-dashboard td .btn-sm,
 .page-manager_dashboard td .btn-sm { min-width: 84px; justify-content: center; }
 

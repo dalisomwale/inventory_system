@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 redirectIfNotLoggedIn();
-if (!isManager()) { header('Location: dashboard.php'); exit(); }
 
 $filter_type = $_GET['type']    ?? 'all';
 $filter_date = $_GET['date']    ?? date('Y-m-d');
@@ -46,7 +45,7 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="page-header">
     <h1>Transaction History</h1>
-    <a href="manager_dashboard.php" class="btn btn-sm">Back to Dashboard</a>
+    <a href="dashboard.php" class="btn btn-sm">Back to Dashboard</a>
 </div>
 
 <!-- Filters -->

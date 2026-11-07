@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 redirectIfNotLoggedIn();
-if (!isManager()) { header('Location: dashboard.php'); exit(); }
 
 $categories     = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 $filter_category = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
