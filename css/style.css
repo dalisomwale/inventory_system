@@ -619,17 +619,25 @@ table.compact thead th { padding: 7px 10px; }
 .tone-stock   { --tone: #25398d; --tone-lt: #e8ebf6; }
 .tone-request { --tone: #8a6200; --tone-lt: #fbf1d8; }
 .tone-reports { --tone: #116e7a; --tone-lt: #e1f2f4; }
-.action-tiles.stacked { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+.page-dashboard .kpi-row { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1200px) { .page-dashboard .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .page-dashboard .kpi-row { grid-template-columns: 1fr; } }
+.page-dashboard .kpi { padding: 24px 24px 22px; }
+.page-dashboard .kpi-label { font-size: .92rem; }
+.page-dashboard .kpi-value { font-size: 2.5rem; margin: 10px 0 2px; }
+.page-dashboard .kpi-unit { font-size: 1rem; }
+.action-tiles.stacked { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .action-tiles.stacked .action-tile {
-    flex-direction: column; align-items: center; text-align: center; gap: 10px;
-    padding: 22px 14px 18px; min-height: 0;
-    border-top: 4px solid var(--tone);
+    flex-direction: column; align-items: center; text-align: center; gap: 7px;
+    padding: 14px 10px 12px; min-height: 0;
+    border-top: 3px solid var(--tone);
 }
-.action-tiles.stacked .at-icon { width: 54px; height: 54px; border-radius: 12px; }
-.action-tiles.stacked .at-icon svg { width: 28px; height: 28px; }
-.action-tiles.stacked .at-text { align-items: center; gap: 3px; }
-.action-tiles.stacked .at-title { font-size: 1.02rem; }
-.action-tiles.stacked .at-badge { margin: 4px auto 0; }
+.action-tiles.stacked .at-icon { width: 38px; height: 38px; border-radius: 9px; }
+.action-tiles.stacked .at-icon svg { width: 20px; height: 20px; }
+.action-tiles.stacked .at-text { align-items: center; gap: 1px; }
+.action-tiles.stacked .at-title { font-size: .9rem; }
+.action-tiles.stacked .at-desc { font-size: .76rem; }
+.action-tiles.stacked .at-badge { position: absolute; top: 8px; right: 8px; margin: 0; }
 
 /* Bigger buttons on the dashboards */
 .page-dashboard .btn,
