@@ -153,6 +153,10 @@ $val = fn($k, $d = '') => ($form ?? '') !== '' ? ($_POST[$k] ?? $d) : $d;
 $breadcrumbs = [['Users', ($editing || $resetting) ? 'users.php' : null]];
 if ($editing)   $breadcrumbs[] = ['Edit ' . $editing['full_name'], null];
 if ($resetting) $breadcrumbs[] = ['Reset password', null];
+function role_link(array $u, string $cls): string {
+    $name = htmlspecialchars($u['role_name']);
+    return can('admin.roles') ? '<a href="roles.php?edit=' . (int)$u['role_id'] . '" class="' . $cls . ' role-link">' . $name . '</a>' : '<span class="' . $cls . '">' . $name . '</span>';
+}
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -232,19 +236,19 @@ include __DIR__ . '/../includes/header.php';
 <div class="card">
     <div class="table-container">
         <table class="users-table">
-            <thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Branch</th><th>Department</th><th>Role</th><th>Status</th><th>Last sign-in</th><th class="col-added">Date added</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Branch</th><th>Department</th><th>Role</th><th>Status</th><th class="col-wide">Last sign-in</th><th class="col-wide">Date added</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($users as $u): $self = (int)$u['id'] === $me; ?>
                 <tr class="<?php echo $u['active'] ? '' : 'row-disabled'; ?>">
-                    <td style="font-weight:600"><?php echo htmlspecialchars($u['full_name']); ?><?php echo $self ? ' <span class="muted-text">(you)</span>' : ''; ?></td>
+                    <td style="font-weight:600"><a class="item-link inline" href="users.php?edit=<?php echo $u['id']; ?>"><?php echo htmlspecialchars($u['full_name']); ?></a><?php echo $self ? ' <span class="muted-text">(you)</span>' : ''; ?></td>
                     <td><?php echo htmlspecialchars($u['email'] ?? '—'); ?></td>
                     <td><?php echo $u['company_name'] ? htmlspecialchars($u['company_name']) : '<span class="muted-text">Not set</span>'; ?></td>
                     <td><?php echo $u['branch_name'] ? htmlspecialchars($u['branch_name']) : '<span class="muted-text">Not set</span>'; ?></td>
                     <td><?php echo $u['department_name'] ? htmlspecialchars($u['department_name']) : '<span class="muted-text">—</span>'; ?></td>
-                    <td><?php echo $u['role_name'] ? ((int)$u['is_system'] ? '<span class="status-ordered">' . htmlspecialchars($u['role_name']) . '</span>' : '<span class="cat-pill">' . htmlspecialchars($u['role_name']) . '</span>') : '<span class="status-issuing">No role</span>'; ?></td>
+                    <td><?php echo $u['role_name'] ? ((int)$u['is_system'] ? role_link($u, 'status-ordered') : role_link($u, 'cat-pill')) : '<span class="status-issuing">No role</span>'; ?></td>
                     <td><?php echo $u['active'] ? '<span class="status-receiving">Active</span>' : '<span class="status-issuing">Disabled</span>'; ?></td>
-                    <td class="muted" style="white-space:nowrap"><?php echo $u['last_login_at'] ? date('d M Y, H:i', strtotime($u['last_login_at'])) : 'Never'; ?></td>
-                    <td class="muted col-added" style="white-space:nowrap"><?php echo date('d M Y', strtotime($u['created_at'])); ?></td>
+                    <td class="col-wide muted" style="white-space:nowrap"><?php echo $u['last_login_at'] ? date('d M Y, H:i', strtotime($u['last_login_at'])) : 'Never'; ?></td>
+                    <td class="muted col-wide" style="white-space:nowrap"><?php echo date('d M Y', strtotime($u['created_at'])); ?></td>
                     <td><div class="row-actions">
                         <a href="users.php?edit=<?php echo $u['id']; ?>" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($u['full_name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
                         <a href="users.php?reset=<?php echo $u['id']; ?>" class="btn btn-icon" aria-label="Reset password for <?php echo htmlspecialchars($u['full_name']); ?>" data-tip="Reset password"><?php echo row_icon('key'); ?></a>

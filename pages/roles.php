@@ -191,7 +191,7 @@ document.querySelectorAll('[data-level-all]').forEach(function (b) {
             <tbody>
             <?php foreach ($roles as $r): $sys = (int)$r['is_system']; ?>
                 <tr>
-                    <td style="font-weight:600"><?php echo htmlspecialchars($r['name']); ?><?php echo $sys ? ' <span class="status-ordered">Locked</span>' : ''; ?></td>
+                    <td style="font-weight:600"><a class="item-link inline" href="roles.php?edit=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['name']); ?></a><?php echo $sys ? ' <span class="status-ordered">Locked</span>' : ''; ?></td>
                     <td class="muted"><?php echo htmlspecialchars($r['description'] ?: '—'); ?></td>
                     <td><?php if ($sys): ?>Full access everywhere
                         <?php elseif (!$r['summary']): ?><span class="muted-text">No access</span>

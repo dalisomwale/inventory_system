@@ -666,6 +666,9 @@ a.ss:hover { border-color: var(--navy); }
 .qty-out { color: var(--danger); }
 .item-link { display: block; font-weight: 600; color: var(--text); text-decoration: none; }
 .item-link:hover { color: var(--navy); text-decoration: underline; }
+.item-link.inline { display: inline; }
+.role-link { text-decoration: none; }
+.role-link:hover { text-decoration: underline; }
 .level { position: relative; width: 84px; height: 8px; background: #edeff4; border-radius: 4px; }
 .level-fill { height: 100%; border-radius: 4px; background: var(--series-1); }
 .level-fill.low { background: #e0a015; }
@@ -722,8 +725,8 @@ a.ss:hover { border-color: var(--navy); }
 .detail-list dd.big.qty-low { color: var(--warning); }
 .detail-list dd.big.qty-out { color: var(--danger); }
 @media (max-width: 1400px) { .stock-table .col-level { display: none; } }
-@media (max-width: 1500px) { .users-table .col-added { display: none; } }
-.users-table td:nth-child(6) span { white-space: nowrap; }
+@media (max-width: 1500px) { .users-table .col-wide { display: none; } }
+.users-table td:nth-child(6) > * { white-space: nowrap; }
 @media (max-width: 1300px) { .stock-table .col-level { display: none; } .item-desc { max-width: 180px; } }
 
 /* Donut */
