@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS procurement (
     category_id  INT          NULL,
     category     VARCHAR(100) NULL,
     supplier     VARCHAR(200) NULL,
+    company_id    INT         NULL,                 -- whose IT, Director and Accounts handle it
     branch_id     INT         NULL,
     department_id INT         NULL,
     is_it        TINYINT(1)   NOT NULL DEFAULT 0,   -- IT gets the quotations
@@ -210,6 +211,7 @@ CREATE TABLE IF NOT EXISTS procurement (
     requested_by INT          NOT NULL,
     approved_by  INT,
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id)   REFERENCES companies(id),
     FOREIGN KEY (requested_by) REFERENCES users(id),
     FOREIGN KEY (approved_by)  REFERENCES users(id)
 ) ENGINE=InnoDB;

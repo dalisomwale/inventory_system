@@ -1103,3 +1103,5 @@ input.is-invalid { border-color: var(--danger); }
 .form-group .check-row { display: flex; align-items: center; margin: 6px 0; font-weight: 400; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
 .form-group .check-row:has(input:checked) { border-color: var(--navy); background: #f5f7fc; }
 .check-row input[type=radio], .check-row input[type=checkbox] { width: auto; margin: 0; flex-shrink: 0; }
+.req-company-filter { margin-bottom: 14px; max-width: 320px; }
+.req-company-filter .form-group { margin: 0; }

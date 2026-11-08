@@ -76,17 +76,51 @@ function req_my_department(PDO $pdo): int {
     return $d;
 }
 
+/** The signed-in user's company (0 if none). */
+function req_my_company(PDO $pdo): int {
+    static $c = null;
+    if ($c === null) {
+        $st = $pdo->prepare("SELECT company_id FROM users WHERE id = ?");
+        $st->execute([$_SESSION['user_id'] ?? 0]);
+        $c = (int)$st->fetchColumn();
+    }
+    return $c;
+}
+
+/**
+ * IT, Director, Accounts, Accounts Manager, CFO and Stores work for their own company only.
+ * The System Admin (and anyone not yet given a company) works across the group.
+ */
+function req_company_sql(PDO $pdo): string {
+    $c = req_my_company($pdo);
+    return (isAdmin() || !$c) ? '1=1' : "p.company_id = $c";
+}
+
+/** Is the requisition in the user's company (for the steps above)? */
+function req_same_company(PDO $pdo, array $p): bool {
+    $c = req_my_company($pdo);
+    return isAdmin() || !$c || (int)$p['company_id'] === $c;
+}
+
+/** Does the user hold this workflow right for this requisition's company? */
+function req_actor(PDO $pdo, string $perm, array $p): bool {
+    return can($perm) && req_same_company($pdo, $p);
+}
+
 /** SQL condition (on alias p) for the requisitions this user may see. */
 function req_visible_sql(PDO $pdo): string {
-    if (can('requisitions.view_all')) return '1=1';
+    $co   = req_company_sql($pdo);
+    if (can('requisitions.view_all')) return "($co)";
     $me   = (int)($_SESSION['user_id'] ?? 0);
     $or   = ["p.requested_by = $me"];
     if (can('requisitions.raise') && ($dept = req_my_department($pdo))) $or[] = "p.department_id = $dept";
-    if (can('requisitions.it_quotes'))  $or[] = "p.is_it = 1";
-    if (can('requisitions.approve'))    $or[] = "p.status = 'director' OR EXISTS (SELECT 1 FROM requisition_log l WHERE l.requisition_id = p.id AND l.to_status = 'director')";
+    $step = [];
+    if (can('requisitions.it_quotes'))  $step[] = "p.is_it = 1";
+    if (can('requisitions.approve'))    $step[] = "p.status = 'director' OR EXISTS (SELECT 1 FROM requisition_log l WHERE l.requisition_id = p.id AND l.to_status = 'director')";
     if (can_any('requisitions.accounts', 'requisitions.accounts_review', 'requisitions.cfo'))
-        $or[] = "p.status IN ('accounts','accounts_manager','cfo','pay','paid','received')";
-    if (can('stock.receive'))           $or[] = "p.status IN ('paid','received')";
+        $step[] = "p.status IN ('accounts','accounts_manager','cfo','pay','paid','received')";
+    if (can('stock.receive'))           $step[] = "p.status IN ('paid','received')";
+    if ($step) $or[] = "(($co) AND (" . implode(' OR ', $step) . "))";
     return '(' . implode(' OR ', $or) . ')';
 }
 
@@ -100,30 +134,31 @@ function req_is_department(PDO $pdo, array $p): bool {
 /** True if it is this user's turn to act on the requisition. */
 function req_my_turn(PDO $pdo, array $p): bool {
     return match ($p['status']) {
-        'quotes_it'        => can('requisitions.it_quotes'),
+        'quotes_it'        => req_actor($pdo, 'requisitions.it_quotes', $p),
         'quotes_dept', 'returned' => req_is_department($pdo, $p),
-        'director'         => can('requisitions.approve'),
-        'accounts', 'pay'  => can('requisitions.accounts'),
-        'accounts_manager' => can('requisitions.accounts_review'),
-        'cfo'              => can('requisitions.cfo'),
-        'paid'             => can('stock.receive'),
+        'director'         => req_actor($pdo, 'requisitions.approve', $p),
+        'accounts', 'pay'  => req_actor($pdo, 'requisitions.accounts', $p),
+        'accounts_manager' => req_actor($pdo, 'requisitions.accounts_review', $p),
+        'cfo'              => req_actor($pdo, 'requisitions.cfo', $p),
+        'paid'             => req_actor($pdo, 'stock.receive', $p),
         default            => false,
     };
 }
 
 /** SQL condition for "waiting for me" (mirrors req_my_turn). */
 function req_my_turn_sql(PDO $pdo): string {
-    $or = [];
-    if (can('requisitions.it_quotes'))       $or[] = "p.status = 'quotes_it'";
+    $or = []; $step = [];
+    if (can('requisitions.it_quotes'))       $step[] = "p.status = 'quotes_it'";
     $me = (int)($_SESSION['user_id'] ?? 0);
     $dept_or = ["p.requested_by = $me"];
     if (can('requisitions.raise') && ($dept = req_my_department($pdo))) $dept_or[] = "p.department_id = $dept";
     $or[] = "(p.status IN ('quotes_dept','returned') AND (" . implode(' OR ', $dept_or) . "))";
-    if (can('requisitions.approve'))         $or[] = "p.status = 'director'";
-    if (can('requisitions.accounts'))        $or[] = "p.status IN ('accounts','pay')";
-    if (can('requisitions.accounts_review')) $or[] = "p.status = 'accounts_manager'";
-    if (can('requisitions.cfo'))             $or[] = "p.status = 'cfo'";
-    if (can('stock.receive'))                $or[] = "p.status = 'paid'";
+    if (can('requisitions.approve'))         $step[] = "p.status = 'director'";
+    if (can('requisitions.accounts'))        $step[] = "p.status IN ('accounts','pay')";
+    if (can('requisitions.accounts_review')) $step[] = "p.status = 'accounts_manager'";
+    if (can('requisitions.cfo'))             $step[] = "p.status = 'cfo'";
+    if (can('stock.receive'))                $step[] = "p.status = 'paid'";
+    if ($step) $or[] = "((" . req_company_sql($pdo) . ") AND (" . implode(' OR ', $step) . "))";
     return '(' . implode(' OR ', $or) . ')';
 }
 

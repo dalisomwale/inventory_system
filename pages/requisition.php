@@ -8,8 +8,9 @@ if (!req_can_open()) requirePermission('requisitions.raise');
 
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 function load_req(PDO $pdo, int $id): ?array {
-    $st = $pdo->prepare("SELECT p.*, u.full_name AS raised_by_name, c.name AS category_name, d.name AS dept_name, b.name AS branch_name
+    $st = $pdo->prepare("SELECT p.*, u.full_name AS raised_by_name, c.name AS category_name, d.name AS dept_name, b.name AS branch_name, co.name AS company_name
                          FROM procurement p
+                         LEFT JOIN companies co ON co.id = p.company_id
                          LEFT JOIN users u ON u.id = p.requested_by
                          LEFT JOIN categories c ON c.id = p.category_id
                          LEFT JOIN departments d ON d.id = p.department_id
@@ -35,10 +36,10 @@ function req_quotes(PDO $pdo, int $id, string $kind = 'quote'): array {
 }
 
 // Who may add or remove quotations right now
-$can_quote = ($p['status'] === 'quotes_it' && can('requisitions.it_quotes'))
+$can_quote = ($p['status'] === 'quotes_it' && req_actor($pdo, 'requisitions.it_quotes', $p))
           || (in_array($p['status'], ['quotes_dept', 'returned'], true) && $dept_side);
 $can_cancel = in_array($p['status'], ['quotes_it', 'quotes_dept', 'returned', 'director'], true)
-          && ($dept_side || can('requisitions.view_all') && isAdmin());
+          && ($dept_side || isAdmin());
 
 // ── Actions ─────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -89,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'approve':
-            if ($p['status'] !== 'director' || !can('requisitions.approve')) { $err = "Only the Director can approve this, while it is waiting for approval."; break; }
+            if ($p['status'] !== 'director' || !req_actor($pdo, 'requisitions.approve', $p)) { $err = "Only the Director can approve this, while it is waiting for approval."; break; }
             $qid = (int)($_POST['quote_id'] ?? 0);
             $q = array_values(array_filter($quotes, fn($x) => (int)$x['id'] === $qid))[0] ?? null;
             if (!$q) { $err = 'Choose the quotation you are approving.'; break; }
@@ -99,19 +100,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'reject':
-            if ($p['status'] !== 'director' || !can('requisitions.approve')) { $err = "Only the Director can reject this, while it is waiting for approval."; break; }
+            if ($p['status'] !== 'director' || !req_actor($pdo, 'requisitions.approve', $p)) { $err = "Only the Director can reject this, while it is waiting for approval."; break; }
             if ($e = $need_reason()) { $err = $e; break; }
             $msg = req_move($pdo, $p, 'returned', 'rejected', $note) ? "$ref rejected and returned to the department." : null;
             break;
 
         case 'to_am':
-            if ($p['status'] !== 'accounts' || !can('requisitions.accounts')) { $err = "It isn't your turn on this requisition."; break; }
+            if ($p['status'] !== 'accounts' || !req_actor($pdo, 'requisitions.accounts', $p)) { $err = "It isn't your turn on this requisition."; break; }
             $msg = req_move($pdo, $p, 'accounts_manager', 'to_am', $note ?: null) ? "$ref sent to the Accounts Manager." : null;
             break;
 
         case 'am_approve':
         case 'am_reject':
-            if ($p['status'] !== 'accounts_manager' || !can('requisitions.accounts_review')) { $err = "It isn't your turn on this requisition."; break; }
+            if ($p['status'] !== 'accounts_manager' || !req_actor($pdo, 'requisitions.accounts_review', $p)) { $err = "It isn't your turn on this requisition."; break; }
             if ($act === 'am_reject' && ($e = $need_reason())) { $err = $e; break; }
             $msg = $act === 'am_approve'
                 ? (req_move($pdo, $p, 'cfo', 'am_approved', $note ?: null) ? "$ref sent to the CFO for final approval." : null)
@@ -120,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         case 'cfo_approve':
         case 'cfo_reject':
-            if ($p['status'] !== 'cfo' || !can('requisitions.cfo')) { $err = "It isn't your turn on this requisition."; break; }
+            if ($p['status'] !== 'cfo' || !req_actor($pdo, 'requisitions.cfo', $p)) { $err = "It isn't your turn on this requisition."; break; }
             if ($act === 'cfo_reject' && ($e = $need_reason())) { $err = $e; break; }
             $msg = $act === 'cfo_approve'
                 ? (req_move($pdo, $p, 'pay', 'cfo_approved', $note ?: null) ? "$ref approved for payment. Accounts can now pay and attach the proof of payment." : null)
@@ -128,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
 
         case 'pop':
-            if ($p['status'] !== 'pay' || !can('requisitions.accounts')) { $err = "The proof of payment is attached by Accounts after the CFO approves."; break; }
+            if ($p['status'] !== 'pay' || !req_actor($pdo, 'requisitions.accounts', $p)) { $err = "The proof of payment is attached by Accounts after the CFO approves."; break; }
             $file = req_store_upload($_FILES['file'] ?? null);
             if (is_string($file)) { $err = $file; break; }
             [$stored, $orig, $mime, $size] = $file;
@@ -241,7 +242,7 @@ function action_form(string $act, string $label, array $o = []): string {
             }
             break;
         case 'director':
-            if (can('requisitions.approve')) {
+            if (req_actor($pdo, 'requisitions.approve', $p)) {
                 $radios = '<div class="form-group"><label>Approve which quotation? *</label>';
                 foreach ($quotes as $i => $q) $radios .= '<label class="check-row"><input type="radio" name="quote_id" value="' . $q['id'] . '" required' . (count($quotes) === 1 ? ' checked' : '') . '><span><strong>' . htmlspecialchars($q['supplier']) . '</strong> &middot; ' . kwacha((float)$q['amount']) . '</span></label>';
                 $radios .= '</div>';
@@ -250,29 +251,29 @@ function action_form(string $act, string $label, array $o = []): string {
             }
             break;
         case 'accounts':
-            if (can('requisitions.accounts')) $actions .= action_form('to_am', 'Send to Accounts Manager', ['confirm' => "Send $ref to the Accounts Manager?", 'note' => 'Payment details', 'placeholder' => 'e.g. payment method, account, invoice number']);
+            if (req_actor($pdo, 'requisitions.accounts', $p)) $actions .= action_form('to_am', 'Send to Accounts Manager', ['confirm' => "Send $ref to the Accounts Manager?", 'note' => 'Payment details', 'placeholder' => 'e.g. payment method, account, invoice number']);
             break;
         case 'accounts_manager':
-            if (can('requisitions.accounts_review')) {
+            if (req_actor($pdo, 'requisitions.accounts_review', $p)) {
                 $actions .= action_form('am_approve', 'Approve and send to CFO', ['confirm' => "Approve $ref and send it to the CFO?", 'note' => 'Note', 'placeholder' => 'Optional']);
                 $actions .= '<hr class="req-sep">' . action_form('am_reject', 'Send back to Accounts', ['class' => 'btn-danger', 'danger' => 1, 'confirm' => "Send $ref back to Accounts?", 'note' => 'Reason', 'note_required' => 1, 'placeholder' => 'What needs fixing']);
             }
             break;
         case 'cfo':
-            if (can('requisitions.cfo')) {
+            if (req_actor($pdo, 'requisitions.cfo', $p)) {
                 $actions .= action_form('cfo_approve', 'Give final approval', ['confirm' => "Give final approval to pay for $ref?", 'note' => 'Note', 'placeholder' => 'Optional']);
                 $actions .= '<hr class="req-sep">' . action_form('cfo_reject', 'Send back to Accounts Manager', ['class' => 'btn-danger', 'danger' => 1, 'confirm' => "Send $ref back to the Accounts Manager?", 'note' => 'Reason', 'note_required' => 1, 'placeholder' => 'What needs fixing']);
             }
             break;
         case 'pay':
-            if (can('requisitions.accounts')) {
+            if (req_actor($pdo, 'requisitions.accounts', $p)) {
                 $actions .= action_form('pop', 'Send proof of payment', ['upload' => 1, 'confirm' => "Attach this proof of payment and send it to " . $p['raised_by_name'] . '?',
                     'body' => '<div class="form-group"><label for="pop_file">Proof of payment *</label><input type="file" id="pop_file" name="file" required accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"><small>PDF, image, Word or Excel, up to 10 MB.</small></div>',
                     'note' => 'Note', 'placeholder' => 'Optional, e.g. payment reference']);
             }
             break;
         case 'paid':
-            if (can('stock.receive')) $actions .= '<p class="muted-text">When the items arrive, receive them into stock.</p><a href="receive_stock.php?purchase_id=' . $p['id'] . '" class="btn btn-success">Receive into stock</a>';
+            if (req_actor($pdo, 'stock.receive', $p)) $actions .= '<p class="muted-text">When the items arrive, receive them into stock.</p><a href="receive_stock.php?purchase_id=' . $p['id'] . '" class="btn btn-success">Receive into stock</a>';
             break;
     }
     ?>
@@ -351,6 +352,7 @@ function action_form(string $act, string $label, array $o = []): string {
             <dt>Item</dt><dd><?php echo htmlspecialchars($p['item_name']); ?></dd>
             <dt>Quantity</dt><dd><?php echo number_format($p['quantity']); ?></dd>
             <dt>Category</dt><dd><?php echo htmlspecialchars($p['category_name'] ?? $p['category'] ?? '—'); ?></dd>
+            <dt>Company</dt><dd><?php echo htmlspecialchars($p['company_name'] ?? '—'); ?></dd>
             <dt>Department</dt><dd><?php echo htmlspecialchars($p['dept_name'] ?? '—'); ?><?php echo $p['branch_name'] ? ' <span class="muted-text">· ' . htmlspecialchars($p['branch_name']) . '</span>' : ''; ?></dd>
             <dt>IT-related</dt><dd><?php echo $p['is_it'] ? 'Yes' : 'No'; ?></dd>
             <dt>Raised by</dt><dd><?php echo htmlspecialchars($p['raised_by_name'] ?? '—'); ?></dd>

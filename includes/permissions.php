@@ -13,14 +13,14 @@ const ACCESS_AREAS = [
         ['Full control',    'Everything in Receive & issue, plus add, edit and delete items and change prices and reorder levels.', ['stock.view', 'stock.receive', 'stock.issue', 'items.manage']],
     ]],
     // Requisitions: a role can play any number of parts in the workflow, so these are ticks, not levels
-    'requisitions' => ['Requisitions', 'Who does what in the requisition workflow', [
+    'requisitions' => ['Requisitions', 'Who does what in the requisition workflow, for their own company', [
         ['Raise for their department', 'Raise requisitions for their own department, attach quotations when it isn\'t IT-related, resubmit after a rejection and cancel before approval. Sees their department\'s requisitions.', ['requisitions.raise']],
         ['IT quotations',              'Attach quotations to IT-related requisitions and send them to the Director.', ['requisitions.it_quotes']],
         ['Director approval',          'Approve a requisition and pick the quotation, or reject it back to the department with a reason.', ['requisitions.approve']],
         ['Accounts',                   'Prepare payment for approved requisitions, then attach the proof of payment once the CFO approves.', ['requisitions.accounts']],
         ['Accounts Manager',           'Check payments from Accounts: approve them on to the CFO or send them back to Accounts.', ['requisitions.accounts_review']],
         ['Chief Finance Officer',      'Final approval of payments, or send them back to the Accounts Manager.', ['requisitions.cfo']],
-        ['See all requisitions',       'See every requisition at any stage, without taking part.', ['requisitions.view_all']],
+        ['See all requisitions',       "See every requisition in their company at any stage, without taking part.", ['requisitions.view_all']],
     ], 'multi'],
     'categories' => ['Categories', 'Stock categories', [
         ['No access', "Can't open Categories.", []],

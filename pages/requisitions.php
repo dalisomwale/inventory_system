@@ -8,6 +8,8 @@ if (!req_can_open()) requirePermission('requisitions.raise');
 $categories  = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 $departments = org_departments($pdo);
 $my_dept     = req_my_department($pdo);
+// People raise for departments in their own company (the System Admin for any)
+if (!isAdmin() && ($my_co = req_my_company($pdo))) $departments = array_values(array_filter($departments, fn($d) => (int)$d['company_id'] === $my_co));
 
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
 if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
@@ -31,7 +33,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
         foreach ($departments as $d) if ((int)$d['id'] === $want) $dept = $d;
         if (!$dept) $v->fail('Please choose the department that needs this.');
     }
-    $req_branch = $dept ? (int)$dept['branch_id'] : (user_branch_id() ?: null);
+    $req_branch  = $dept ? (int)$dept['branch_id'] : (user_branch_id() ?: null);
+    // The company decides whose IT, Director and Accounts handle it
+    $req_company = $dept ? (int)$dept['company_id'] : (req_my_company($pdo) ?: null);
+    if (!$req_company && $req_branch) {
+        $bc = $pdo->prepare("SELECT company_id FROM branches WHERE id = ?"); $bc->execute([$req_branch]); $req_company = (int)$bc->fetchColumn() ?: null;
+    }
 
     if ($v->ok()) {
         $dup = $pdo->prepare("SELECT COUNT(*) FROM procurement WHERE LOWER(item_name) = LOWER(?) AND (department_id <=> ?) AND status NOT IN ('received','cancelled')");
@@ -46,9 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
         $item_id = $match->fetchColumn() ?: null;
         $status  = $is_it ? 'quotes_it' : 'quotes_dept';
 
-        $pdo->prepare("INSERT INTO procurement (item_name, item_id, quantity, reason, requested_by, category_id, category, branch_id, department_id, is_it, status, stage_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())")
-            ->execute([$item_name, $item_id, $quantity, $notes, $_SESSION['user_id'], $category['id'], $category['name'], $req_branch, $dept['id'] ?? null, $is_it, $status]);
+        $pdo->prepare("INSERT INTO procurement (item_name, item_id, quantity, reason, requested_by, category_id, category, company_id, branch_id, department_id, is_it, status, stage_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW())")
+            ->execute([$item_name, $item_id, $quantity, $notes, $_SESSION['user_id'], $category['id'], $category['name'], $req_company, $req_branch, $dept['id'] ?? null, $is_it, $status]);
         $id = (int)$pdo->lastInsertId();
         req_log($pdo, $id, 'raised', null, $status, $is_it ? 'IT-related' : null);
         logAudit($pdo, $_SESSION['user_id'], 'REQUISITION_RAISED', $item_id ? (int)$item_id : null, $quantity, req_ref($id) . " raised: $item_name");
@@ -59,6 +66,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
 
 // ── List ────────────────────────────────────────────────────
 $visible = req_visible_sql($pdo);
+// Company filter, for people who see more than one company
+$companies  = org_companies($pdo);
+$co_ids     = array_map('intval', $pdo->query("SELECT DISTINCT p.company_id FROM procurement p WHERE $visible AND p.company_id IS NOT NULL")->fetchAll(PDO::FETCH_COLUMN));
+$show_co    = count($companies) > 1 && count($co_ids) > 1;
+$company_id = (int)($_GET['company_id'] ?? 0);
+if (!in_array($company_id, $co_ids, true)) $company_id = 0;
+if ($company_id) $visible .= " AND p.company_id = $company_id";
 $mine    = req_my_turn_sql($pdo);
 $tabs = [
     'mine'      => ['Waiting for me', $mine . " AND p.status NOT IN ('received','cancelled')"],
@@ -73,7 +87,7 @@ foreach ($tabs as $k => [, $cond]) $counts[$k] = (int)$pdo->query("SELECT COUNT(
 $tab = array_key_exists($_GET['tab'] ?? '', $tabs) ? $_GET['tab'] : ($counts['mine'] ? 'mine' : 'progress');
 
 $list = $pdo->query("
-    SELECT p.*, u.full_name AS added_by, c.name AS category_name, d.name AS dept_name, b.name AS branch_name,
+    SELECT p.*, u.full_name AS added_by, c.name AS category_name, d.name AS dept_name, b.name AS branch_name, co.name AS company_name,
            (SELECT COUNT(*) FROM requisition_files f WHERE f.requisition_id = p.id AND f.kind = 'quote') AS quotes,
            ($mine) AS my_turn
     FROM procurement p
@@ -81,6 +95,7 @@ $list = $pdo->query("
     LEFT JOIN categories c ON c.id = p.category_id
     LEFT JOIN departments d ON d.id = p.department_id
     LEFT JOIN branches b ON b.id = p.branch_id
+    LEFT JOIN companies co ON co.id = p.company_id
     WHERE $visible AND {$tabs[$tab][1]}
     ORDER BY FIELD(p.status,'returned','quotes_it','quotes_dept','director','accounts','accounts_manager','cfo','pay','paid','received','cancelled'), p.created_at DESC")->fetchAll();
 
@@ -106,7 +121,7 @@ include __DIR__ . '/../includes/header.php';
     <div class="form-title">New requisition</div>
     <form method="POST"
           data-confirm-title="Raise requisition"
-          data-confirm="Raise a requisition for {quantity} &times; {item_name} ({category_id})?"
+          data-confirm="Raise a requisition for {quantity} &times; {item_name} ({category_id})<?php echo $departments && !$my_dept_row ? ' for {department_id}' : ''; ?>?"
           data-confirm-ok="Raise requisition">
         <input type="hidden" name="add_purchase" value="1">
         <div class="form-row">
@@ -137,7 +152,7 @@ include __DIR__ . '/../includes/header.php';
             <div class="form-group">
                 <label for="department_id">For department *</label>
                 <?php if ($my_dept_row): ?>
-                <input type="text" id="department_id" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars(dept_label($my_dept_row)); ?>">
+                <input type="text" id="department_id" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars($my_dept_row['company_name'] . ' › ' . dept_label($my_dept_row)); ?>">
                 <?php else: ?>
                 <select id="department_id" name="department_id" required>
                     <option value="">— Select department —</option>
@@ -150,6 +165,7 @@ include __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
                 <?php endif; ?>
+                <small>Its company's IT, Director and Accounts will handle it.</small>
             </div>
             <?php endif; ?>
         </div>
@@ -167,15 +183,30 @@ include __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <div class="card">
+    <?php if ($show_co): ?>
+    <form method="GET" class="req-company-filter">
+        <input type="hidden" name="tab" value="<?php echo htmlspecialchars($tab); ?>">
+        <div class="form-group">
+        <label for="company_filter">Company</label>
+        <select id="company_filter" name="company_id" onchange="this.form.submit()">
+            <option value="">All companies</option>
+            <?php foreach ($companies as $c): if (!in_array((int)$c['id'], $co_ids, true)) continue; ?>
+            <option value="<?php echo $c['id']; ?>" <?php echo $company_id === (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
+            <?php endforeach; ?>
+        </select>
+        </div>
+        <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
+    </form>
+    <?php endif; ?>
     <div class="pill-tabs pill-tabs-inline">
         <?php foreach ($tabs as $k => [$label]): ?>
-        <a href="?tab=<?php echo $k; ?>" class="pill-tab <?php echo $tab === $k ? 'active' : ''; ?>"><?php echo $label; ?> (<?php echo $counts[$k]; ?>)</a>
+        <a href="?tab=<?php echo $k; ?><?php echo $company_id ? '&company_id=' . $company_id : ''; ?>" class="pill-tab <?php echo $tab === $k ? 'active' : ''; ?>"><?php echo $label; ?> (<?php echo $counts[$k]; ?>)</a>
         <?php endforeach; ?>
     </div>
     <?php if ($list): ?>
     <div class="table-container">
         <table class="req-table">
-            <thead><tr><th>Ref</th><th>Date</th><th>Raised by</th><th>Item</th><th class="num">Qty</th><th>Department</th><th>Stage</th><th></th></tr></thead>
+            <thead><tr><th>Ref</th><th>Date</th><th>Raised by</th><th>Item</th><th class="num">Qty</th><th>Company</th><th>Department</th><th>Stage</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($list as $p): ?>
                 <tr>
@@ -187,6 +218,7 @@ include __DIR__ . '/../includes/header.php';
                         <div class="item-desc"><?php echo htmlspecialchars($p['category_name'] ?? $p['category'] ?? ''); ?><?php echo $p['is_it'] ? ' · IT-related' : ''; ?></div>
                     </td>
                     <td class="num"><?php echo number_format($p['quantity']); ?></td>
+                    <td><?php echo $p['company_name'] ? htmlspecialchars($p['company_name']) : '<span class="muted-text">—</span>'; ?></td>
                     <td><?php echo $p['dept_name'] ? htmlspecialchars($p['dept_name']) : '<span class="muted-text">—</span>'; ?><div class="item-desc"><?php echo htmlspecialchars($p['branch_name'] ?? ''); ?></div></td>
                     <td><span class="<?php echo req_status_class($p['status']); ?>"><?php echo req_status_label($p['status']); ?></span>
                         <div class="item-desc">since <?php echo date('d M', strtotime($p['stage_at'] ?? $p['created_at'])); ?></div></td>

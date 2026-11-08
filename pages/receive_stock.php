@@ -21,7 +21,7 @@ $purchase = null;
 $pid = (int)($_POST['purchase_id'] ?? $_GET['purchase_id'] ?? 0);
 if ($pid > 0) {
     // Only requisitions that have been paid for can be received
-    $ps = $pdo->prepare("SELECT * FROM procurement WHERE id = ? AND status = 'paid'");
+    $ps = $pdo->prepare("SELECT p.* FROM procurement p WHERE p.id = ? AND p.status = 'paid' AND " . req_visible_sql($pdo));
     $ps->execute([$pid]);
     $purchase = $ps->fetch() ?: null;
     if ($purchase && $_SERVER['REQUEST_METHOD'] !== 'POST') {

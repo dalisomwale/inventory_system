@@ -146,6 +146,10 @@ ALTER TABLE procurement MODIFY status VARCHAR(20) NOT NULL DEFAULT 'quotes_dept'
 UPDATE procurement SET status = 'quotes_dept' WHERE status IN ('pending', 'needed');
 UPDATE procurement SET status = 'paid', ordered_at = COALESCE(ordered_at, created_at) WHERE status IN ('approved', 'ordered');
 UPDATE procurement SET status = 'cancelled'   WHERE status = 'rejected';
+CALL add_column_if_missing('procurement', 'company_id',   'INT NULL AFTER category');
+-- Each requisition belongs to the company of its branch (or of the person who raised it)
+UPDATE procurement p JOIN branches b ON b.id = p.branch_id SET p.company_id = b.company_id WHERE p.company_id IS NULL;
+UPDATE procurement p JOIN users u ON u.id = p.requested_by SET p.company_id = u.company_id WHERE p.company_id IS NULL;
 CALL add_column_if_missing('procurement', 'is_it',        'TINYINT(1) NOT NULL DEFAULT 0 AFTER department_id');
 CALL add_column_if_missing('procurement', 'quote_id',     'INT NULL AFTER is_it');
 CALL add_column_if_missing('procurement', 'last_note',    'TEXT NULL AFTER quote_id');
@@ -242,6 +246,7 @@ CALL add_fk_if_missing('stock_issuing', 'branch_id', 'branches');
 CALL add_fk_if_missing('stock_issuing', 'department_id', 'departments');
 CALL add_fk_if_missing('procurement', 'branch_id', 'branches');
 CALL add_fk_if_missing('procurement', 'department_id', 'departments');
+CALL add_fk_if_missing('procurement', 'company_id', 'companies');
 DROP PROCEDURE IF EXISTS add_fk_if_missing;
 
 -- One account per email (case-insensitive collation)
