@@ -18,6 +18,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_role'])) {
     $desc = $v->text('description', 'Description', 255, false);
     $levels = [];
     foreach (ACCESS_AREAS as $area => [$alabel, , $opts]) {
+        if (area_is_multi($area)) {
+            $picked = array_values(array_filter((array)($_POST['level'][$area] ?? []), fn($x) => ctype_digit((string)$x) && (int)$x < count($opts)));
+            $levels[$area] = array_map('intval', $picked);
+            continue;
+        }
         $raw = $_POST['level'][$area] ?? '0';
         if (!ctype_digit((string)$raw) || (int)$raw >= count($opts)) $v->fail("Choose an access level for $alabel.");
         $levels[$area] = (int)$raw;
@@ -112,7 +117,7 @@ if (!empty($_GET['edit'])) {
 }
 $showing_form = $editing || !empty($_GET['new']);
 $locked  = $editing && (int)$editing['is_system'];
-if (!empty($form_error))  $current = array_map('intval', (array)($_POST['level'] ?? []));
+if (!empty($form_error))  $current = array_map(fn($x) => is_array($x) ? array_map('intval', $x) : (int)$x, (array)($_POST['level'] ?? []));
 elseif ($editing)         $current = levels_from_perms($editing_perms);
 else                      $current = [];
 foreach ($roles as &$r) $r['summary'] = levels_summary(role_permissions($pdo, (int)$r['id'])); unset($r);
@@ -151,9 +156,22 @@ include __DIR__ . '/../includes/header.php';
         <div class="form-title" style="margin:0">Access levels</div>
         <?php if (!$locked): ?><div class="perm-bulk"><button type="button" class="btn btn-sm" data-level-all="max">Full access everywhere</button><button type="button" class="btn btn-sm" data-level-all="0">No access everywhere</button></div><?php endif; ?>
     </div>
-    <p class="muted-text" style="margin:-4px 0 12px">Pick one level for each area. Each level includes everything in the levels above it.</p>
+    <p class="muted-text" style="margin:-4px 0 12px">Pick one level for each area. Each level includes everything in the levels above it. For Requisitions, tick each part this role plays.</p>
     <div class="perm-groups">
         <?php foreach (ACCESS_AREAS as $area => [$alabel, $ahelp, $opts]):
+            $multi = area_is_multi($area);
+            if ($multi):
+                $ticked = $locked ? array_keys($opts) : (array)($current[$area] ?? []); ?>
+        <fieldset class="perm-group perm-multi" data-area="<?php echo $area; ?>">
+            <legend><?php echo htmlspecialchars($alabel); ?> <small><?php echo htmlspecialchars($ahelp); ?></small></legend>
+            <?php foreach ($opts as $i => [$lname, $ldesc]): ?>
+            <label class="perm">
+                <input type="checkbox" name="level[<?php echo $area; ?>][]" value="<?php echo $i; ?>" <?php echo in_array($i, $ticked, true) ? 'checked' : ''; ?> <?php echo $locked ? 'disabled' : ''; ?>>
+                <span><strong><?php echo htmlspecialchars($lname); ?></strong><small><?php echo htmlspecialchars($ldesc); ?></small></span>
+            </label>
+            <?php endforeach; ?>
+        </fieldset>
+        <?php continue; endif;
             $sel = $locked ? count($opts) - 1 : (int)($current[$area] ?? 0); ?>
         <fieldset class="perm-group" data-area="<?php echo $area; ?>">
             <legend><?php echo htmlspecialchars($alabel); ?> <small><?php echo htmlspecialchars($ahelp); ?></small></legend>
@@ -176,6 +194,10 @@ include __DIR__ . '/../includes/header.php';
 document.querySelectorAll('[data-level-all]').forEach(function (b) {
     b.addEventListener('click', function () {
         document.querySelectorAll('.role-form .perm-group').forEach(function (g) {
+            if (g.classList.contains('perm-multi')) {
+                g.querySelectorAll('input[type=checkbox]').forEach(function (c) { c.checked = b.dataset.levelAll === 'max'; });
+                return;
+            }
             var r = g.querySelectorAll('input[type=radio]');
             (b.dataset.levelAll === 'max' ? r[r.length - 1] : r[0]).checked = true;
         });

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/requisition_flow.php';
 requirePermission('stock.receive');
 
 $categories        = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
@@ -19,7 +20,8 @@ $selected_item = null;
 $purchase = null;
 $pid = (int)($_POST['purchase_id'] ?? $_GET['purchase_id'] ?? 0);
 if ($pid > 0) {
-    $ps = $pdo->prepare("SELECT * FROM procurement WHERE id = ? AND status IN ('needed','ordered')");
+    // Only requisitions that have been paid for can be received
+    $ps = $pdo->prepare("SELECT * FROM procurement WHERE id = ? AND status = 'paid'");
     $ps->execute([$pid]);
     $purchase = $ps->fetch() ?: null;
     if ($purchase && $_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -62,8 +64,9 @@ function branch_field(array $branches, int $branch_id, string $id = 'branch_id')
 /** Mark the requisition as received once its stock is in. */
 function complete_purchase(PDO $pdo, ?array $purchase, int $item_id): void {
     if (!$purchase) return;
-    $pdo->prepare("UPDATE procurement SET status='received', received_at=NOW(), item_id=? WHERE id=? AND status IN ('needed','ordered')")
-        ->execute([$item_id, $purchase['id']]);
+    $st = $pdo->prepare("UPDATE procurement SET status='received', received_at=NOW(), stage_at=NOW(), last_note=NULL, item_id=? WHERE id=? AND status='paid'");
+    $st->execute([$item_id, $purchase['id']]);
+    if ($st->rowCount()) req_log($pdo, (int)$purchase['id'], 'received', 'paid', 'received');
     logAudit($pdo, $_SESSION['user_id'], 'REQUISITION_RECEIVED', $item_id, $purchase['quantity'], "Requisition received: {$purchase['item_name']}");
 }
 
@@ -192,7 +195,7 @@ include __DIR__ . '/../includes/header.php';
 
 
 <?php if ($purchase): ?>
-<div class="info-note">Receiving requisition: <strong><?php echo htmlspecialchars($purchase['quantity'] . ' × ' . $purchase['item_name']); ?></strong><?php echo $purchase['supplier'] ? ' from ' . htmlspecialchars($purchase['supplier']) : ''; ?>. Check the quantity that actually arrived.</div>
+<div class="info-note">Receiving <a href="requisition.php?id=<?php echo $purchase['id']; ?>"><?php echo req_ref((int)$purchase['id']); ?></a>: <strong><?php echo htmlspecialchars($purchase['quantity'] . ' × ' . $purchase['item_name']); ?></strong><?php echo $purchase['supplier'] ? ' from ' . htmlspecialchars($purchase['supplier']) : ''; ?>. Check the quantity that actually arrived.</div>
 <?php endif; ?>
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>

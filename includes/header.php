@@ -30,7 +30,7 @@
     Manage Stock
 </a>
 <?php endif; ?>
-<?php if (can_any('stock.receive','stock.issue','requisitions.view','categories.manage')): ?><div class="nav-section-label">Stock</div><?php endif; ?>
+<?php if (can_any('stock.receive','stock.issue','categories.manage') || req_can_open()): ?><div class="nav-section-label">Stock</div><?php endif; ?>
 <?php if (can('stock.receive')): ?>
 <a href="receive_stock.php" class="nav-link <?php echo ($cur==='receive_stock.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
@@ -43,8 +43,8 @@
     Issue Stock
 </a>
 <?php endif; ?>
-<?php if (can('requisitions.view')): ?>
-<a href="requisitions.php" class="nav-link <?php echo ($cur==='requisitions.php')?'active':'';?>">
+<?php if (req_can_open()): ?>
+<a href="requisitions.php" class="nav-link <?php echo ($cur==='requisitions.php' || $cur==='requisition.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
     Requisitions
 </a>

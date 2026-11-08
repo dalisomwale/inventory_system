@@ -12,11 +12,16 @@ const ACCESS_AREAS = [
         ['Receive & issue', 'Everything in View, plus record deliveries (including new items) and issue stock to departments.', ['stock.view', 'stock.receive', 'stock.issue']],
         ['Full control',    'Everything in Receive & issue, plus add, edit and delete items and change prices and reorder levels.', ['stock.view', 'stock.receive', 'stock.issue', 'items.manage']],
     ]],
-    'requisitions' => ['Requisitions', 'What needs buying', [
-        ['No access',      "Can't open Requisitions.", []],
-        ['View',           'See what has been requested, ordered and received.', ['requisitions.view']],
-        ['Raise & update', 'Everything in View, plus raise requisitions, mark them ordered and cancel them.', ['requisitions.view', 'requisitions.manage']],
-    ]],
+    // Requisitions: a role can play any number of parts in the workflow, so these are ticks, not levels
+    'requisitions' => ['Requisitions', 'Who does what in the requisition workflow', [
+        ['Raise for their department', 'Raise requisitions for their own department, attach quotations when it isn\'t IT-related, resubmit after a rejection and cancel before approval. Sees their department\'s requisitions.', ['requisitions.raise']],
+        ['IT quotations',              'Attach quotations to IT-related requisitions and send them to the Director.', ['requisitions.it_quotes']],
+        ['Director approval',          'Approve a requisition and pick the quotation, or reject it back to the department with a reason.', ['requisitions.approve']],
+        ['Accounts',                   'Prepare payment for approved requisitions, then attach the proof of payment once the CFO approves.', ['requisitions.accounts']],
+        ['Accounts Manager',           'Check payments from Accounts: approve them on to the CFO or send them back to Accounts.', ['requisitions.accounts_review']],
+        ['Chief Finance Officer',      'Final approval of payments, or send them back to the Accounts Manager.', ['requisitions.cfo']],
+        ['See all requisitions',       'See every requisition at any stage, without taking part.', ['requisitions.view_all']],
+    ], 'multi'],
     'categories' => ['Categories', 'Stock categories', [
         ['No access', "Can't open Categories.", []],
         ['Manage',    'Add, rename and delete categories.', ['categories.manage']],
@@ -47,14 +52,20 @@ const ACCESS_AREAS = [
 /** Every access right that exists. */
 function all_permissions(): array {
     $all = [];
-    foreach (ACCESS_AREAS as [, , $levels]) foreach ($levels as [, , $perms]) $all = array_merge($all, $perms);
+    foreach (ACCESS_AREAS as $a) foreach ($a[2] as [, , $perms]) $all = array_merge($all, $perms);
     return array_values(array_unique($all));
 }
 
-/** Access rights for a set of levels, e.g. ['stock' => 2, 'reports' => 1]. */
+function area_is_multi(string $area): bool { return (ACCESS_AREAS[$area][3] ?? '') === 'multi'; }
+
+/** Access rights for a set of levels, e.g. ['stock' => 2, 'reports' => 1, 'requisitions' => [0, 2]]. */
 function perms_for_levels(array $levels): array {
     $perms = [];
     foreach (ACCESS_AREAS as $area => [, , $opts]) {
+        if (area_is_multi($area)) {
+            foreach ((array)($levels[$area] ?? []) as $i) if (isset($opts[(int)$i])) $perms = array_merge($perms, $opts[(int)$i][2]);
+            continue;
+        }
         $lvl = max(0, min(count($opts) - 1, (int)($levels[$area] ?? 0)));
         $perms = array_merge($perms, $opts[$lvl][2]);
     }
@@ -65,6 +76,11 @@ function perms_for_levels(array $levels): array {
 function levels_from_perms(array $perms): array {
     $out = [];
     foreach (ACCESS_AREAS as $area => [, , $opts]) {
+        if (area_is_multi($area)) {
+            $out[$area] = [];
+            foreach ($opts as $i => [, , $need]) if (!array_diff($need, $perms)) $out[$area][] = $i;
+            continue;
+        }
         $out[$area] = 0;
         foreach ($opts as $i => [, , $need]) {
             if ($need && !array_diff($need, $perms)) $out[$area] = $i;
@@ -78,6 +94,10 @@ function levels_summary(array $perms): array {
     $levels = levels_from_perms($perms);
     $out = [];
     foreach (ACCESS_AREAS as $area => [$label, , $opts]) {
+        if (area_is_multi($area)) {
+            if ($levels[$area]) $out[] = [$label, implode(', ', array_map(fn($i) => $opts[$i][0], $levels[$area])), false];
+            continue;
+        }
         if ($levels[$area] > 0) $out[] = [$label, $opts[$levels[$area]][0], $levels[$area] === count($opts) - 1];
     }
     return $out;
@@ -92,6 +112,12 @@ function can(string $perm): bool {
 function can_any(string ...$perms): bool {
     foreach ($perms as $p) if (can($p)) return true;
     return false;
+}
+
+/** Can the user open the Requisitions pages at all? */
+function req_can_open(): bool {
+    return can_any('requisitions.raise', 'requisitions.it_quotes', 'requisitions.approve', 'requisitions.accounts',
+                   'requisitions.accounts_review', 'requisitions.cfo', 'requisitions.view_all', 'stock.receive');
 }
 
 /** Stop here unless the signed-in user has the right. */

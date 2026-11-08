@@ -60,11 +60,25 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 ) ENGINE=InnoDB;
 INSERT IGNORE INTO roles (id, name, description, is_system, is_default) VALUES
     (1, 'System Admin', 'Full access, including users, roles and the organisation', 1, 0),
-    (2, 'Staff', 'All stock work: receive, issue, requisitions, items and reports', 0, 1);
+    (2, 'Staff', 'All stock work: receive, issue, requisitions, items and reports', 0, 1),
+    -- The people in the requisition workflow (edit them on Admin > Roles)
+    (3, 'Department Manager',    'Raises requisitions for their department and attaches quotations', 0, 0),
+    (4, 'IT Officer',            'Gets quotations for IT-related requisitions', 0, 0),
+    (5, 'Director',              'Approves or rejects requisitions', 0, 0),
+    (6, 'Accountant',            'Prepares payments and sends the proof of payment', 0, 0),
+    (7, 'Accounts Manager',      'Checks payments before the CFO', 0, 0),
+    (8, 'Chief Finance Officer', 'Gives final approval for payments', 0, 0);
 INSERT IGNORE INTO role_permissions (role_id, permission)
     SELECT 2, p FROM (SELECT 'stock.view' p UNION SELECT 'stock.receive' UNION SELECT 'stock.issue' UNION SELECT 'items.manage'
-                      UNION SELECT 'categories.manage' UNION SELECT 'requisitions.view' UNION SELECT 'requisitions.manage'
+                      UNION SELECT 'categories.manage' UNION SELECT 'requisitions.raise'
                       UNION SELECT 'transactions.view' UNION SELECT 'reports.view' UNION SELECT 'reports.submit') x;
+INSERT IGNORE INTO role_permissions (role_id, permission) VALUES
+    (3, 'requisitions.raise'), (3, 'stock.view'),
+    (4, 'requisitions.it_quotes'), (4, 'stock.view'),
+    (5, 'requisitions.approve'), (5, 'requisitions.view_all'), (5, 'stock.view'), (5, 'reports.view'),
+    (6, 'requisitions.accounts'),
+    (7, 'requisitions.accounts_review'),
+    (8, 'requisitions.cfo'), (8, 'reports.view');
 
 -- ── USERS ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
@@ -184,7 +198,13 @@ CREATE TABLE IF NOT EXISTS procurement (
     supplier     VARCHAR(200) NULL,
     branch_id     INT         NULL,
     department_id INT         NULL,
-    status       ENUM('needed','ordered','received','cancelled') NOT NULL DEFAULT 'needed',
+    is_it        TINYINT(1)   NOT NULL DEFAULT 0,   -- IT gets the quotations
+    quote_id     INT          NULL,                 -- quotation the Director approved
+    last_note    TEXT         NULL,                 -- latest rejection reason or note
+    stage_at     DATETIME     NULL,                 -- when it reached its current stage
+    director_at  DATETIME     NULL,
+    paid_at      DATETIME     NULL,
+    status       VARCHAR(20)  NOT NULL DEFAULT 'quotes_dept',   -- stage, see includes/requisition_flow.php
     ordered_at   DATETIME     NULL,
     received_at  DATETIME     NULL,
     requested_by INT          NOT NULL,
@@ -192,6 +212,35 @@ CREATE TABLE IF NOT EXISTS procurement (
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (requested_by) REFERENCES users(id),
     FOREIGN KEY (approved_by)  REFERENCES users(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS requisition_files (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    requisition_id INT          NOT NULL,
+    kind           VARCHAR(10)  NOT NULL,           -- quote or pop
+    supplier       VARCHAR(200) NULL,
+    amount         DECIMAL(15,2) NULL,
+    original_name  VARCHAR(255) NOT NULL,
+    stored_name    VARCHAR(80)  NOT NULL,
+    mime           VARCHAR(100) NOT NULL,
+    size           INT          NOT NULL,
+    uploaded_by    INT          NOT NULL,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (requisition_id) REFERENCES procurement(id) ON DELETE CASCADE,
+    FOREIGN KEY (uploaded_by)    REFERENCES users(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS requisition_log (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    requisition_id INT          NOT NULL,
+    user_id        INT          NOT NULL,
+    action         VARCHAR(40)  NOT NULL,
+    from_status    VARCHAR(20)  NULL,
+    to_status      VARCHAR(20)  NULL,
+    note           TEXT         NULL,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (requisition_id) REFERENCES procurement(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)        REFERENCES users(id)
 ) ENGINE=InnoDB;
 
 -- ── AUDIT TRAIL ────────────────────────────────────────────

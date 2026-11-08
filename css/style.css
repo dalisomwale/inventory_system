@@ -1057,3 +1057,49 @@ input.is-invalid { border-color: var(--danger); }
     .sidebar, .action-group, .receive-forms, .btn, .pill-tabs, .page-footer { display: none !important; }
     .main-content { margin-left: 0 !important; }
 }
+/* ── Requisition workflow ─────────────────────────────────── */
+.req-sub { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: .85rem; }
+.status-muted { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .74rem; font-weight: 600; background: #f0f1f4; color: var(--muted); }
+
+.req-steps { display: flex; list-style: none; margin: 0 0 18px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
+.req-steps li { position: relative; flex: 1; min-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: .78rem; color: var(--muted); text-align: center; }
+.req-steps li::before { content: ""; position: absolute; top: 13px; left: -50%; width: 100%; height: 2px; background: var(--border); z-index: 0; }
+.req-steps li:first-child::before { display: none; }
+.req-steps .dot { position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .78rem; background: #fff; border: 2px solid var(--border); color: var(--muted); }
+.req-steps li.done::before, .req-steps li.current::before { background: var(--navy); }
+.req-steps li.done .dot { background: var(--navy); border-color: var(--navy); color: #fff; }
+.req-steps li.current .dot { border-color: var(--navy); color: var(--navy); box-shadow: 0 0 0 4px rgba(37,57,141,.12); }
+.req-steps li.done .lbl, .req-steps li.current .lbl { color: var(--text); }
+.req-steps li.current .lbl { font-weight: 700; color: var(--navy); }
+
+.req-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .req-layout { grid-template-columns: 1fr; } }
+.req-your-action { border-top: 3px solid var(--navy); }
+.req-your-action .form-group { max-width: 560px; }
+.req-action.inline { display: inline-block; margin-top: 8px; }
+.req-sep { border: 0; border-top: 1px solid var(--border); margin: 18px 0; }
+.req-waiting p { margin: 0; color: var(--muted); }
+.req-upload { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.form-row.three { grid-template-columns: 1fr 160px 1fr; }
+@media (max-width: 800px) { .form-row.three { grid-template-columns: 1fr; } }
+.row-approved td { background: #f3f9ee; }
+.req-cancel { margin: 4px 0 16px; }
+.req-cancel summary { cursor: pointer; font-size: .85rem; color: var(--danger); }
+.req-cancel .req-action { margin-top: 10px; max-width: 560px; }
+
+.req-details { display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; margin: 0; font-size: .88rem; }
+.req-details dt { color: var(--muted); }
+.req-details dd { margin: 0; }
+.req-history { list-style: none; margin: 0; padding: 0; font-size: .85rem; }
+.req-history li { position: relative; padding: 0 0 14px 16px; border-left: 2px solid var(--border); margin-left: 4px; }
+.req-history li::before { content: ""; position: absolute; left: -6px; top: 3px; width: 10px; height: 10px; border-radius: 50%; background: var(--navy); }
+.req-history li:last-child { padding-bottom: 0; }
+.req-history .muted-text { font-size: .78rem; }
+.req-note { margin-top: 4px; padding: 6px 9px; background: #f6f7f9; border-radius: 6px; font-size: .82rem; }
+
+.check-row { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 14px; cursor: pointer; font-size: .9rem; }
+.check-row input { margin-top: 3px; }
+.check-row small { display: block; color: var(--muted); font-size: .8rem; }
+.form-group .check-row { display: flex; align-items: center; margin: 6px 0; font-weight: 400; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.form-group .check-row:has(input:checked) { border-color: var(--navy); background: #f5f7fc; }
+.check-row input[type=radio], .check-row input[type=checkbox] { width: auto; margin: 0; flex-shrink: 0; }

@@ -39,7 +39,8 @@ $by_branch = $pdo->prepare("
 $by_branch->execute([$item['id']]);
 $by_branch = $by_branch->fetchAll();
 
-$open_req = $pdo->prepare("SELECT * FROM procurement WHERE (item_id = ? OR LOWER(item_name) = LOWER(?)) AND status IN ('needed','ordered') ORDER BY created_at DESC LIMIT 1");
+require_once __DIR__ . '/../includes/requisition_flow.php';
+$open_req = $pdo->prepare("SELECT * FROM procurement p WHERE (p.item_id = ? OR LOWER(p.item_name) = LOWER(?)) AND p.status NOT IN ('received','cancelled') AND " . req_visible_sql($pdo) . " ORDER BY p.created_at DESC LIMIT 1");
 $open_req->execute([$item['id'], $item['item_name']]);
 $open_req = $open_req->fetch();
 
@@ -82,9 +83,9 @@ include __DIR__ . '/../includes/header.php';
     <?php if ($item['current_quantity'] > 0 && can('stock.issue')): ?>
         <?php echo action_tile('issue_stock.php?category_id=' . (int)$item['category_id'] . '&item_id=' . $item['id'], 'Issue', 'Give out to a department', icon('issue')); ?>
     <?php endif; ?>
-    <?php if ($open_req && can('requisitions.view')): ?>
-        <?php echo action_tile('requisitions.php', 'Requisition open', $open_req['quantity'] . ' ' . ($open_req['status'] === 'ordered' ? 'ordered' : 'to order'), icon('request')); ?>
-    <?php elseif (!$open_req && can('requisitions.manage')): ?>
+    <?php if ($open_req): ?>
+        <?php echo action_tile('requisition.php?id=' . $open_req['id'], req_ref((int)$open_req['id']) . ' open', $open_req['quantity'] . ' · ' . req_status_label($open_req['status']), icon('request')); ?>
+    <?php elseif (can('requisitions.raise')): ?>
         <?php echo action_tile('requisitions.php?item_name=' . urlencode($item['item_name']) . '&qty=' . max(1, (int)($f['suggest'] ?? 1)) . '&category_id=' . (int)$item['category_id'], 'Raise requisition', 'Order more of this item', icon('request')); ?>
     <?php endif; ?>
 </div>

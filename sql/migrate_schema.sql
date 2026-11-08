@@ -114,7 +114,7 @@ SET @admin_role = (SELECT MIN(id) FROM roles WHERE is_system = 1);
 SET @staff_role = (SELECT id FROM roles WHERE name = 'Staff');
 INSERT IGNORE INTO role_permissions (role_id, permission)
     SELECT @staff_role, p FROM (SELECT 'stock.view' p UNION SELECT 'stock.receive' UNION SELECT 'stock.issue' UNION SELECT 'items.manage'
-                      UNION SELECT 'categories.manage' UNION SELECT 'requisitions.view' UNION SELECT 'requisitions.manage'
+                      UNION SELECT 'categories.manage' UNION SELECT 'requisitions.raise'
                       UNION SELECT 'transactions.view' UNION SELECT 'reports.view' UNION SELECT 'reports.submit') x
     WHERE NOT EXISTS (SELECT 1 FROM role_permissions WHERE role_id = @staff_role);
 CALL add_column_if_missing('users', 'role_id', 'INT NULL AFTER role');
@@ -140,11 +140,78 @@ CALL add_column_if_missing('procurement', 'supplier',    'VARCHAR(200) NULL AFTE
 CALL add_column_if_missing('procurement', 'ordered_at',  'DATETIME NULL');
 CALL add_column_if_missing('procurement', 'received_at', 'DATETIME NULL');
 CALL add_column_if_missing('procurement', 'item_id',     'INT NULL AFTER item_name');
-ALTER TABLE procurement MODIFY status ENUM('pending','approved','rejected','needed','ordered','received','cancelled') NOT NULL DEFAULT 'needed';
-UPDATE procurement SET status = 'needed'    WHERE status = 'pending';
-UPDATE procurement SET status = 'ordered', ordered_at = COALESCE(ordered_at, created_at) WHERE status = 'approved';
-UPDATE procurement SET status = 'cancelled' WHERE status = 'rejected';
-ALTER TABLE procurement MODIFY status ENUM('needed','ordered','received','cancelled') NOT NULL DEFAULT 'needed';
+-- Requisition workflow: the status is the stage it is at (see includes/requisition_flow.php).
+-- Older lists: to order -> waiting for the department's quotations, ordered -> paid, awaiting delivery.
+ALTER TABLE procurement MODIFY status VARCHAR(20) NOT NULL DEFAULT 'quotes_dept';
+UPDATE procurement SET status = 'quotes_dept' WHERE status IN ('pending', 'needed');
+UPDATE procurement SET status = 'paid', ordered_at = COALESCE(ordered_at, created_at) WHERE status IN ('approved', 'ordered');
+UPDATE procurement SET status = 'cancelled'   WHERE status = 'rejected';
+CALL add_column_if_missing('procurement', 'is_it',        'TINYINT(1) NOT NULL DEFAULT 0 AFTER department_id');
+CALL add_column_if_missing('procurement', 'quote_id',     'INT NULL AFTER is_it');
+CALL add_column_if_missing('procurement', 'last_note',    'TEXT NULL AFTER quote_id');
+CALL add_column_if_missing('procurement', 'stage_at',     'DATETIME NULL AFTER last_note');
+CALL add_column_if_missing('procurement', 'director_at',  'DATETIME NULL AFTER stage_at');
+CALL add_column_if_missing('procurement', 'paid_at',      'DATETIME NULL AFTER director_at');
+UPDATE procurement SET stage_at = created_at WHERE stage_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS requisition_files (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    requisition_id INT          NOT NULL,
+    kind           VARCHAR(10)  NOT NULL,           -- quote or pop
+    supplier       VARCHAR(200) NULL,
+    amount         DECIMAL(15,2) NULL,
+    original_name  VARCHAR(255) NOT NULL,
+    stored_name    VARCHAR(80)  NOT NULL,
+    mime           VARCHAR(100) NOT NULL,
+    size           INT          NOT NULL,
+    uploaded_by    INT          NOT NULL,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (requisition_id) REFERENCES procurement(id) ON DELETE CASCADE,
+    FOREIGN KEY (uploaded_by)    REFERENCES users(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS requisition_log (
+    id             INT AUTO_INCREMENT PRIMARY KEY,
+    requisition_id INT          NOT NULL,
+    user_id        INT          NOT NULL,
+    action         VARCHAR(40)  NOT NULL,
+    from_status    VARCHAR(20)  NULL,
+    to_status      VARCHAR(20)  NULL,
+    note           TEXT         NULL,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (requisition_id) REFERENCES procurement(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)        REFERENCES users(id)
+) ENGINE=InnoDB;
+
+-- Requisition rights: the old "manage" becomes "raise for my department"; view-only roles keep seeing them all
+INSERT IGNORE INTO role_permissions (role_id, permission)
+    SELECT role_id, 'requisitions.raise' FROM role_permissions WHERE permission = 'requisitions.manage';
+INSERT IGNORE INTO role_permissions (role_id, permission)
+    SELECT v.role_id, 'requisitions.view_all' FROM role_permissions v
+    WHERE v.permission = 'requisitions.view'
+      AND NOT EXISTS (SELECT 1 FROM role_permissions m WHERE m.role_id = v.role_id AND m.permission = 'requisitions.manage');
+DELETE FROM role_permissions WHERE permission IN ('requisitions.view', 'requisitions.manage');
+
+-- A role for each person in the requisition workflow (only added if missing; edit them on Admin > Roles)
+INSERT INTO roles (name, description, is_system, is_default)
+SELECT x.n, x.d, 0, 0 FROM (
+          SELECT 'Department Manager' n, 'Raises requisitions for their department and attaches quotations' d
+    UNION SELECT 'IT Officer',            'Gets quotations for IT-related requisitions'
+    UNION SELECT 'Director',              'Approves or rejects requisitions'
+    UNION SELECT 'Accountant',            'Prepares payments and sends the proof of payment'
+    UNION SELECT 'Accounts Manager',      'Checks payments before the CFO'
+    UNION SELECT 'Chief Finance Officer', 'Gives final approval for payments') x
+WHERE NOT EXISTS (SELECT 1 FROM roles r WHERE r.name = x.n);
+INSERT IGNORE INTO role_permissions (role_id, permission)
+SELECT r.id, x.p FROM roles r JOIN (
+          SELECT 'Department Manager' n, 'requisitions.raise' p UNION SELECT 'Department Manager', 'stock.view'
+    UNION SELECT 'IT Officer', 'requisitions.it_quotes'        UNION SELECT 'IT Officer', 'stock.view'
+    UNION SELECT 'Director', 'requisitions.approve'            UNION SELECT 'Director', 'requisitions.view_all'
+    UNION SELECT 'Director', 'stock.view'                      UNION SELECT 'Director', 'reports.view'
+    UNION SELECT 'Accountant', 'requisitions.accounts'
+    UNION SELECT 'Accounts Manager', 'requisitions.accounts_review'
+    UNION SELECT 'Chief Finance Officer', 'requisitions.cfo'   UNION SELECT 'Chief Finance Officer', 'reports.view') x ON x.n = r.name
+WHERE NOT EXISTS (SELECT 1 FROM role_permissions rp WHERE rp.role_id = r.id);
 
 -- Monthly reports store the stock value
 CALL add_column_if_missing('category_monthly_reports', 'total_value', 'DECIMAL(15,2) NOT NULL DEFAULT 0.00 AFTER total_units');

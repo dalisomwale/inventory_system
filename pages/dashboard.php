@@ -3,7 +3,8 @@ require_once __DIR__ . '/../includes/auth.php';
 redirectIfNotLoggedIn();
 
 $current_month   = date('Y-m');
-$to_order        = (int)$pdo->query("SELECT COUNT(*) FROM procurement WHERE status='needed'")->fetchColumn();
+require_once __DIR__ . '/../includes/requisition_flow.php';
+$to_order        = req_can_open() ? (int)$pdo->query("SELECT COUNT(*) FROM procurement p WHERE " . req_visible_sql($pdo) . " AND " . req_my_turn_sql($pdo) . " AND p.status NOT IN ('received','cancelled')")->fetchColumn() : 0;
 $today = $pdo->query("
     SELECT (SELECT COALESCE(SUM(quantity),0) FROM stock_issuing   WHERE DATE(created_at)=CURDATE()) AS issued,
            (SELECT COALESCE(SUM(quantity),0) FROM stock_receiving WHERE DATE(created_at)=CURDATE()) AS received")->fetch();
@@ -68,7 +69,7 @@ include __DIR__ . '/../includes/header.php';
     </div>
     <div class="kpi">
         <div class="kpi-label">Requisitions</div>
-        <div class="kpi-value <?php echo $to_order ? 'is-warn' : ''; ?>"><?php echo $to_order; ?> <span class="kpi-unit">to order</span></div>
+        <div class="kpi-value <?php echo $to_order ? 'is-warn' : ''; ?>"><?php echo $to_order; ?> <span class="kpi-unit">waiting for you</span></div>
     </div>
 </div>
 
@@ -77,7 +78,7 @@ include __DIR__ . '/../includes/header.php';
     <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive'), '', 'receive'); ?><?php endif; ?>
     <?php if (can('stock.issue')): ?><?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue'), '', 'issue'); ?><?php endif; ?>
     <?php if (can('stock.view')): ?><?php echo action_tile('stock.php', 'Manage stock', 'All items and levels', icon('stock'), '', 'stock'); ?><?php endif; ?>
-    <?php if (can('requisitions.view')): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), $to_order ? $to_order . ' to order' : '', 'request'); ?><?php endif; ?>
+    <?php if (req_can_open()): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), $to_order ? $to_order . ' waiting for you' : '', 'request'); ?><?php endif; ?>
     <?php if (can_any('reports.view','reports.submit')): ?><?php echo action_tile('reports.php', 'Monthly reports', $submitted_count . ' of ' . $total_cats . ' submitted', icon('chart'), '', 'reports'); ?><?php endif; ?>
 </div>
 
@@ -157,7 +158,7 @@ include __DIR__ . '/../includes/header.php';
                     <td><span class="<?php echo $urgent ? 'status-issuing' : 'status-pending'; ?>"><?php echo $urgent ? '&#9888; ' : ''; ?><?php echo days_left_label($r['days_left'], (int)$r['current_quantity']); ?></span></td>
                     <td class="num"><strong><?php echo number_format($r['suggest']); ?></strong></td>
                     <td><div class="row-actions">
-                        <?php if (can('requisitions.manage')): ?><a href="requisitions.php?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm">Raise requisition</a><?php endif; ?>
+                        <?php if (can('requisitions.raise')): ?><a href="requisitions.php?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm">Raise requisition</a><?php endif; ?>
                         <?php if (can('stock.receive')): ?><a href="receive_stock.php?category_id=<?php echo (int)$r['category_id']; ?>&item_id=<?php echo $r['id']; ?>" class="btn btn-sm">Receive</a><?php endif; ?>
                     </div></td>
                 </tr>
