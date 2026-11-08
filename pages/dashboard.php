@@ -2,7 +2,6 @@
 require_once __DIR__ . '/../includes/auth.php';
 redirectIfNotLoggedIn();
 
-$current_month   = date('Y-m');
 require_once __DIR__ . '/../includes/requisition_flow.php';
 $to_order        = req_can_open() ? (int)$pdo->query("SELECT COUNT(*) FROM procurement p WHERE " . req_visible_sql($pdo) . " AND " . req_my_turn_sql($pdo) . " AND p.status NOT IN ('received','cancelled')")->fetchColumn() : 0;
 $today = $pdo->query("
@@ -11,18 +10,6 @@ $today = $pdo->query("
 $low_stock_count = $pdo->query("SELECT COUNT(*) FROM items WHERE current_quantity <= reorder_level")->fetchColumn();
 $total_items     = $pdo->query("SELECT COUNT(*) FROM items")->fetchColumn();
 
-$report_status = $pdo->prepare("
-    SELECT c.id, c.name,
-           CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END as submitted,
-           r.submitted_at, r.total_value
-    FROM categories c
-    LEFT JOIN category_monthly_reports r ON c.id = r.category_id AND DATE_FORMAT(r.report_month, '%Y-%m') = ?
-    ORDER BY c.name
-");
-$report_status->execute([$current_month]);
-$reports_data    = $report_status->fetchAll();
-$total_cats      = count($reports_data);
-$submitted_count = count(array_filter($reports_data, fn($r) => $r['submitted']));
 
 require_once __DIR__ . '/../includes/insights.php';
 // Department-limited users see only their department's figures
@@ -117,7 +104,7 @@ include __DIR__ . '/../includes/header.php';
     <?php if (can('stock.issue')): ?><?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue'), '', 'issue'); ?><?php endif; ?>
     <?php if (can('stock.view')): ?><?php echo action_tile('stock.php', $scoped ? 'Stock' : 'Manage stock', $scoped ? 'Your department\'s items' : 'All items and levels', icon('stock'), '', 'stock'); ?><?php endif; ?>
     <?php if (req_can_open()): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), '', 'request'); ?><?php endif; ?>
-    <?php if (can_any('reports.view','reports.submit')): ?><?php echo action_tile('reports.php', 'Monthly reports', $scoped ? 'Your department, by month' : $submitted_count . ' of ' . $total_cats . ' submitted', icon('chart'), '', 'reports'); ?><?php endif; ?>
+    <?php if (can('reports.view')): ?><?php echo action_tile('reports.php', 'Monthly reports', $scoped ? 'Your department, by month' : 'View and export to Excel', icon('chart'), '', 'reports'); ?><?php endif; ?>
 </div>
 
 <?php if ($scoped): ?>

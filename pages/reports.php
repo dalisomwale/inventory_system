@@ -1,238 +1,170 @@
 <?php
+// Monthly Reports: worked out from stock movements for any month, to view, print or export to Excel.
 require_once __DIR__ . '/../includes/auth.php';
 requirePermission('reports.view');
 // Department-limited users get their own department's report
 if (my_scope_department() !== null) { require __DIR__ . '/../includes/department_report.php'; exit(); }
+require_once __DIR__ . '/../includes/insights.php';
 
-$selected_month       = $_GET['month']       ?? date('Y-m');
-$selected_category_id = (int)($_GET['category_id'] ?? 0);
+$month = safe_month($_GET['month'] ?? null);
+if ($month > date('Y-m')) $month = date('Y-m');
+$from   = $month . '-01';
+$to     = date('Y-m-t', strtotime($from));
+$cat_id = (int)($_GET['category_id'] ?? 0);
 
-$categories = $pdo->query("SELECT id, name, description FROM categories ORDER BY name")->fetchAll();
+$categories = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
+if (!in_array($cat_id, array_map(fn($c) => (int)$c['id'], $categories), true)) $cat_id = 0;
+$cat_name = '';
+foreach ($categories as $c) if ((int)$c['id'] === $cat_id) $cat_name = $c['name'];
 
-$reports = $pdo->prepare("
-    SELECT r.*, c.name as category_name, u.full_name as submitted_by_name
-    FROM category_monthly_reports r
-    JOIN categories c ON r.category_id=c.id
-    JOIN users u ON r.submitted_by=u.id
-    WHERE DATE_FORMAT(r.report_month,'%Y-%m')=?
-    ORDER BY c.name
-");
-$reports->execute([$selected_month]);
-$all_reports = $reports->fetchAll();
-
-$selected_report = null;
-$items_data      = [];
-$total_value     = 0;
-if ($selected_category_id > 0) {
-    $r = $pdo->prepare("SELECT r.*,c.name as category_name,c.description as category_description,u.full_name as submitted_by_name FROM category_monthly_reports r JOIN categories c ON r.category_id=c.id JOIN users u ON r.submitted_by=u.id WHERE r.category_id=? AND DATE_FORMAT(r.report_month,'%Y-%m')=?");
-    $r->execute([$selected_category_id, $selected_month]);
-    $selected_report = $r->fetch();
-
-    if ($selected_report) {
-        $items_data = json_decode($selected_report['items_data'], true);
-        foreach ($items_data as $key => $item) {
-            $i = $pdo->prepare("SELECT unit_price, current_quantity FROM items WHERE item_name=? AND category_id=?");
-            $i->execute([$item['item_name'], $selected_category_id]);
-            $db_item = $i->fetch();
-            $items_data[$key]['unit_price']  = $db_item ? $db_item['unit_price'] : 0;
-            $items_data[$key]['total_value'] = $items_data[$key]['closing_stock'] * ($db_item ? $db_item['unit_price'] : 0);
-        }
-        $total_value = array_sum(array_column($items_data, 'total_value'));
-        $total_units = array_sum(array_column($items_data, 'closing_stock'));
-    }
+// Per item: received and issued in the month, and movements since, to work back from today's stock
+$st = $pdo->prepare("
+    SELECT i.id, i.item_name, i.category_id, COALESCE(c.name, i.category, 'Other') AS category_name,
+           i.current_quantity, i.reorder_level, i.unit_price,
+           COALESCE(r.in_month, 0) AS received, COALESCE(r.after, 0) AS received_after,
+           COALESCE(s.in_month, 0) AS issued,   COALESCE(s.after, 0) AS issued_after
+    FROM items i
+    LEFT JOIN categories c ON c.id = i.category_id
+    LEFT JOIN (SELECT item_id, SUM(CASE WHEN DATE(created_at) BETWEEN :f1 AND :t1 THEN quantity END) AS in_month,
+                               SUM(CASE WHEN DATE(created_at) > :t2 THEN quantity END) AS after
+               FROM stock_receiving GROUP BY item_id) r ON r.item_id = i.id
+    LEFT JOIN (SELECT item_id, SUM(CASE WHEN DATE(created_at) BETWEEN :f2 AND :t3 THEN quantity END) AS in_month,
+                               SUM(CASE WHEN DATE(created_at) > :t4 THEN quantity END) AS after
+               FROM stock_issuing GROUP BY item_id) s ON s.item_id = i.id
+    WHERE DATE(i.created_at) <= :t5" . ($cat_id ? " AND i.category_id = $cat_id" : "") . "
+    ORDER BY category_name, i.item_name");
+$st->execute(['f1' => $from, 't1' => $to, 't2' => $to, 'f2' => $from, 't3' => $to, 't4' => $to, 't5' => $to]);
+$items = [];
+foreach ($st->fetchAll() as $r) {
+    $r['closing'] = (int)$r['current_quantity'] - (int)$r['received_after'] + (int)$r['issued_after'];
+    $r['opening'] = $r['closing'] - (int)$r['received'] + (int)$r['issued'];
+    $r['value']   = $r['closing'] * (float)$r['unit_price'];
+    $r['status']  = $r['closing'] <= 0 ? 'Out of stock' : ($r['closing'] <= $r['reorder_level'] ? 'Below reorder' : 'OK');
+    $items[] = $r;
 }
+
+// Totals per category
+$by_cat = [];
+foreach ($items as $r) {
+    $k = $r['category_name'];
+    $by_cat[$k] ??= ['id' => (int)$r['category_id'], 'name' => $k, 'items' => 0, 'opening' => 0, 'received' => 0, 'issued' => 0, 'closing' => 0, 'value' => 0.0, 'low' => 0];
+    $by_cat[$k]['items']++;
+    foreach (['opening', 'received', 'issued', 'closing', 'value'] as $f) $by_cat[$k][$f] += $r[$f];
+    if ($r['status'] !== 'OK') $by_cat[$k]['low']++;
+}
+$sum = fn(string $f) => array_sum(array_column($items, $f));
+$month_label = date('F Y', strtotime($from));
 
 if (wants_xlsx()) {
-    $month_label = date('F Y', strtotime(safe_month($selected_month) . '-01'));
-    if ($selected_category_id > 0 && $selected_report) {
-        xlsx_download("{$selected_report['category_name']} report " . safe_month($selected_month), [[
-            'name'    => $selected_report['category_name'],
-            'title'   => "{$selected_report['category_name']} - $month_label",
-            'meta'    => ['Submitted by ' . $selected_report['submitted_by_name'] . ' on ' . date('d M Y, H:i', strtotime($selected_report['submitted_at'])),
-                          $selected_report['notes'] ? 'Notes: ' . $selected_report['notes'] : ''],
-            'columns' => ['Item', ['Opening', 'int'], ['Closing', 'int'], ['Unit price (K)', 'money'], ['Total value (K)', 'money'], ['Reorder at', 'int'], 'Status'],
-            'rows'    => array_map(fn($i) => [$i['item_name'], $i['opening_stock'], $i['closing_stock'], $i['unit_price'], $i['total_value'], $i['reorder_level'], $i['status']], $items_data),
-            'totals'  => ['Total', array_sum(array_column($items_data, 'opening_stock')), array_sum(array_column($items_data, 'closing_stock')), '', $total_value, '', ''],
-        ]]);
-    }
-    $by_cat = array_column($all_reports, null, 'category_id');
-    xlsx_download('Monthly reports ' . safe_month($selected_month), [[
-        'name'    => 'Summary',
-        'title'   => "Monthly Reports - $month_label",
-        'meta'    => [count($all_reports) . ' of ' . count($categories) . ' categories submitted'],
-        'columns' => ['Category', 'Status', ['Items', 'int'], ['Units', 'int'], ['Value (K)', 'money'], ['Low stock', 'int'], 'Submitted by', 'Submitted on'],
-        'rows'    => array_map(fn($c) => ($r = $by_cat[$c['id']] ?? null)
-            ? [$c['name'], 'Submitted', $r['total_items'], $r['total_units'], $r['total_value'], $r['low_stock_count'], $r['submitted_by_name'], date('d M Y, H:i', strtotime($r['submitted_at']))]
-            : [$c['name'], 'Not yet submitted', '', '', '', '', '', ''], $categories),
-        'totals'  => ['Total', '', array_sum(array_column($all_reports, 'total_items')), array_sum(array_column($all_reports, 'total_units')), array_sum(array_column($all_reports, 'total_value')), array_sum(array_column($all_reports, 'low_stock_count')), '', ''],
-    ]]);
+    $title = "Monthly Report - $month_label" . ($cat_name ? " - $cat_name" : '');
+    $meta  = ['Stock from ' . date('d M Y', strtotime($from)) . ' to ' . date('d M Y', strtotime($to)), 'Exported: ' . date('d M Y, H:i')];
+    $item_sheet = ['name' => 'By item', 'title' => $title, 'meta' => $meta,
+        'columns' => ['Item', 'Category', ['Opening', 'int'], ['Received', 'int'], ['Issued', 'int'], ['Closing', 'int'], ['Reorder at', 'int'], 'Status', ['Unit price (K)', 'money'], ['Closing value (K)', 'money']],
+        'rows'    => array_map(fn($r) => [$r['item_name'], $r['category_name'], $r['opening'], $r['received'], $r['issued'], $r['closing'], $r['reorder_level'], $r['status'], $r['unit_price'], $r['value']], $items),
+        'totals'  => ['Total', '', $sum('opening'), $sum('received'), $sum('issued'), $sum('closing'), '', '', '', $sum('value')]];
+    $sheets = $cat_id ? [$item_sheet] : [
+        ['name' => 'By category', 'title' => $title, 'meta' => $meta,
+         'columns' => ['Category', ['Items', 'int'], ['Opening', 'int'], ['Received', 'int'], ['Issued', 'int'], ['Closing', 'int'], ['Closing value (K)', 'money'], ['Low or out', 'int']],
+         'rows'    => array_map(fn($c) => [$c['name'], $c['items'], $c['opening'], $c['received'], $c['issued'], $c['closing'], $c['value'], $c['low']], array_values($by_cat)),
+         'totals'  => ['Total', count($items), $sum('opening'), $sum('received'), $sum('issued'), $sum('closing'), $sum('value'), array_sum(array_column($by_cat, 'low'))]],
+        $item_sheet,
+    ];
+    xlsx_download("Monthly report $month" . ($cat_name ? " $cat_name" : ''), $sheets);
 }
 
+$report_url = fn(array $p) => 'reports.php?' . http_build_query(array_filter($p + ['month' => $month]));
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
     <h1>Monthly Reports</h1>
     <div style="display:flex; gap:8px; flex-wrap:wrap">
-        <?php if (can('reports.submit')): ?><a href="submit_category_report.php" class="btn btn-primary">Submit a monthly report</a><?php endif; ?>
-        <a href="category_reports.php" class="btn">Category activity</a>
+        <a href="category_reports.php" class="btn btn-sm">Category activity</a>
         <?php echo xlsx_button(); ?>
+        <button type="button" onclick="window.print()" class="btn btn-sm">Print</button>
     </div>
 </div>
 
-<!-- Month Selector -->
-<div class="card" style="margin-bottom:14px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-    <label style="font-size:.78rem; font-weight:500; color:var(--text2)">Select Month</label>
-    <input type="month" id="monthSelect" value="<?php echo $selected_month; ?>"
-           onchange="window.location.href='?month='+this.value<?php if($selected_category_id>0) echo '&category_id='.$selected_category_id; ?>"
+<form method="GET" class="card" style="margin-bottom:14px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+    <?php if ($cat_id): ?><input type="hidden" name="category_id" value="<?php echo $cat_id; ?>"><?php endif; ?>
+    <label for="month" style="font-size:.78rem; font-weight:500; color:var(--text2)">Month</label>
+    <input type="month" id="month" name="month" value="<?php echo $month; ?>" max="<?php echo date('Y-m'); ?>" onchange="this.form.submit()"
            style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:.84rem; background:var(--surface);">
+    <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
+    <span class="muted-text">Opening and closing stock for <?php echo $month_label; ?>, worked out from deliveries and issues<?php echo $month === date('Y-m') ? ' (closing = stock today)' : ''; ?>.</span>
+</form>
+
+<div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">Items</div><div class="kpi-value"><?php echo number_format(count($items)); ?></div></div>
+    <div class="kpi"><div class="kpi-label">Received</div><div class="kpi-value"><?php echo number_format($sum('received')); ?> <span class="kpi-unit">units</span></div></div>
+    <div class="kpi"><div class="kpi-label">Issued</div><div class="kpi-value"><?php echo number_format($sum('issued')); ?> <span class="kpi-unit">units</span></div></div>
+    <div class="kpi"><div class="kpi-label">Closing value</div><div class="kpi-value"><?php echo kwacha($sum('value'), true); ?></div></div>
 </div>
 
-<?php if ($selected_category_id > 0 && $selected_report): ?>
-<!-- Detail View -->
-<a href="reports.php?month=<?php echo $selected_month; ?>" class="back-link">&#8592; All Categories</a>
-
-<div class="card">
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
-        <div>
-            <h2 style="margin:0 0 4px"><?php echo htmlspecialchars($selected_report['category_name']); ?></h2>
-            <div style="font-size:.76rem; color:var(--muted)">
-                <?php echo date('F Y', strtotime($selected_report['report_month'])); ?>
-                &mdash; Submitted by <?php echo htmlspecialchars($selected_report['submitted_by_name']); ?>
-                on <?php echo date('d/m/Y H:i', strtotime($selected_report['submitted_at'])); ?>
-            </div>
-        </div>
-        <div style="display:flex; gap:8px">
-            <?php echo xlsx_button(); ?>
-            <button onclick="window.print()" class="btn btn-sm btn-info">Print</button>
-        </div>
-    </div>
-
-    <div class="stat-row">
-        <div class="stat-box"><div class="num"><?php echo $selected_report['total_items']; ?></div><div class="lbl">Items</div></div>
-        <div class="stat-box"><div class="num"><?php echo number_format($selected_report['total_units']); ?></div><div class="lbl">Total Units</div></div>
-        <div class="stat-box"><div class="num" style="font-size:1.2rem">K<?php echo number_format($total_value,2); ?></div><div class="lbl">Total Value</div></div>
-        <div class="stat-box"><div class="num" style="color:<?php echo $selected_report['low_stock_count']>0?'var(--danger)':'var(--success)'; ?>"><?php echo $selected_report['low_stock_count']; ?></div><div class="lbl">Low Stock</div></div>
-    </div>
-
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr><th>Item</th><th>Opening</th><th>Closing</th><th>Unit Price</th><th>Total Value</th><th>Reorder</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-                <?php foreach ($items_data as $item): ?>
-                <tr>
-                    <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
-                    <td style="color:var(--muted)"><?php echo $item['opening_stock']; ?></td>
-                    <td><strong><?php echo $item['closing_stock']; ?></strong></td>
-                    <td style="font-family:var(--mono); font-size:.76rem">K<?php echo number_format($item['unit_price'],2); ?></td>
-                    <td style="font-family:var(--mono); font-size:.76rem">K<?php echo number_format($item['total_value'],2); ?></td>
-                    <td><?php echo $item['reorder_level']; ?></td>
-                    <td>
-                        <?php if ($item['status']=='Low Stock'): ?>
-                            <span class="status-pending">Low Stock</span>
-                        <?php else: ?>
-                            <span class="status-receiving">OK</span>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-            <tfoot>
-                <tr>
-                    <td colspan="4" style="text-align:right; font-size:.76rem; color:var(--muted)">Total Value</td>
-                    <td style="font-family:var(--mono)">K<?php echo number_format($total_value,2); ?></td>
-                    <td colspan="2"></td>
-                </tr>
-            </tfoot>
-        </table>
-    </div>
-
-    <?php if ($selected_report['notes']): ?>
-    <div class="info-note" style="margin-top:16px">
-        <strong>Notes from Reception:</strong><br>
-        <?php echo nl2br(htmlspecialchars($selected_report['notes'])); ?>
-    </div>
-    <?php endif; ?>
-</div>
-
-<?php else: ?>
-<!-- Grid Overview -->
-<div class="report-grid">
-    <?php
-    $submitted_ids = array_column($all_reports, 'category_id');
-    foreach ($categories as $cat):
-        $report = null;
-        foreach ($all_reports as $r) { if ($r['category_id']==$cat['id']) { $report=$r; break; } }
-    ?>
-    <a href="?category_id=<?php echo $cat['id']; ?>&month=<?php echo $selected_month; ?>"
-       class="report-card-item <?php echo $report?'submitted':'pending'; ?>">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <span style="font-weight:600; font-size:.88rem"><?php echo htmlspecialchars($cat['name']); ?></span>
-            <?php if ($report): ?>
-            <span class="status-receiving" style="font-size:.68rem">Submitted</span>
-            <?php else: ?>
-            <span class="status-pending" style="font-size:.68rem">Pending</span>
-            <?php endif; ?>
-        </div>
-        <?php if ($report): ?>
-        <div style="display:flex; gap:16px; font-size:.76rem; color:var(--muted); margin-bottom:8px;">
-            <span><?php echo $report['total_items']; ?> items</span>
-            <span><?php echo number_format($report['total_units']); ?> units</span>
-            <?php if ($report['low_stock_count']>0): ?>
-            <span style="color:var(--danger)"><?php echo $report['low_stock_count']; ?> low</span>
-            <?php endif; ?>
-        </div>
-        <div style="font-size:.72rem; color:var(--muted); padding-top:8px; border-top:1px solid var(--border)">
-            <?php echo date('d/m/Y', strtotime($report['submitted_at'])); ?>
-        </div>
-        <?php else: ?>
-        <div style="font-size:.76rem; color:var(--muted)">Not yet submitted</div>
-        <?php endif; ?>
-    </a>
+<div class="pill-tabs pill-tabs-inline">
+    <a href="<?php echo htmlspecialchars($report_url([])); ?>" class="pill-tab <?php echo $cat_id ? '' : 'active'; ?>">All categories</a>
+    <?php foreach ($categories as $c): ?>
+    <a href="<?php echo htmlspecialchars($report_url(['category_id' => (int)$c['id']])); ?>" class="pill-tab <?php echo $cat_id === (int)$c['id'] ? 'active' : ''; ?>"><?php echo htmlspecialchars($c['name']); ?></a>
     <?php endforeach; ?>
 </div>
 
-<!-- Summary Table -->
-<?php if (count($all_reports) > 0): ?>
+<?php if (!$items): ?>
+<div class="empty-state card"><p>There were no items<?php echo $cat_name ? ' in ' . htmlspecialchars($cat_name) : ''; ?> in <?php echo $month_label; ?>.</p></div>
+<?php else: ?>
+
+<?php if (!$cat_id): ?>
 <div class="card">
-    <h3 style="margin-bottom:12px">Summary &mdash; <?php echo date('F Y', strtotime($selected_month.'-01')); ?></h3>
+    <div class="card-head"><h3>By category &mdash; <?php echo $month_label; ?></h3></div>
     <div class="table-container">
         <table>
-            <thead>
-                <tr><th>Category</th><th>Items</th><th>Units</th><th>Low Stock</th><th>Submitted By</th><th>Submitted On</th></tr>
-            </thead>
+            <thead><tr><th>Category</th><th class="num">Items</th><th class="num">Opening</th><th class="num">Received</th><th class="num">Issued</th><th class="num">Closing</th><th class="num">Closing value</th><th class="num">Low or out</th></tr></thead>
             <tbody>
-                <?php foreach ($all_reports as $r): ?>
-                <tr style="cursor:pointer" onclick="window.location.href='?category_id=<?php echo $r['category_id']; ?>&month=<?php echo $selected_month; ?>'">
-                    <td style="font-weight:500"><?php echo htmlspecialchars($r['category_name']); ?></td>
-                    <td><?php echo $r['total_items']; ?></td>
-                    <td><?php echo number_format($r['total_units']); ?></td>
-                    <td><?php echo $r['low_stock_count']>0 ? '<span style="color:var(--danger)">'.$r['low_stock_count'].' items</span>' : '<span style="color:var(--success)">None</span>'; ?></td>
-                    <td style="color:var(--muted)"><?php echo htmlspecialchars($r['submitted_by_name']); ?></td>
-                    <td style="color:var(--muted); font-size:.76rem"><?php echo date('d/m/Y H:i', strtotime($r['submitted_at'])); ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-            <tfoot>
+            <?php foreach ($by_cat as $c): ?>
                 <tr>
-                    <td>Total</td>
-                    <td><?php echo array_sum(array_column($all_reports,'total_items')); ?></td>
-                    <td><?php echo number_format(array_sum(array_column($all_reports,'total_units'))); ?></td>
-                    <td colspan="3"></td>
+                    <td><a href="<?php echo htmlspecialchars($report_url(['category_id' => $c['id']])); ?>" style="font-weight:600"><?php echo htmlspecialchars($c['name']); ?></a></td>
+                    <td class="num"><?php echo number_format($c['items']); ?></td>
+                    <td class="num muted"><?php echo number_format($c['opening']); ?></td>
+                    <td class="num"><?php echo number_format($c['received']); ?></td>
+                    <td class="num"><?php echo number_format($c['issued']); ?></td>
+                    <td class="num"><strong><?php echo number_format($c['closing']); ?></strong></td>
+                    <td class="num"><?php echo kwacha($c['value']); ?></td>
+                    <td class="num"><?php echo $c['low'] ? '<span style="color:var(--danger)">' . $c['low'] . '</span>' : '0'; ?></td>
                 </tr>
-            </tfoot>
+            <?php endforeach; ?>
+            </tbody>
+            <tfoot><tr><td>Total</td><td class="num"><?php echo number_format(count($items)); ?></td><td class="num"><?php echo number_format($sum('opening')); ?></td><td class="num"><?php echo number_format($sum('received')); ?></td>
+                <td class="num"><?php echo number_format($sum('issued')); ?></td><td class="num"><?php echo number_format($sum('closing')); ?></td><td class="num"><?php echo kwacha($sum('value')); ?></td><td></td></tr></tfoot>
         </table>
     </div>
 </div>
 <?php endif; ?>
 
-<?php if (count($all_reports)==0): ?>
-<div class="empty-state" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);">
-    <p>No reports submitted for <?php echo date('F Y', strtotime($selected_month.'-01')); ?> yet.</p>
+<div class="card">
+    <div class="card-head"><h3>By item<?php echo $cat_name ? ' &mdash; ' . htmlspecialchars($cat_name) : ''; ?></h3></div>
+    <div class="table-container">
+        <table>
+            <thead><tr><th>Item</th><?php if (!$cat_id): ?><th>Category</th><?php endif; ?><th class="num">Opening</th><th class="num">Received</th><th class="num">Issued</th><th class="num">Closing</th><th class="num">Reorder at</th><th>Status</th><th class="num">Unit price</th><th class="num">Closing value</th></tr></thead>
+            <tbody>
+            <?php foreach ($items as $r): ?>
+                <tr>
+                    <td><a class="item-link" href="stock_item.php?id=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['item_name']); ?></a></td>
+                    <?php if (!$cat_id): ?><td><span class="cat-pill"><?php echo htmlspecialchars($r['category_name']); ?></span></td><?php endif; ?>
+                    <td class="num muted"><?php echo number_format($r['opening']); ?></td>
+                    <td class="num"><?php echo number_format($r['received']); ?></td>
+                    <td class="num"><?php echo number_format($r['issued']); ?></td>
+                    <td class="num"><strong><?php echo number_format($r['closing']); ?></strong></td>
+                    <td class="num muted"><?php echo number_format($r['reorder_level']); ?></td>
+                    <td><span class="<?php echo $r['status'] === 'OK' ? 'status-receiving' : ($r['status'] === 'Out of stock' ? 'status-issuing' : 'status-pending'); ?>"><?php echo $r['status']; ?></span></td>
+                    <td class="num muted"><?php echo kwacha((float)$r['unit_price']); ?></td>
+                    <td class="num"><?php echo kwacha($r['value']); ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+            <tfoot><tr><td<?php echo $cat_id ? '' : ' colspan="2"'; ?>>Total</td><td class="num"><?php echo number_format($sum('opening')); ?></td><td class="num"><?php echo number_format($sum('received')); ?></td>
+                <td class="num"><?php echo number_format($sum('issued')); ?></td><td class="num"><?php echo number_format($sum('closing')); ?></td><td colspan="3"></td><td class="num"><?php echo kwacha($sum('value')); ?></td></tr></tfoot>
+        </table>
+    </div>
 </div>
-<?php endif; ?>
 <?php endif; ?>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

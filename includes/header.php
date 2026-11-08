@@ -55,15 +55,15 @@
     Categories
 </a>
 <?php endif; ?>
-<?php if (can_any('transactions.view','reports.view','reports.submit')): ?><div class="nav-section-label">Records</div><?php endif; ?>
+<?php if (can_any('transactions.view','reports.view')): ?><div class="nav-section-label">Records</div><?php endif; ?>
 <?php if (can('transactions.view')): ?>
 <a href="view_transactions.php" class="nav-link <?php echo ($cur==='view_transactions.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
     Transactions
 </a>
 <?php endif; ?>
-<?php if (can_any('reports.view','reports.submit')): ?>
-<a href="reports.php" class="nav-link <?php echo ($cur==='reports.php' || $cur==='submit_category_report.php' || $cur==='category_reports.php' || $cur==='view_category_reports.php')?'active':'';?>">
+<?php if (can('reports.view')): ?>
+<a href="reports.php" class="nav-link <?php echo ($cur==='reports.php' || $cur==='category_reports.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     Monthly Reports
 </a>
@@ -129,9 +129,7 @@ if (isset($_SESSION['user_id'])) {
         'categories.php'             => [['Categories', null]],
         'view_transactions.php'      => [['Transactions', null]],
         'reports.php'                => [['Monthly Reports', null]],
-        'submit_category_report.php' => [['Monthly Reports', 'reports.php'], ['Submit report', null]],
         'category_reports.php'       => [['Monthly Reports', 'reports.php'], ['Category activity', null]],
-        'view_category_reports.php'  => [['Monthly Reports', 'reports.php'], ['Category report', null]],
         'settings.php'               => [['Settings', null]],
         'users.php'                  => [['Users', null]],
         'suppliers.php'              => [['Suppliers', null]],

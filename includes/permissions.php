@@ -30,10 +30,9 @@ const ACCESS_AREAS = [
         ['No access', "Can't open Transactions.", []],
         ['View',      'See every receipt and issue, filtered by date, item and category.', ['transactions.view']],
     ]],
-    'reports' => ['Monthly reports', 'Month-end category reports', [
-        ['No access',     "Can't open Monthly Reports.", []],
-        ['View',          'See submitted monthly reports and category activity.', ['reports.view']],
-        ['View & submit', 'Everything in View, plus submit or update the month-end report for a category.', ['reports.view', 'reports.submit']],
+    'reports' => ['Monthly reports', 'Monthly stock reports and category activity', [
+        ['No access', "Can't open Monthly Reports.", []],
+        ['View & export', 'See monthly stock reports and category activity for any month, print them and export them to Excel.', ['reports.view']],
     ]],
     // Narrows Stock, Transactions, Reports and the dashboard to what was issued to the user's own department
     'scope' => ['Department limit', 'Whose stock, transactions and reports they see', [

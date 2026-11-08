@@ -115,7 +115,7 @@ SET @staff_role = (SELECT id FROM roles WHERE name = 'Staff');
 INSERT IGNORE INTO role_permissions (role_id, permission)
     SELECT @staff_role, p FROM (SELECT 'stock.view' p UNION SELECT 'stock.receive' UNION SELECT 'stock.issue' UNION SELECT 'items.manage'
                       UNION SELECT 'categories.manage' UNION SELECT 'requisitions.raise'
-                      UNION SELECT 'transactions.view' UNION SELECT 'reports.view' UNION SELECT 'reports.submit') x
+                      UNION SELECT 'transactions.view' UNION SELECT 'reports.view') x
     WHERE NOT EXISTS (SELECT 1 FROM role_permissions WHERE role_id = @staff_role);
 CALL add_column_if_missing('users', 'role_id', 'INT NULL AFTER role');
 UPDATE users SET role_id = @admin_role WHERE role_id IS NULL AND role = 'admin';
@@ -273,6 +273,10 @@ INSERT IGNORE INTO role_permissions (role_id, permission)
     SELECT r.id, p.perm FROM roles r
     JOIN (SELECT 'scope.department' AS perm UNION SELECT 'stock.view' UNION SELECT 'transactions.view' UNION SELECT 'reports.view') p
     WHERE r.name = 'Department Manager';
+
+-- Monthly reports are no longer submitted (they are worked out live and exported), so the right is gone.
+-- Old submitted reports stay in category_monthly_reports.
+DELETE FROM role_permissions WHERE permission = 'reports.submit';
 
 SELECT 'Schema is up to date.' AS result;
 
