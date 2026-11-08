@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/validation.php';
+require_once __DIR__ . '/org.php';
 
 // Roles: 'staff' can do all stock work; 'admin' (System Admin) can also manage users and roles.
 function isLoggedIn(): bool { return isset($_SESSION['user_id']); }

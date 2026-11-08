@@ -56,6 +56,10 @@
 </a>
 <?php if (isAdmin()): ?>
 <div class="nav-section-label">Admin</div>
+<a href="organisation.php" class="nav-link <?php echo ($cur==='organisation.php')?'active':'';?>">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-2a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v2"/></svg>
+    Organisation
+</a>
 <a href="users.php" class="nav-link <?php echo ($cur==='users.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     Users

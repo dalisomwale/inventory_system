@@ -29,15 +29,18 @@ function ins_issued_compare(PDO $pdo, int $days = 30): array {
  * Every item with how fast it is being used and how long the stock will last.
  * days_left is null when the item hasn't been issued in the last 30 days.
  */
-function ins_item_forecast(PDO $pdo, int $window = 30): array {
+function ins_item_forecast(PDO $pdo, int $window = 30, int $branch_id = 0): array {
+    // With a branch: that branch's stock and usage. Without: totals across all branches.
+    $qty = $branch_id ? "COALESCE(bs.quantity, 0)" : "i.current_quantity";
     $st = $pdo->prepare("
-        SELECT i.id, i.item_name, i.category, i.category_id, i.current_quantity, i.reorder_level, i.unit_price,
+        SELECT i.id, i.item_name, i.category, i.category_id, $qty AS current_quantity, i.reorder_level, i.unit_price,
                COALESCE(u.used, 0) AS used
         FROM items i
+        " . ($branch_id ? "LEFT JOIN branch_stock bs ON bs.item_id = i.id AND bs.branch_id = " . (int)$branch_id : "") . "
         LEFT JOIN (
             SELECT item_id, SUM(quantity) AS used
             FROM stock_issuing
-            WHERE created_at >= NOW() - INTERVAL ? DAY
+            WHERE created_at >= NOW() - INTERVAL ? DAY" . ($branch_id ? " AND branch_id = " . (int)$branch_id : "") . "
             GROUP BY item_id
         ) u ON u.item_id = i.id");
     $st->execute([$window]);
@@ -113,12 +116,17 @@ function ins_top_issued(PDO $pdo, int $days = 30, int $limit = 6): array {
 
 /** Who stock is issued to (departments/people) in the last $days days. */
 function ins_top_recipients(PDO $pdo, int $days = 30, int $limit = 6): array {
+    // Department (with branch) when known, otherwise the old free-text "issued to"
     $st = $pdo->prepare("
-        SELECT TRIM(issued_to) AS label, SUM(quantity) AS value, COUNT(*) AS times,
-               SUM(s.quantity * i.unit_price) AS cost
-        FROM stock_issuing s JOIN items i ON i.id = s.item_id
-        WHERE s.created_at >= NOW() - INTERVAL ? DAY AND TRIM(COALESCE(issued_to,'')) <> ''
-        GROUP BY TRIM(issued_to) ORDER BY cost DESC, value DESC LIMIT " . (int)$limit);
+        SELECT COALESCE(CONCAT(d.name, ' — ', b.name), TRIM(s.issued_to)) AS label,
+               SUM(s.quantity) AS value, COUNT(*) AS times, SUM(s.quantity * i.unit_price) AS cost
+        FROM stock_issuing s
+        JOIN items i ON i.id = s.item_id
+        LEFT JOIN departments d ON d.id = s.department_id
+        LEFT JOIN branches b ON b.id = d.branch_id
+        WHERE s.created_at >= NOW() - INTERVAL ? DAY
+          AND (s.department_id IS NOT NULL OR TRIM(COALESCE(s.issued_to,'')) <> '')
+        GROUP BY label ORDER BY cost DESC, value DESC LIMIT " . (int)$limit);
     $st->execute([$days]);
     return $st->fetchAll();
 }

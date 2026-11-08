@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/validation.php';
+require_once __DIR__ . '/../includes/org.php';
 
 if (isset($_SESSION['user_id'])) {
     header('Location: dashboard.php');
@@ -13,6 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email     = $v->email('email', 'Work email');
     $role      = 'staff'; // new accounts are staff; the System Admin can change roles
     $password  = (string)($_POST['password'] ?? '');
+    [$cid, $bid, $did] = org_validate($pdo, $v, $_POST);
     $confirm   = (string)($_POST['confirm_password'] ?? '');
 
     if ($full_name !== '' && !preg_match("/^[\p{L} .'-]+$/u", $full_name)) {
@@ -39,8 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'An account with this email already exists. <a href="login.php">Sign in</a> instead.';
             } else {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $pdo->prepare("INSERT INTO users (full_name, email, password, role) VALUES (?, ?, ?, ?)")
-                    ->execute([$full_name, $email, $hash, $role]);
+                $pdo->prepare("INSERT INTO users (full_name, email, password, role, company_id, branch_id, department_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
+                    ->execute([$full_name, $email, $hash, $role, $cid, $bid, $did]);
                 try {
                     $new_id = (int)$pdo->lastInsertId();
                     $pdo->prepare("INSERT INTO audit_trail (user_id, action, details) VALUES (?, 'CREATE_ACCOUNT', ?)")
@@ -70,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
 <div class="login-wrapper">
-    <div class="login-card" style="max-width: 400px;">
+    <div class="login-card" style="max-width: 440px;">
         <div class="login-brand">
             <img src="../images/altus-logo.png" alt="Altus Financial Services Limited">
             <h2>Create an account</h2>
@@ -98,6 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="email" id="email" name="email" required maxlength="190" placeholder="name@altus.co.zm"
                        value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" autocomplete="email">
             </div>
+            <?php echo org_pickers($pdo, $_POST); ?>
             <div class="form-group">
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required minlength="8" maxlength="128" placeholder="Min. 8 characters, with a letter and a number" autocomplete="new-password"

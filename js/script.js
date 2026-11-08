@@ -244,8 +244,43 @@
         window.addEventListener('scroll', hide, true);
     }
 
+    // ── Linked company > branch > department dropdowns ─────────
+    function initOrgPickers() {
+        document.querySelectorAll('[data-org-pickers]').forEach(function (wrap) {
+            var company = wrap.querySelector('[data-org="company"]');
+            var branch  = wrap.querySelector('[data-org="branch"]');
+            var dept    = wrap.querySelector('[data-org="department"]');
+            function narrow(select, attr, parentValue) {
+                if (!select) return;
+                var keep = false;
+                Array.prototype.forEach.call(select.options, function (o) {
+                    if (!o.value) return;
+                    var show = !parentValue || o.getAttribute(attr) === parentValue;
+                    o.hidden = !show; o.disabled = !show;
+                    if (show && o.selected) keep = true;
+                });
+                if (!keep) select.value = '';
+            }
+            function update() {
+                narrow(branch, 'data-company', company ? company.value : '');
+                narrow(dept, 'data-branch', branch ? branch.value : '');
+            }
+            if (company) company.addEventListener('change', update);
+            if (branch) branch.addEventListener('change', function () {
+                // Picking a branch fills in its company
+                var o = branch.options[branch.selectedIndex];
+                if (company && o && o.getAttribute('data-company') && company.value !== o.getAttribute('data-company')) {
+                    company.value = o.getAttribute('data-company');
+                }
+                update();
+            });
+            update();
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         autoDismissAlerts();
+        initOrgPickers();
         initTooltips();
         addCsrfTokens();
 

@@ -10,6 +10,39 @@
 CREATE DATABASE IF NOT EXISTS inventory_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE inventory_system;
 
+-- ── ORGANISATION (managed by the System Admin) ─────────────
+CREATE TABLE IF NOT EXISTS companies (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    name       VARCHAR(150) NOT NULL UNIQUE,
+    active     TINYINT(1)   NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS branches (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT          NOT NULL,
+    name       VARCHAR(150) NOT NULL,
+    location   VARCHAR(200) NULL,
+    active     TINYINT(1)   NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_branch (company_id, name),
+    FOREIGN KEY (company_id) REFERENCES companies(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS departments (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id  INT          NOT NULL,
+    name       VARCHAR(150) NOT NULL,
+    active     TINYINT(1)   NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_department (branch_id, name),
+    FOREIGN KEY (branch_id) REFERENCES branches(id)
+) ENGINE=InnoDB;
+
+-- Starting company and branch (rename them on the Organisation page)
+INSERT IGNORE INTO companies (id, name) VALUES (1, 'Altus Financial Services Limited');
+INSERT IGNORE INTO branches (id, company_id, name) VALUES (1, 1, 'Head Office');
+
 -- ── USERS ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
     id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -20,7 +53,13 @@ CREATE TABLE IF NOT EXISTS users (
     role       ENUM('admin','staff') NOT NULL DEFAULT 'staff',
     active     TINYINT(1)   NOT NULL DEFAULT 1,
     last_login_at DATETIME  NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    company_id    INT       NULL,
+    branch_id     INT       NULL,
+    department_id INT       NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id)    REFERENCES companies(id),
+    FOREIGN KEY (branch_id)     REFERENCES branches(id),
+    FOREIGN KEY (department_id) REFERENCES departments(id)
 ) ENGINE=InnoDB;
 
 -- ── CATEGORIES ─────────────────────────────────────────────
@@ -57,6 +96,18 @@ CREATE TABLE IF NOT EXISTS items (
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
+-- ── STOCK PER BRANCH ───────────────────────────────────────
+-- items.current_quantity is the total across all branches.
+CREATE TABLE IF NOT EXISTS branch_stock (
+    item_id    INT NOT NULL,
+    branch_id  INT NOT NULL,
+    quantity   INT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (item_id, branch_id),
+    FOREIGN KEY (item_id)   REFERENCES items(id) ON DELETE CASCADE,
+    FOREIGN KEY (branch_id) REFERENCES branches(id)
+) ENGINE=InnoDB;
+
 -- ── STOCK RECEIVING ────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS stock_receiving (
     id            INT AUTO_INCREMENT PRIMARY KEY,
@@ -66,11 +117,13 @@ CREATE TABLE IF NOT EXISTS stock_receiving (
     unit_price    DECIMAL(12,2)  NOT NULL DEFAULT 0.00,
     date_received DATE,
     received_by   INT            NOT NULL,
+    branch_id     INT            NULL,
     old_stock     INT            NULL,
     new_stock     INT            NULL,
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (item_id)     REFERENCES items(id),
-    FOREIGN KEY (received_by) REFERENCES users(id)
+    FOREIGN KEY (received_by) REFERENCES users(id),
+    FOREIGN KEY (branch_id)   REFERENCES branches(id)
 ) ENGINE=InnoDB;
 
 -- ── STOCK ISSUING ──────────────────────────────────────────
@@ -82,11 +135,16 @@ CREATE TABLE IF NOT EXISTS stock_issuing (
     purpose     TEXT,
     date_issued DATE,
     issued_by   INT           NOT NULL,
+    branch_id     INT         NULL,
+    department_id INT         NULL,
+    recipient   VARCHAR(150)  NULL,
     old_stock   INT           NULL,
     new_stock   INT           NULL,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (item_id)   REFERENCES items(id),
-    FOREIGN KEY (issued_by) REFERENCES users(id)
+    FOREIGN KEY (issued_by) REFERENCES users(id),
+    FOREIGN KEY (branch_id) REFERENCES branches(id),
+    FOREIGN KEY (department_id) REFERENCES departments(id)
 ) ENGINE=InnoDB;
 
 -- ── PROCUREMENT ────────────────────────────────────────────
@@ -99,6 +157,8 @@ CREATE TABLE IF NOT EXISTS procurement (
     category_id  INT          NULL,
     category     VARCHAR(100) NULL,
     supplier     VARCHAR(200) NULL,
+    branch_id     INT         NULL,
+    department_id INT         NULL,
     status       ENUM('needed','ordered','received','cancelled') NOT NULL DEFAULT 'needed',
     ordered_at   DATETIME     NULL,
     received_at  DATETIME     NULL,

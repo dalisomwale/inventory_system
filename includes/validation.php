@@ -190,7 +190,7 @@ class Validator
             $this->errors[] = "Please select a $label.";
             return null;
         }
-        $allowed = ['items', 'categories', 'procurement', 'users'];
+        $allowed = ['items', 'categories', 'procurement', 'users', 'companies', 'branches', 'departments'];
         if (!in_array($table, $allowed, true)) throw new InvalidArgumentException('Bad table');
         $st = $pdo->prepare("SELECT $cols FROM $table WHERE id = ?");
         $st->execute([(int)$id]);

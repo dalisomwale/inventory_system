@@ -23,6 +23,67 @@ BEGIN
 END //
 DELIMITER ;
 
+-- Organisation: companies > branches > departments (managed by the System Admin)
+CREATE TABLE IF NOT EXISTS companies (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    name       VARCHAR(150) NOT NULL UNIQUE,
+    active     TINYINT(1)   NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS branches (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT          NOT NULL,
+    name       VARCHAR(150) NOT NULL,
+    location   VARCHAR(200) NULL,
+    active     TINYINT(1)   NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_branch (company_id, name),
+    FOREIGN KEY (company_id) REFERENCES companies(id)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS departments (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    branch_id  INT          NOT NULL,
+    name       VARCHAR(150) NOT NULL,
+    active     TINYINT(1)   NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_department (branch_id, name),
+    FOREIGN KEY (branch_id) REFERENCES branches(id)
+) ENGINE=InnoDB;
+-- A starting company and branch so existing stock has a home (rename on the Organisation page)
+INSERT INTO companies (name) SELECT 'Altus Financial Services Limited' FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM companies);
+INSERT INTO branches (company_id, name) SELECT MIN(id), 'Head Office' FROM companies HAVING NOT EXISTS (SELECT 1 FROM branches);
+SET @home_branch  = (SELECT MIN(id) FROM branches);
+SET @home_company = (SELECT company_id FROM branches WHERE id = @home_branch);
+
+CALL add_column_if_missing('users', 'company_id',    'INT NULL');
+CALL add_column_if_missing('users', 'branch_id',     'INT NULL');
+CALL add_column_if_missing('users', 'department_id', 'INT NULL');
+CALL add_column_if_missing('stock_receiving', 'branch_id',     'INT NULL AFTER received_by');
+CALL add_column_if_missing('stock_issuing',   'branch_id',     'INT NULL AFTER issued_by');
+CALL add_column_if_missing('stock_issuing',   'department_id', 'INT NULL AFTER branch_id');
+CALL add_column_if_missing('stock_issuing',   'recipient',     'VARCHAR(150) NULL AFTER department_id');
+CALL add_column_if_missing('procurement',     'branch_id',     'INT NULL');
+CALL add_column_if_missing('procurement',     'department_id', 'INT NULL');
+
+-- Stock held at each branch; items.current_quantity stays the total across branches
+CREATE TABLE IF NOT EXISTS branch_stock (
+    item_id    INT NOT NULL,
+    branch_id  INT NOT NULL,
+    quantity   INT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (item_id, branch_id),
+    FOREIGN KEY (item_id)   REFERENCES items(id) ON DELETE CASCADE,
+    FOREIGN KEY (branch_id) REFERENCES branches(id)
+) ENGINE=InnoDB;
+-- Existing stock and history belong to the starting branch (only rows not yet assigned)
+INSERT INTO branch_stock (item_id, branch_id, quantity)
+    SELECT i.id, @home_branch, i.current_quantity FROM items i
+    WHERE NOT EXISTS (SELECT 1 FROM branch_stock b WHERE b.item_id = i.id);
+UPDATE stock_receiving SET branch_id = @home_branch WHERE branch_id IS NULL;
+UPDATE stock_issuing   SET branch_id = @home_branch WHERE branch_id IS NULL;
+UPDATE procurement     SET branch_id = @home_branch WHERE branch_id IS NULL;
+UPDATE users SET company_id = @home_company, branch_id = @home_branch WHERE branch_id IS NULL;
+
 -- Roles: 'admin' (System Admin, manages users) and 'staff' (everything else)
 CALL add_column_if_missing('users', 'active',        'TINYINT(1) NOT NULL DEFAULT 1 AFTER role');
 CALL add_column_if_missing('users', 'last_login_at', 'DATETIME NULL AFTER active');
@@ -60,6 +121,30 @@ CALL add_column_if_missing('category_monthly_reports', 'total_value', 'DECIMAL(1
 CALL add_column_if_missing('category_monthly_reports', 'updated_at',  'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
 
 DROP PROCEDURE IF EXISTS add_column_if_missing;
+
+-- Foreign keys for the organisation links (added once)
+DROP PROCEDURE IF EXISTS add_fk_if_missing;
+DELIMITER //
+CREATE PROCEDURE add_fk_if_missing(IN tbl VARCHAR(64), IN col VARCHAR(64), IN ref VARCHAR(64))
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.KEY_COLUMN_USAGE
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl AND COLUMN_NAME = col AND REFERENCED_TABLE_NAME = ref
+    ) THEN
+        SET @sql = CONCAT('ALTER TABLE `', tbl, '` ADD FOREIGN KEY (`', col, '`) REFERENCES `', ref, '`(id)');
+        PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+    END IF;
+END //
+DELIMITER ;
+CALL add_fk_if_missing('users', 'company_id', 'companies');
+CALL add_fk_if_missing('users', 'branch_id', 'branches');
+CALL add_fk_if_missing('users', 'department_id', 'departments');
+CALL add_fk_if_missing('stock_receiving', 'branch_id', 'branches');
+CALL add_fk_if_missing('stock_issuing', 'branch_id', 'branches');
+CALL add_fk_if_missing('stock_issuing', 'department_id', 'departments');
+CALL add_fk_if_missing('procurement', 'branch_id', 'branches');
+CALL add_fk_if_missing('procurement', 'department_id', 'departments');
+DROP PROCEDURE IF EXISTS add_fk_if_missing;
 
 -- One account per email (case-insensitive collation)
 DROP PROCEDURE IF EXISTS add_email_index;

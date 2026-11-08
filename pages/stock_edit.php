@@ -59,6 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_item'])) {
     $reorder_level = $v->int('reorder_level', 'Reorder level', 0, 1000000);
     $opening       = $is_new ? ($v->int('opening_quantity', 'Opening stock', 0, 1000000, false) ?? 0) : 0;
     $supplier      = $is_new ? $v->text('supplier', 'Supplier', 200, false) : '';
+    $open_branch   = 0;
+    if ($is_new && $opening > 0) {
+        $open_branch = (int)($_POST['branch_id'] ?? 0);
+        if (!in_array($open_branch, array_map(fn($b) => (int)$b['id'], org_branches($pdo)), true)) $v->fail('Please choose the branch that holds the opening stock.');
+    }
 
     if ($v->ok()) {
         $dup = $pdo->prepare("SELECT id FROM items WHERE category_id = ? AND LOWER(item_name) = LOWER(?) AND id <> ?");
@@ -71,12 +76,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_item'])) {
     } elseif ($is_new) {
         $pdo->beginTransaction();
         try {
-            $pdo->prepare("INSERT INTO items (item_name, category_id, category, description, current_quantity, unit_price, reorder_level) VALUES (?,?,?,?,?,?,?)")
-                ->execute([$item_name, $cat['id'], $cat['name'], $description, $opening, $unit_price, $reorder_level]);
+            $pdo->prepare("INSERT INTO items (item_name, category_id, category, description, current_quantity, unit_price, reorder_level) VALUES (?,?,?,?,0,?,?)")
+                ->execute([$item_name, $cat['id'], $cat['name'], $description, $unit_price, $reorder_level]);
             $new_id = (int)$pdo->lastInsertId();
             if ($opening > 0) {
-                $pdo->prepare("INSERT INTO stock_receiving (item_id, supplier, quantity, unit_price, date_received, received_by, old_stock, new_stock) VALUES (?,?,?,?,?,?,?,?)")
-                    ->execute([$new_id, $supplier ?: 'Opening stock', $opening, $unit_price, date('Y-m-d'), $_SESSION['user_id'], 0, $opening]);
+                [$ob, $nb] = branch_stock_change($pdo, $new_id, $open_branch, $opening);
+                $pdo->prepare("INSERT INTO stock_receiving (item_id, supplier, quantity, unit_price, date_received, received_by, branch_id, old_stock, new_stock) VALUES (?,?,?,?,?,?,?,?,?)")
+                    ->execute([$new_id, $supplier ?: 'Opening stock', $opening, $unit_price, date('Y-m-d'), $_SESSION['user_id'], $open_branch, $ob, $nb]);
             }
             logAudit($pdo, $_SESSION['user_id'], 'ADD_ITEM', $new_id, $opening, "Added item: $item_name in {$cat['name']}");
             $pdo->commit();
@@ -170,6 +176,18 @@ include __DIR__ . '/../includes/header.php';
                        value="<?php echo htmlspecialchars($_POST['opening_quantity'] ?? '0'); ?>">
                 <small>How many you have right now. Leave at 0 if none.</small>
             </div>
+            <?php $bl = org_branches($pdo); $mine = user_branch_id(); ?>
+            <?php if (count($bl) > 1): ?>
+            <div class="form-group">
+                <label for="branch_id">Held at branch</label>
+                <select id="branch_id" name="branch_id">
+                    <?php foreach ($bl as $b): ?><option value="<?php echo $b['id']; ?>" <?php echo (int)($_POST['branch_id'] ?? $mine) === (int)$b['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($b['company_name'] . ' › ' . $b['name']); ?></option><?php endforeach; ?>
+                </select>
+                <small>Where the opening stock is kept.</small>
+            </div>
+            <?php else: ?><input type="hidden" name="branch_id" value="<?php echo (int)($bl[0]['id'] ?? 0); ?>"><?php endif; ?>
+        </div>
+        <div class="form-row">
             <div class="form-group">
                 <label for="supplier">Supplier</label>
                 <input type="text" id="supplier" name="supplier" maxlength="200" placeholder="Optional"

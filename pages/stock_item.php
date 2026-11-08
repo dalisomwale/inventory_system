@@ -18,17 +18,26 @@ foreach (ins_item_forecast($pdo, 30) as $r) { if ((int)$r['id'] === (int)$item['
 $state = $item['current_quantity'] <= 0 ? 'out' : ($item['current_quantity'] <= $item['reorder_level'] ? 'low' : 'ok');
 
 $h = $pdo->prepare("
-    (SELECT 'Received' AS type, r.created_at, r.quantity, r.supplier AS party, r.old_stock, r.new_stock, u.full_name AS by_name, NULL AS purpose
-     FROM stock_receiving r LEFT JOIN users u ON u.id = r.received_by WHERE r.item_id = ?)
+    (SELECT 'Received' AS type, r.created_at, r.quantity, r.supplier AS party, r.old_stock, r.new_stock, u.full_name AS by_name, NULL AS purpose, b.name AS branch_name
+     FROM stock_receiving r LEFT JOIN users u ON u.id = r.received_by LEFT JOIN branches b ON b.id = r.branch_id WHERE r.item_id = ?)
     UNION ALL
-    (SELECT 'Issued', s.created_at, s.quantity, s.issued_to, s.old_stock, s.new_stock, u.full_name, s.purpose
-     FROM stock_issuing s LEFT JOIN users u ON u.id = s.issued_by WHERE s.item_id = ?)
+    (SELECT 'Issued', s.created_at, s.quantity, CONCAT(s.issued_to, IF(s.recipient IS NULL OR s.recipient = '', '', CONCAT(' (', s.recipient, ')'))), s.old_stock, s.new_stock, u.full_name, s.purpose, b.name
+     FROM stock_issuing s LEFT JOIN users u ON u.id = s.issued_by LEFT JOIN branches b ON b.id = s.branch_id WHERE s.item_id = ?)
     ORDER BY created_at DESC LIMIT 100");
 $h->execute([$item['id'], $item['id']]);
 $history     = $h->fetchAll();
 $has_history = count($history) > 0;
 $received    = array_sum(array_map(fn($r) => $r['type'] === 'Received' ? $r['quantity'] : 0, $history));
 $issued      = array_sum(array_map(fn($r) => $r['type'] === 'Issued'   ? $r['quantity'] : 0, $history));
+
+$by_branch = $pdo->prepare("
+    SELECT b.id, b.name, c.name AS company_name, COALESCE(bs.quantity, 0) AS quantity
+    FROM branches b JOIN companies c ON c.id = b.company_id
+    LEFT JOIN branch_stock bs ON bs.branch_id = b.id AND bs.item_id = ?
+    WHERE (b.active = 1 AND c.active = 1) OR COALESCE(bs.quantity, 0) <> 0
+    ORDER BY c.name, b.name");
+$by_branch->execute([$item['id']]);
+$by_branch = $by_branch->fetchAll();
 
 $open_req = $pdo->prepare("SELECT * FROM procurement WHERE (item_id = ? OR LOWER(item_name) = LOWER(?)) AND status IN ('needed','ordered') ORDER BY created_at DESC LIMIT 1");
 $open_req->execute([$item['id'], $item['item_name']]);
@@ -103,18 +112,42 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<?php if (count($by_branch) > 1): ?>
+<!-- Stock by branch -->
+<div class="card">
+    <div class="card-head"><h3>Stock by branch</h3><span class="card-hint">Total <?php echo number_format($item['current_quantity']); ?></span></div>
+    <table class="compact">
+        <thead><tr><th>Branch</th><th>Company</th><th class="num">In stock</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($by_branch as $bb): ?>
+            <tr>
+                <td style="font-weight:600"><?php echo htmlspecialchars($bb['name']); ?></td>
+                <td class="muted"><?php echo htmlspecialchars($bb['company_name']); ?></td>
+                <td class="num"><strong class="qty-<?php echo $bb['quantity'] <= 0 ? 'out' : ($bb['quantity'] <= $item['reorder_level'] ? 'low' : 'ok'); ?>"><?php echo number_format($bb['quantity']); ?></strong></td>
+                <td><div class="row-actions">
+                    <a href="receive_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>&branch_id=<?php echo $bb['id']; ?>" class="btn btn-sm">Receive</a>
+                    <?php if ($bb['quantity'] > 0): ?><a href="issue_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>&branch_id=<?php echo $bb['id']; ?>" class="btn btn-sm">Issue</a><?php endif; ?>
+                </div></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
+<?php endif; ?>
+
 <!-- History -->
 <div class="card">
     <div class="card-head"><h3>Stock history</h3><?php if (count($history) === 100): ?><span class="card-hint">Latest 100 movements</span><?php endif; ?></div>
     <?php if ($history): ?>
     <div class="table-container">
         <table class="compact">
-            <thead><tr><th>Date</th><th>Type</th><th class="num">Qty</th><th class="num">Stock before &rarr; after</th><th>From / to</th><th>Purpose</th><th>By</th></tr></thead>
+            <thead><tr><th>Date</th><th>Type</th><th>Branch</th><th class="num">Qty</th><th class="num">Branch stock before &rarr; after</th><th>From / to</th><th>Purpose</th><th>By</th></tr></thead>
             <tbody>
             <?php foreach ($history as $r): ?>
                 <tr>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y, H:i', strtotime($r['created_at'])); ?></td>
                     <td><span class="status-<?php echo strtolower($r['type']); ?>"><?php echo $r['type']; ?></span></td>
+                    <td class="muted"><?php echo htmlspecialchars($r['branch_name'] ?? '—'); ?></td>
                     <td class="num"><strong><?php echo ($r['type'] === 'Issued' ? '−' : '+') . number_format($r['quantity']); ?></strong></td>
                     <td class="num muted"><?php echo $r['old_stock'] !== null ? number_format($r['old_stock']) . ' &rarr; ' . number_format($r['new_stock']) : '—'; ?></td>
                     <td><?php echo htmlspecialchars($r['party'] ?: '—'); ?></td>

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../includes/auth.php';
 redirectIfNotLoggedIn();
 
 $categories = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
+$departments = org_departments($pdo);
 $statuses   = ['needed' => 'To order', 'ordered' => 'Ordered', 'received' => 'Received', 'cancelled' => 'Cancelled'];
 $tab        = array_key_exists($_GET['tab'] ?? '', $statuses) || ($_GET['tab'] ?? '') === 'all' ? $_GET['tab'] : 'open';
 
@@ -23,6 +24,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
     $quantity  = $v->int('quantity', 'Quantity', 1, 100000);
     $supplier  = $v->text('supplier', 'Supplier', 200, false);
     $notes     = $v->textarea('reason', 'Notes', 500);
+    $dept = null;
+    if ($departments) {
+        foreach ($departments as $d) if ((int)$d['id'] === (int)($_POST['department_id'] ?? 0)) $dept = $d;
+        if (!$dept) $v->fail('Please choose the department that needs this.');
+    }
+    $req_branch = $dept ? (int)$dept['branch_id'] : (user_branch_id() ?: null);
 
     if ($v->ok()) {
         $dup = $pdo->prepare("SELECT COUNT(*) FROM procurement WHERE LOWER(item_name)=LOWER(?) AND status IN ('needed','ordered')");
@@ -37,9 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
         $match->execute([$item_name, $category['id']]);
         $item_id = $match->fetchColumn() ?: null;
 
-        $pdo->prepare("INSERT INTO procurement (item_name, item_id, quantity, reason, supplier, requested_by, category_id, category, status)
-                       VALUES (?,?,?,?,?,?,?,?,'needed')")
-            ->execute([$item_name, $item_id, $quantity, $notes, $supplier ?: null, $_SESSION['user_id'], $category['id'], $category['name']]);
+        $pdo->prepare("INSERT INTO procurement (item_name, item_id, quantity, reason, supplier, requested_by, category_id, category, branch_id, department_id, status)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,'needed')")
+            ->execute([$item_name, $item_id, $quantity, $notes, $supplier ?: null, $_SESSION['user_id'], $category['id'], $category['name'], $req_branch, $dept['id'] ?? null]);
         logAudit($pdo, $_SESSION['user_id'], 'REQUISITION_RAISED', $item_id ? (int)$item_id : null, $quantity, "Requisition raised: $item_name");
         $_SESSION['flash'] = "Requisition raised for \"$item_name\".";
         back_to_list('open');
@@ -89,11 +96,14 @@ $where = match ($tab) {
     default => 'p.status = ' . $pdo->quote($tab),
 };
 $list = $pdo->query("
-    SELECT p.*, u.full_name AS added_by, u2.full_name AS updated_by, c.name AS category_name
+    SELECT p.*, u.full_name AS added_by, u2.full_name AS updated_by, c.name AS category_name,
+           d.name AS dept_name, b.name AS branch_name
     FROM procurement p
     LEFT JOIN users u  ON u.id  = p.requested_by
     LEFT JOIN users u2 ON u2.id = p.approved_by
     LEFT JOIN categories c ON c.id = p.category_id
+    LEFT JOIN departments d ON d.id = p.department_id
+    LEFT JOIN branches b ON b.id = p.branch_id
     WHERE $where
     ORDER BY FIELD(p.status,'needed','ordered','received','cancelled'), p.created_at DESC")->fetchAll();
 
@@ -121,7 +131,7 @@ include __DIR__ . '/../includes/header.php';
     <div class="form-title">New requisition</div>
     <form method="POST"
           data-confirm-title="Raise requisition"
-          data-confirm="Raise a requisition for {quantity} &times; {item_name} ({category_id})?"
+          data-confirm="Raise a requisition for {quantity} &times; {item_name} ({category_id})<?php echo $departments ? ' for {department_id}' : ''; ?>?"
           data-confirm-ok="Raise requisition">
         <input type="hidden" name="add_purchase" value="1">
         <div class="form-row">
@@ -155,6 +165,22 @@ include __DIR__ . '/../includes/header.php';
                 <datalist id="supplier-names"><?php foreach ($suppliers as $n): ?><option value="<?php echo htmlspecialchars($n); ?>"><?php endforeach; ?></datalist>
             </div>
         </div>
+        <?php if ($departments): ?>
+        <div class="form-group" style="max-width:50%">
+            <label for="department_id">For department *</label>
+            <select id="department_id" name="department_id" required>
+                <option value="">— Select department —</option>
+                <?php $sel = (int)($_POST['department_id'] ?? 0); $groups = [];
+                foreach ($departments as $d) $groups[$d['company_name'] . ' › ' . $d['branch_name']][] = $d;
+                foreach ($groups as $g => $ds): ?>
+                <optgroup label="<?php echo htmlspecialchars($g); ?>">
+                    <?php foreach ($ds as $d): ?><option value="<?php echo $d['id']; ?>" <?php echo $sel === (int)$d['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars(dept_label($d)); ?></option><?php endforeach; ?>
+                </optgroup>
+                <?php endforeach; ?>
+            </select>
+            <small>The stock will be received at this department's branch.</small>
+        </div>
+        <?php endif; ?>
         <div class="form-group">
             <label for="reason">Notes</label>
             <textarea id="reason" name="reason" rows="2" maxlength="500" placeholder="Optional, e.g. for the Credit department"><?php echo isset($error) ? htmlspecialchars($_POST['reason'] ?? '') : ''; ?></textarea>
@@ -176,13 +202,13 @@ include __DIR__ . '/../includes/header.php';
     <?php if ($list): ?>
     <div class="table-container">
         <table>
-            <thead><tr><th>Added</th><th>Item</th><th>Category</th><th class="num">Qty</th><th>Supplier</th><th>Notes</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Added</th><th>Item</th><th>For</th><th class="num">Qty</th><th>Supplier</th><th>Notes</th><th>Status</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($list as $p): ?>
                 <tr>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($p['created_at'])); ?><br><span style="font-size:.76rem"><?php echo htmlspecialchars($p['added_by'] ?? '—'); ?></span></td>
                     <td style="font-weight:600"><?php echo htmlspecialchars($p['item_name']); ?></td>
-                    <td><span class="cat-pill"><?php echo htmlspecialchars($p['category_name'] ?? $p['category'] ?? 'Other'); ?></span></td>
+                    <td><?php echo $p['dept_name'] ? htmlspecialchars($p['dept_name']) : '<span class="muted-text">—</span>'; ?><div class="item-desc"><?php echo htmlspecialchars($p['branch_name'] ?? ''); ?></div></td>
                     <td class="num"><?php echo number_format($p['quantity']); ?></td>
                     <td><?php echo htmlspecialchars($p['supplier'] ?: '—'); ?></td>
                     <td class="muted" style="max-width:220px; white-space:normal; font-size:.82rem"><?php echo htmlspecialchars($p['reason'] ?: '—'); ?></td>

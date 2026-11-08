@@ -12,10 +12,15 @@ $cat_id  = (int)($_GET['category_id'] ?? 0);
 $status  = in_array($_GET['status'] ?? '', ['ok', 'low', 'out', 'soon'], true) ? $_GET['status'] : '';
 $sorts   = ['name' => 'Name', 'stock' => 'Stock (lowest first)', 'days' => 'Days left', 'value' => 'Value (highest first)', 'added' => 'Date added (newest first)'];
 $sort    = array_key_exists($_GET['sort'] ?? '', $sorts) ? $_GET['sort'] : 'name';
+$branches = org_branches($pdo);
+$branch_id = (int)($_GET['branch_id'] ?? 0);
+if (!in_array($branch_id, array_map(fn($b) => (int)$b['id'], $branches), true)) $branch_id = 0;
+$branch_name = '';
+foreach ($branches as $b) if ((int)$b['id'] === $branch_id) $branch_name = $b['name'];
 
 // ── Data ────────────────────────────────────────────────────
 $forecast = [];
-foreach (ins_item_forecast($pdo, 30) as $r) $forecast[$r['id']] = $r;
+foreach (ins_item_forecast($pdo, 30, $branch_id) as $r) $forecast[$r['id']] = $r;
 
 $st = $pdo->query("
     SELECT i.id, i.item_name, i.description, i.category_id, COALESCE(c.name, i.category, 'Other') AS category_name,
@@ -32,6 +37,7 @@ foreach ($all as $r) {
     $r['days_left'] = $f['days_left'];
     $r['per_day']   = $f['per_day'];
     $r['suggest']   = $f['suggest'];
+    if ($branch_id) $r['current_quantity'] = (int)($f['current_quantity'] ?? 0); // this branch's stock
     $r['value']     = $r['current_quantity'] * $r['unit_price'];
     $r['state']     = $r['current_quantity'] <= 0 ? 'out' : ($r['current_quantity'] <= $r['reorder_level'] ? 'low' : 'ok');
     $r['last_move'] = $r['last_move'] === '1970-01-01 00:00:00' || $r['last_move'] === '1970-01-01' ? null : $r['last_move'];
@@ -69,7 +75,7 @@ if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['f
 
 // Keep current filters on links
 function stock_url(array $change = []): string {
-    $keep = array_intersect_key($_GET, array_flip(['q', 'category_id', 'status', 'sort']));
+    $keep = array_intersect_key($_GET, array_flip(['q', 'category_id', 'status', 'sort', 'branch_id']));
     $params = array_filter(array_merge($keep, $change), fn($v) => $v !== '' && $v !== null && $v !== 0 && $v !== '0');
     return 'stock.php' . ($params ? '?' . http_build_query($params) : '');
 }
@@ -98,6 +104,17 @@ include __DIR__ . '/../includes/header.php';
         <label for="q">Search</label>
         <input type="search" id="q" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="Item name or description" maxlength="100">
     </div>
+    <?php if (count($branches) > 1): ?>
+    <div class="form-group">
+        <label for="branch_id">Branch</label>
+        <select id="branch_id" name="branch_id">
+            <option value="">All branches</option>
+            <?php foreach ($branches as $b): ?>
+            <option value="<?php echo $b['id']; ?>" <?php echo $branch_id === (int)$b['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($b['name']); ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+    <?php endif; ?>
     <div class="form-group">
         <label for="category_id">Category</label>
         <select id="category_id" name="category_id">
@@ -127,7 +144,7 @@ include __DIR__ . '/../includes/header.php';
     </div>
     <div class="form-group filter-buttons">
         <button type="submit" class="btn btn-primary">Apply</button>
-        <?php if ($q !== '' || $cat_id || $status || $sort !== 'name'): ?><a href="stock.php" class="btn">Clear</a><?php endif; ?>
+        <?php if ($q !== '' || $cat_id || $status || $sort !== 'name' || $branch_id): ?><a href="stock.php" class="btn">Clear</a><?php endif; ?>
     </div>
 </form>
 
@@ -135,7 +152,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="card">
     <div class="card-head">
         <h3>
-            <?php echo count($rows) === $tot_items ? 'All items' : 'Showing ' . count($rows) . ' of ' . $tot_items . ' items'; ?>
+            <?php echo count($rows) === $tot_items ? 'All items' : 'Showing ' . count($rows) . ' of ' . $tot_items . ' items'; ?><?php echo $branch_id ? ' at ' . htmlspecialchars($branch_name) : ''; ?>
         </h3>
         <span class="card-hint">Value <?php echo kwacha_whole(array_sum(array_column($rows, 'value'))); ?> &middot; <?php echo number_format(array_sum(array_column($rows, 'current_quantity'))); ?> units</span>
     </div>

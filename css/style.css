@@ -617,6 +617,7 @@ table.compact thead th { padding: 7px 10px; }
 .page-requisitions .btn,
 .page-categories .btn,
 .page-users .btn,
+.page-organisation .btn,
 .page-stock_item .btn,
 .page-stock_edit .btn { padding: 9px 16px; font-size: .9rem; min-height: 38px; }
 .page-dashboard .btn-sm,
@@ -626,6 +627,7 @@ table.compact thead th { padding: 7px 10px; }
 .page-requisitions .btn-sm,
 .page-categories .btn-sm,
 .page-users .btn-sm,
+.page-organisation .btn-sm,
 .page-stock_item .btn-sm,
 .page-stock_edit .btn-sm { padding: 7px 14px; font-size: .86rem; min-height: 34px; }
 .page-dashboard td .btn-sm,
@@ -679,6 +681,13 @@ a.ss:hover { border-color: var(--navy); }
 .btn-icon-danger { color: var(--danger); border-color: #efc4c4; }
 .btn-icon-danger:hover { color: var(--danger); border-color: var(--danger); background: #fdecec; }
 .btn-icon[aria-disabled="true"]:hover { color: var(--text2); border-color: var(--border); background: var(--surface); }
+.branch-bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 14px; }
+.branch-bar label { font-size: .84rem; font-weight: 600; color: var(--text2); }
+.branch-bar select { padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: .88rem; min-width: 280px; }
+.org-pickers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.org-pickers.two { grid-template-columns: repeat(2, 1fr); }
+.login-card .org-pickers { grid-template-columns: 1fr; gap: 0; }
+@media (max-width: 768px) { .org-pickers { grid-template-columns: 1fr; } }
 .row-disabled td { color: var(--muted); }
 .row-disabled td:first-child { text-decoration: line-through; text-decoration-color: #c5cad6; }
 .btn-danger-outline { color: var(--danger); border-color: #efc4c4; }
