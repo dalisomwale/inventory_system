@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $v           = new Validator($_POST);
     $item        = $v->exists($pdo, 'item_id', 'item', 'items', 'id, item_name');
     $quantity    = $v->int('quantity', 'Quantity to issue', 1, 1000000);
-    $recipient   = $v->text('recipient', 'Person receiving', 150, false);
+    $recipient   = $v->text('recipient', 'Person receiving', 150, true, 2);
     $purpose     = $v->textarea('purpose', 'Purpose', 255);
     $date_issued = $v->date('date_issued', 'Date issued');
     if (!$branch) $v->fail('Please choose the branch the stock is issued from.');
@@ -211,8 +211,8 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="form-row">
             <div class="form-group">
-                <label for="recipient">Person receiving</label>
-                <input type="text" id="recipient" name="recipient" maxlength="150" placeholder="Optional, e.g. Mary Phiri"
+                <label for="recipient">Person receiving *</label>
+                <input type="text" id="recipient" name="recipient" required minlength="2" maxlength="150" placeholder="Full name, e.g. Mary Phiri"
                        value="<?php echo isset($error) ? htmlspecialchars($_POST['recipient'] ?? '') : ''; ?>">
             </div>
             <div class="form-group">
