@@ -1,5 +1,5 @@
 <?php
-// Issue Stock — give items from a branch to a department.
+// Issue Stock — pick the company, then an item in stock anywhere in it, then the branch it comes from; issue to a department.
 require_once __DIR__ . '/../includes/auth.php';
 requirePermission('stock.issue');
 
@@ -29,13 +29,22 @@ $co_branches = array_values(array_filter($branches, fn($b) => (int)$b['company_i
 $companies   = [];
 foreach ($branches as $b) $companies[(int)$b['company_id']] = $b['company_name'];
 
-/** Items with stock at the branch (optionally in one category). */
-function items_at_branch(PDO $pdo, int $branch_id, int $cat_id): array {
-    $sql = "SELECT i.id, i.item_name, i.category, i.reorder_level, bs.quantity AS available
-            FROM items i JOIN branch_stock bs ON bs.item_id = i.id AND bs.branch_id = ?
-            WHERE bs.quantity > 0" . ($cat_id ? " AND i.category_id = ?" : "") . " ORDER BY i.item_name";
+/** Items in stock anywhere in the company (optionally in one category), with the company total. */
+function items_in_company(PDO $pdo, int $company_id, int $cat_id): array {
+    $sql = "SELECT i.id, i.item_name, SUM(bs.quantity) AS available
+            FROM items i JOIN branch_stock bs ON bs.item_id = i.id AND bs.quantity > 0
+            JOIN branches b ON b.id = bs.branch_id AND b.company_id = ? AND b.active = 1
+            " . ($cat_id ? "WHERE i.category_id = ? " : "") . "GROUP BY i.id, i.item_name ORDER BY i.item_name";
     $st = $pdo->prepare($sql);
-    $st->execute($cat_id ? [$branch_id, $cat_id] : [$branch_id]);
+    $st->execute($cat_id ? [$company_id, $cat_id] : [$company_id]);
+    return $st->fetchAll();
+}
+
+/** The company's branches that hold this item, most stock first. */
+function item_branches(PDO $pdo, int $company_id, int $item_id): array {
+    $st = $pdo->prepare("SELECT b.id, b.name, bs.quantity FROM branch_stock bs JOIN branches b ON b.id = bs.branch_id
+                         WHERE bs.item_id = ? AND bs.quantity > 0 AND b.company_id = ? AND b.active = 1 ORDER BY bs.quantity DESC, b.name");
+    $st->execute([$item_id, $company_id]);
     return $st->fetchAll();
 }
 
@@ -90,7 +99,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$items = $branch ? items_at_branch($pdo, $branch_id, $selected_cat_id) : [];
+$items = $company_id ? items_in_company($pdo, $company_id, $selected_cat_id) : [];
+$company_total = 0;
+foreach ($items as $it) if ((int)$it['id'] === $selected_item_id) $company_total = (int)$it['available'];
+// Branches holding the chosen item: keep the one asked for, else the user's own, else the one with the most
+$item_branches = $selected_item_id && $company_id ? item_branches($pdo, $company_id, $selected_item_id) : [];
+if ($item_branches) {
+    $ids = array_map(fn($b) => (int)$b['id'], $item_branches);
+    $asked = (int)($_POST['branch_id'] ?? $_GET['branch_id'] ?? 0);
+    $mine  = user_branch_id();
+    $branch_id = in_array($asked, $ids, true) ? $asked : (in_array($mine, $ids, true) ? $mine : $ids[0]);
+    foreach ($branches as $b) if ((int)$b['id'] === $branch_id) $branch = $b;
+}
 $selected_item = null;
 if ($selected_item_id) {
     $st = $pdo->prepare("SELECT i.*, COALESCE(bs.quantity, 0) AS available FROM items i
@@ -146,19 +166,6 @@ include __DIR__ . '/../includes/header.php';
             <?php endif; ?>
         </div>
         <div class="form-group">
-            <label for="branch_pick">Branch</label>
-            <?php if (count($co_branches) > 1): ?>
-            <select id="branch_pick" name="branch_id" data-resets-item>
-                <?php foreach ($co_branches as $b): ?>
-                <option value="<?php echo $b['id']; ?>" <?php echo (int)$b['id'] === $branch_id ? 'selected' : ''; ?>><?php echo htmlspecialchars($b['name']); ?></option>
-                <?php endforeach; ?>
-            </select>
-            <?php else: ?>
-            <input type="text" id="branch_pick" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars($branch['name']); ?>">
-            <input type="hidden" name="branch_id" value="<?php echo $branch_id; ?>">
-            <?php endif; ?>
-        </div>
-        <div class="form-group">
             <label for="cat_pick">Category</label>
             <select id="cat_pick" name="category_id" data-resets-item>
                 <option value="">All categories</option>
@@ -168,7 +175,7 @@ include __DIR__ . '/../includes/header.php';
             </select>
         </div>
         <div class="form-group">
-            <label for="item_pick">Item in stock at <?php echo htmlspecialchars($branch['name']); ?></label>
+            <label for="item_pick">Item in stock at <?php echo htmlspecialchars($companies[$company_id] ?? 'this company'); ?></label>
             <select id="item_pick" name="item_id" onchange="this.form.submit()">
                 <option value="">— Select an item —</option>
                 <?php foreach ($items as $it): ?>
@@ -177,7 +184,22 @@ include __DIR__ . '/../includes/header.php';
                 </option>
                 <?php endforeach; ?>
             </select>
-            <?php if (!$items): ?><small style="color:var(--muted)">Nothing in stock at this branch<?php echo $selected_cat_id ? ' in this category' : ''; ?>.</small><?php endif; ?>
+            <?php if (!$items): ?><small style="color:var(--muted)">Nothing in stock in this company<?php echo $selected_cat_id ? ' in this category' : ''; ?>.</small><?php endif; ?>
+        </div>
+        <div class="form-group">
+            <label for="branch_pick">From branch</label>
+            <?php if (!$item_branches): ?>
+            <input type="text" id="branch_pick" class="readonly-field" readonly tabindex="-1" value="Choose an item first">
+            <?php elseif (count($item_branches) > 1): ?>
+            <select id="branch_pick" name="branch_id" onchange="this.form.submit()">
+                <?php foreach ($item_branches as $b): ?>
+                <option value="<?php echo $b['id']; ?>" <?php echo (int)$b['id'] === $branch_id ? 'selected' : ''; ?>><?php echo htmlspecialchars($b['name']); ?> (<?php echo number_format($b['quantity']); ?> in stock)</option>
+                <?php endforeach; ?>
+            </select>
+            <?php else: ?>
+            <input type="text" id="branch_pick" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars($item_branches[0]['name'] . ' (' . number_format($item_branches[0]['quantity']) . ' in stock)'); ?>">
+            <input type="hidden" name="branch_id" value="<?php echo $branch_id; ?>">
+            <?php endif; ?>
         </div>
         </div>
         <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
@@ -190,6 +212,7 @@ include __DIR__ . '/../includes/header.php';
 
     <div class="stock-info-box">
         <div class="stock-info-item"><div class="label">Available at <?php echo htmlspecialchars($branch['name']); ?></div><div class="value"><?php echo number_format($selected_item['available']); ?></div></div>
+        <div class="stock-info-item"><div class="label">Across <?php echo htmlspecialchars($companies[$company_id] ?? 'the company'); ?></div><div class="value"><?php echo number_format($company_total); ?></div></div>
         <div class="stock-info-item"><div class="label">Category</div><div class="value" style="font-size:.88rem"><?php echo htmlspecialchars($selected_item['category']); ?></div></div>
         <div class="stock-info-item"><div class="label">Reorder level</div><div class="value"><?php echo number_format($selected_item['reorder_level']); ?></div></div>
     </div>
