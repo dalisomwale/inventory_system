@@ -49,7 +49,7 @@ if ($by === 'department') {
         $g ??= ['name' => $r['name'], 'branch' => $r['branch_name'], 'company' => $r['company_name'], 'items' => 0, 'units' => 0, 'value' => 0.0, 'times' => 0];
         $g['items']++; $g['units'] += $r['units']; $g['value'] += $r['value']; $g['times'] += $r['times'];
         unset($g);
-        if (!$sel || (int)$r['gid'] === $sel) $rows[] = $r;
+        $rows[] = $r;   // narrowed to the chosen department below
     }
 } elseif ($by === 'category') {
     // Per item, from the item's total stock
@@ -115,7 +115,29 @@ if ($by === 'department') {
 uasort($groups, fn($a, $b) => strcasecmp($a['name'], $b['name']));
 if ($sel && !isset($groups[$sel])) $sel = 0;
 $sel_name = $sel ? $groups[$sel]['name'] : '';
-if ($sel && $by === 'department') $sel_name .= ' (' . $groups[$sel]['branch'] . ', ' . $groups[$sel]['company'] . ')';
+// Filter pills: one per name, so a department that exists at several branches appears once
+// (branches with the same name in different companies are different places, so they get the company added instead)
+$pills = [];
+$name_count = array_count_values(array_map(fn($g) => mb_strtolower($g['name']), $groups));
+foreach ($groups as $gid => $g) {
+    if ($by === 'department') { $pills[mb_strtolower($g['name'])] ??= ['id' => $gid, 'name' => $g['name']]; continue; }
+    $pills[$gid] = ['id' => $gid, 'name' => $g['name'] . ($name_count[mb_strtolower($g['name'])] > 1 && !empty($g['sub']) ? " ({$g['sub']})" : '')];
+}
+if ($by === 'department') {
+    // The chosen department covers every branch's department of that name, item by item
+    $same = $sel ? array_keys(array_filter($groups, fn($g) => mb_strtolower($g['name']) === mb_strtolower($sel_name))) : [];
+    if ($sel) {
+        $merged = [];
+        foreach ($rows as $r) {
+            if (!in_array((int)$r['gid'], $same, true)) continue;
+            if (!isset($merged[$r['id']])) { $merged[$r['id']] = $r; continue; }
+            foreach (['units', 'value', 'times'] as $f) $merged[$r['id']][$f] += $r[$f];
+        }
+        $rows = array_values($merged);
+        usort($rows, fn($a, $b) => $b['units'] <=> $a['units']);
+        $sel_name .= count($same) > 1 ? ' (all branches)' : ' (' . $groups[$sel]['branch'] . ', ' . $groups[$sel]['company'] . ')';
+    }
+}
 
 $is_issue = $by === 'department';
 $sum = fn(array $list, string $f) => array_sum(array_column($list, $f));
@@ -190,8 +212,8 @@ include __DIR__ . '/../includes/header.php';
 <?php if ($groups): ?>
 <div class="pill-tabs pill-tabs-inline">
     <a href="<?php echo htmlspecialchars($report_url()); ?>" class="pill-tab <?php echo $sel ? '' : 'active'; ?>">All</a>
-    <?php foreach ($groups as $gid => $g): ?>
-    <a href="<?php echo htmlspecialchars($report_url(['id' => $gid])); ?>" class="pill-tab <?php echo $sel === $gid ? 'active' : ''; ?>"><?php echo htmlspecialchars($g['name']); ?></a>
+    <?php foreach ($pills as $p): $on = $sel && ($by === 'department' ? mb_strtolower($groups[$sel]['name']) === mb_strtolower($p['name']) : $sel === $p['id']); ?>
+    <a href="<?php echo htmlspecialchars($report_url(['id' => $p['id']])); ?>" class="pill-tab <?php echo $on ? 'active' : ''; ?>"><?php echo htmlspecialchars($p['name']); ?></a>
     <?php endforeach; ?>
 </div>
 <?php endif; ?>
