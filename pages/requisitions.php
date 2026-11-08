@@ -210,11 +210,12 @@ include __DIR__ . '/../includes/header.php';
     <?php if ($list): ?>
     <div class="table-container">
         <table>
-            <thead><tr><th>Added</th><th>Item</th><th>For</th><th class="num">Qty</th><th>Supplier</th><th>Reason</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>Raised by</th><th>Item</th><th>For</th><th class="num">Qty</th><th>Supplier</th><th>Reason</th><th>Status</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($list as $p): ?>
                 <tr>
-                    <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($p['created_at'])); ?><br><span style="font-size:.76rem"><?php echo htmlspecialchars($p['added_by'] ?? '—'); ?></span></td>
+                    <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($p['created_at'])); ?></td>
+                    <td><?php echo htmlspecialchars($p['added_by'] ?? '—'); ?></td>
                     <td style="font-weight:600"><?php echo htmlspecialchars($p['item_name']); ?></td>
                     <td><?php echo $p['dept_name'] ? htmlspecialchars($p['dept_name']) : '<span class="muted-text">—</span>'; ?><div class="item-desc"><?php echo htmlspecialchars($p['branch_name'] ?? ''); ?></div></td>
                     <td class="num"><?php echo number_format($p['quantity']); ?></td>
