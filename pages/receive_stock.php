@@ -171,9 +171,10 @@ $recent = $pdo->prepare("
     JOIN items i ON r.item_id = i.id
     LEFT JOIN categories c ON i.category_id = c.id
     JOIN users u ON r.received_by = u.id
+    WHERE (? = 0 OR i.category_id = ?)
     ORDER BY r.created_at DESC LIMIT 20
 ");
-$recent->execute();
+$recent->execute([$selected_cat_id, $selected_cat_id]);
 $recent = $recent->fetchAll();
 
 include __DIR__ . '/../includes/header.php';
@@ -184,15 +185,6 @@ include __DIR__ . '/../includes/header.php';
     <a href="dashboard.php" class="btn btn-sm">Back to Dashboard</a>
 </div>
 
-<!-- Category Selector -->
-<div class="pill-tabs">
-    <a href="receive_stock.php?branch_id=<?php echo $branch_id; ?>" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>">All</a>
-    <?php foreach ($categories as $cat): ?>
-    <a href="?category_id=<?php echo $cat['id']; ?>&branch_id=<?php echo $branch_id; ?>" class="pill-tab <?php echo $selected_cat_id == $cat['id'] ? 'active' : ''; ?>">
-        <?php echo htmlspecialchars($cat['name']); ?>
-    </a>
-    <?php endforeach; ?>
-</div>
 
 <?php if ($purchase): ?>
 <div class="info-note">Receiving requisition: <strong><?php echo htmlspecialchars($purchase['quantity'] . ' × ' . $purchase['item_name']); ?></strong><?php echo $purchase['supplier'] ? ' from ' . htmlspecialchars($purchase['supplier']) : ''; ?>. Check the quantity that actually arrived.</div>
@@ -350,6 +342,16 @@ include __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 <?php endif; ?>
 
+<!-- Category Selector -->
+<div class="pill-tabs" id="recent">
+    <a href="receive_stock.php?branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>">All</a>
+    <?php foreach ($categories as $cat): ?>
+    <a href="?category_id=<?php echo $cat['id']; ?>&branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == $cat['id'] ? 'active' : ''; ?>">
+        <?php echo htmlspecialchars($cat['name']); ?>
+    </a>
+    <?php endforeach; ?>
+</div>
+
 <!-- Recent Transactions -->
 <div class="card">
     <h3 style="margin-bottom:12px">Recent Receiving</h3>
@@ -376,7 +378,7 @@ include __DIR__ . '/../includes/header.php';
         </table>
     </div>
     <?php else: ?>
-    <div class="empty-state"><p>No receiving transactions yet.</p></div>
+    <div class="empty-state"><p><?php echo $selected_cat_id ? 'Nothing received in this category yet.' : 'No receiving transactions yet.'; ?></p></div>
     <?php endif; ?>
 </div>
 
