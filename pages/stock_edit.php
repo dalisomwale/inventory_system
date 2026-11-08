@@ -161,7 +161,6 @@ include __DIR__ . '/../includes/header.php';
                 <label for="unit_price">Unit price (K)<?php echo $locked ? '' : ' *'; ?></label>
                 <?php if ($locked): ?>
                 <input type="text" id="unit_price" class="readonly-field" readonly tabindex="-1" value="<?php echo number_format((float)$item['unit_price'], 2); ?>">
-                <small>This item has stock history, so its price changes when you <a href="receive_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>">receive it as an existing item</a>.</small>
                 <?php else: ?>
                 <input type="number" id="unit_price" name="unit_price" step="0.01" min="0" max="100000000" required
                        value="<?php echo htmlspecialchars($val('unit_price', '')); ?>" placeholder="0.00">
@@ -201,10 +200,6 @@ include __DIR__ . '/../includes/header.php';
                        value="<?php echo htmlspecialchars($_POST['supplier'] ?? ''); ?>">
             </div>
         </div>
-        <?php else: ?>
-        <div class="info-note">In stock: <strong><?php echo number_format($item['current_quantity']); ?></strong>. To change the quantity, use
-            <a href="receive_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>">Receive</a> or
-            <a href="issue_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>">Issue</a>, so every change is recorded.</div>
         <?php endif; ?>
 
         <div class="form-actions">
