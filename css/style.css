@@ -603,11 +603,33 @@ table.compact thead th { padding: 7px 10px; }
 .at-title { font-size: .98rem; font-weight: 700; color: var(--navy); }
 .at-desc  { font-size: .8rem; color: var(--muted); }
 .at-badge {
-    display: inline-block; vertical-align: 2px; margin-left: 4px;
+    display: block; width: max-content; margin-top: 4px;
     font-size: .7rem; font-weight: 700;
     color: #7a4a00; background: #fff4dc; border: 1px solid #f3d08a;
     padding: 1px 7px; border-radius: 999px;
 }
+
+/* Coloured tiles: icon on top, then the title, then the description */
+.action-tile { --tone: var(--navy); --tone-lt: var(--accent-lt); }
+.action-tile[class*="tone-"] .at-icon { background: var(--tone-lt); color: var(--tone); }
+.action-tile[class*="tone-"] .at-title { color: var(--tone); }
+.action-tile[class*="tone-"]:hover { border-color: var(--tone); background: var(--surface); }
+.tone-receive { --tone: #0e7a53; --tone-lt: #e3f5ec; }
+.tone-issue   { --tone: #b25e08; --tone-lt: #fcefe1; }
+.tone-stock   { --tone: #25398d; --tone-lt: #e8ebf6; }
+.tone-request { --tone: #8a6200; --tone-lt: #fbf1d8; }
+.tone-reports { --tone: #116e7a; --tone-lt: #e1f2f4; }
+.action-tiles.stacked { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+.action-tiles.stacked .action-tile {
+    flex-direction: column; align-items: center; text-align: center; gap: 10px;
+    padding: 22px 14px 18px; min-height: 0;
+    border-top: 4px solid var(--tone);
+}
+.action-tiles.stacked .at-icon { width: 54px; height: 54px; border-radius: 12px; }
+.action-tiles.stacked .at-icon svg { width: 28px; height: 28px; }
+.action-tiles.stacked .at-text { align-items: center; gap: 3px; }
+.action-tiles.stacked .at-title { font-size: 1.02rem; }
+.action-tiles.stacked .at-badge { margin: 4px auto 0; }
 
 /* Bigger buttons on the dashboards */
 .page-dashboard .btn,

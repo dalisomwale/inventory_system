@@ -4,7 +4,6 @@ redirectIfNotLoggedIn();
 
 $current_month   = date('Y-m');
 $to_order        = (int)$pdo->query("SELECT COUNT(*) FROM procurement WHERE status='needed'")->fetchColumn();
-$on_order        = (int)$pdo->query("SELECT COUNT(*) FROM procurement WHERE status='ordered'")->fetchColumn();
 $today = $pdo->query("
     SELECT (SELECT COALESCE(SUM(quantity),0) FROM stock_issuing   WHERE DATE(created_at)=CURDATE()) AS issued,
            (SELECT COALESCE(SUM(quantity),0) FROM stock_receiving WHERE DATE(created_at)=CURDATE()) AS received")->fetch();
@@ -34,14 +33,10 @@ $weekly        = ins_weekly_movement($pdo, 8);
 $by_category   = ins_value_by_category($pdo);
 $top_issued    = ins_top_issued($pdo, 30, 6);
 $top_users     = ins_top_recipients($pdo, 30, 6);
-$idle          = ins_idle_items($pdo, 60, 6);
 $week_recv     = array_sum(array_column($weekly, 'received'));
 $week_issued   = array_sum(array_column($weekly, 'issued'));
-$idle_value    = array_sum(array_column($idle, 'value'));
 $health        = ins_stock_health($forecast);
-$daily         = ins_daily_issued($pdo, 30);
 $by_cat_issued = ins_issued_by_category($pdo, 30);
-$busiest       = ins_busiest_days($pdo, 90);
 
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
 if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
@@ -78,12 +73,12 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Quick actions -->
-<div class="action-tiles">
-    <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive')); ?><?php endif; ?>
-    <?php if (can('stock.issue')): ?><?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue')); ?><?php endif; ?>
-    <?php if (can('stock.view')): ?><?php echo action_tile('stock.php', 'Manage stock', 'All items and levels', icon('box')); ?><?php endif; ?>
-    <?php if (can('requisitions.view')): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), $to_order ? $to_order . ' to order' : ''); ?><?php endif; ?>
-    <?php if (can_any('reports.view','reports.submit')): ?><?php echo action_tile('reports.php', 'Monthly reports', $submitted_count . ' of ' . $total_cats . ' submitted', icon('report')); ?><?php endif; ?>
+<div class="action-tiles stacked">
+    <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive'), '', 'receive'); ?><?php endif; ?>
+    <?php if (can('stock.issue')): ?><?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue'), '', 'issue'); ?><?php endif; ?>
+    <?php if (can('stock.view')): ?><?php echo action_tile('stock.php', 'Manage stock', 'All items and levels', icon('stock'), '', 'stock'); ?><?php endif; ?>
+    <?php if (can('requisitions.view')): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), $to_order ? $to_order . ' to order' : '', 'request'); ?><?php endif; ?>
+    <?php if (can_any('reports.view','reports.submit')): ?><?php echo action_tile('reports.php', 'Monthly reports', $submitted_count . ' of ' . $total_cats . ' submitted', icon('chart'), '', 'reports'); ?><?php endif; ?>
 </div>
 
 <!-- Movement + health -->
@@ -124,21 +119,13 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<!-- Daily trend + value share -->
+<!-- Category usage + value share -->
 <div class="grid-2 wide-left">
     <div class="card">
-        <div class="card-head">
-            <h3>Daily usage &mdash; last 30 days</h3>
-            <div class="legend">
-                <span><i class="swatch received"></i>Units issued per day</span>
-                <span><i class="swatch line-avg"></i>7-day average <strong><?php echo number_format(end($daily)['avg'], 1); ?>/day</strong></span>
-            </div>
-        </div>
-        <?php if (array_sum(array_column($daily, 'value')) > 0): ?>
-            <?php echo chart_line($daily); ?>
-        <?php else: ?>
-            <div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>
-        <?php endif; ?>
+        <div class="card-head"><h3>Issued by category &mdash; last 30 days</h3><span class="card-hint">Units</span></div>
+        <?php echo $by_cat_issued
+            ? chart_hbars(array_map(fn($r) => ['label' => $r['label'], 'value' => $r['value']], $by_cat_issued), fn($v) => number_format($v) . ' units')
+            : '<div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>'; ?>
     </div>
     <div class="card">
         <div class="card-head"><h3>Where the stock value sits</h3><span class="card-hint">Share by category</span></div>
@@ -184,44 +171,6 @@ include __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 </div>
 
-<!-- Requisitions -->
-<?php if ($to_order + $on_order > 0 && can('requisitions.view')):
-$open_purchases = $pdo->query("SELECT * FROM procurement WHERE status IN ('needed','ordered')
-                               ORDER BY FIELD(status,'needed','ordered'), created_at LIMIT 6")->fetchAll(); ?>
-<div class="card">
-    <div class="card-head">
-        <h3>Open requisitions &mdash; <?php echo $to_order; ?> to order, <?php echo $on_order; ?> on order</h3>
-        <?php if (can('requisitions.view')): ?><a href="requisitions.php" class="btn btn-sm">All requisitions</a><?php endif; ?>
-    </div>
-    <table class="compact">
-        <thead><tr><th>Item</th><th class="num">Qty</th><th>Supplier</th><th>Status</th><th></th></tr></thead>
-        <tbody>
-        <?php foreach ($open_purchases as $p): ?>
-            <tr>
-                <td style="font-weight:600"><?php echo htmlspecialchars($p['item_name']); ?></td>
-                <td class="num"><?php echo number_format($p['quantity']); ?></td>
-                <td class="muted"><?php echo htmlspecialchars($p['supplier'] ?: '—'); ?></td>
-                <td><?php echo $p['status'] === 'needed' ? '<span class="status-pending">To order</span>' : '<span class="status-ordered">Ordered</span>'; ?></td>
-                <td><div class="row-actions">
-                    <?php if ($p['status'] === 'needed' && can('requisitions.manage')): ?>
-                    <form method="POST" action="requisitions.php" class="inline-form"
-                          data-confirm-title="Mark as ordered"
-                          data-confirm="Mark <?php echo htmlspecialchars($p['quantity'] . ' × ' . $p['item_name']); ?> as ordered?"
-                          data-confirm-ok="Mark ordered">
-                        <input type="hidden" name="id" value="<?php echo $p['id']; ?>">
-                        <input type="hidden" name="return" value="dashboard.php">
-                        <button type="submit" name="purchase_action" value="ordered" class="btn btn-sm btn-primary">Mark ordered</button>
-                    </form>
-                    <?php endif; ?>
-                    <?php if (can('stock.receive')): ?><a href="receive_stock.php?purchase_id=<?php echo $p['id']; ?>" class="btn btn-sm btn-success">Receive</a><?php endif; ?>
-                </div></td>
-            </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
-</div>
-<?php endif; ?>
-
 <!-- Usage -->
 <div class="grid-2">
     <div class="card">
@@ -232,64 +181,6 @@ $open_purchases = $pdo->query("SELECT * FROM procurement WHERE status IN ('neede
         <div class="card-head"><h3>Who uses the most &mdash; last 30 days</h3><span class="card-hint">By value issued</span></div>
         <?php echo $top_users ? chart_hbars(array_map(fn($r) => ['label' => $r['label'], 'value' => $r['cost'] > 0 ? $r['cost'] : $r['value'], 'times' => $r['times']], $top_users),
                                              fn($v) => kwacha_whole((float)$v)) : '<div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>'; ?>
-    </div>
-</div>
-
-<!-- Category usage + busiest days -->
-<div class="grid-2 wide-left">
-    <div class="card">
-        <div class="card-head"><h3>Issued by category &mdash; last 30 days</h3><span class="card-hint">Units</span></div>
-        <?php echo $by_cat_issued
-            ? chart_hbars(array_map(fn($r) => ['label' => $r['label'], 'value' => $r['value']], $by_cat_issued), fn($v) => number_format($v) . ' units')
-            : '<div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>'; ?>
-    </div>
-    <div class="card">
-        <div class="card-head"><h3>Busiest days</h3><span class="card-hint">Issues per weekday, last 90 days</span></div>
-        <?php echo array_sum(array_column($busiest, 'value')) > 0
-            ? chart_columns($busiest, fn($r) => $r['label'] . ': ' . number_format($r['value']) . ' issues, ' . number_format($r['units']) . ' units')
-            : '<div class="empty-state"><p>No issues in the last 90 days.</p></div>'; ?>
-    </div>
-</div>
-
-<!-- Housekeeping -->
-<div class="card">
-    <div class="card-head">
-        <h3>Not moving &mdash; 60+ days</h3>
-        <?php if ($idle): ?><span class="card-hint"><?php echo kwacha($idle_value, true); ?> tied up</span><?php endif; ?>
-    </div>
-    <?php if ($idle): ?>
-    <table class="compact">
-        <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Value</th><th>Last issued</th></tr></thead>
-        <tbody>
-        <?php foreach ($idle as $r): ?>
-            <tr><td><?php echo htmlspecialchars($r['item_name']); ?></td><td class="num"><?php echo number_format($r['current_quantity']); ?></td>
-                <td class="num"><?php echo kwacha((float)$r['value']); ?></td>
-                <td class="muted"><?php echo $r['last_issued'] ? date('d M Y', strtotime($r['last_issued'])) : 'Never'; ?></td></tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
-    <?php else: ?>
-    <div class="empty-state"><p>Every item in stock has been used in the last 60 days.</p></div>
-    <?php endif; ?>
-</div>
-
-
-<!-- Report Submission Progress -->
-<div class="card" style="margin-bottom:16px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-        <h3 style="margin:0">Monthly Reports &mdash; <?php echo date('F Y'); ?></h3>
-        <?php if (can('reports.view')): ?><a href="reports.php" class="btn btn-sm">View All</a><?php endif; ?>
-    </div>
-    <div class="progress-track">
-        <div class="progress-fill" style="width:<?php echo $total_cats > 0 ? round(($submitted_count / $total_cats) * 100) : 0; ?>%"></div>
-    </div>
-    <div style="font-size:.74rem; color:var(--muted); margin-bottom:12px"><?php echo $submitted_count; ?> of <?php echo $total_cats; ?> categories submitted</div>
-    <div style="display:flex; flex-wrap:wrap; gap:6px;">
-        <?php foreach ($reports_data as $r): ?>
-        <span style="padding:3px 10px; border-radius:999px; font-size:.72rem; font-weight:500; background:<?php echo $r['submitted'] ? '#f0fdf4' : '#fafafa'; ?>; color:<?php echo $r['submitted'] ? '#166534' : 'var(--muted)'; ?>; border:1px solid <?php echo $r['submitted'] ? '#bbf7d0' : 'var(--border)'; ?>">
-            <?php echo htmlspecialchars($r['name']); ?>
-        </span>
-        <?php endforeach; ?>
     </div>
 </div>
 
