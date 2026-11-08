@@ -117,12 +117,7 @@ include __DIR__ . '/../includes/header.php';
     <?php if ($history): ?>
     <div class="table-container">
         <table class="compact">
-            <?php $rs = $scoped ? '' : ' rowspan="2"'; ?>
-            <thead>
-                <tr><th<?php echo $rs; ?>>Date</th><th<?php echo $rs; ?>>Type</th><th class="num"<?php echo $rs; ?>>Qty</th><th<?php echo $rs; ?>>From</th><th<?php echo $rs; ?>>To</th>
-                    <?php if (!$scoped): ?><th colspan="2" class="th-group">Branch stock</th><?php endif; ?><th<?php echo $rs; ?>>Purpose</th><th<?php echo $rs; ?>>By</th></tr>
-                <?php if (!$scoped): ?><tr><th class="num">Before</th><th class="num">After</th></tr><?php endif; ?>
-            </thead>
+            <thead><tr><th>Date</th><th>Type</th><th class="num">Qty</th><th>From</th><th>To</th><th>Purpose</th><th>By</th></tr></thead>
             <tbody>
             <?php foreach ($history as $r): ?>
                 <tr>
@@ -134,10 +129,6 @@ include __DIR__ . '/../includes/header.php';
                     $party_cell  = htmlspecialchars($r['party'] ?: '—'); ?>
                     <td><?php echo $r['type'] === 'Issued' ? $branch_cell : $party_cell; ?></td>
                     <td><?php echo $r['type'] === 'Issued' ? $party_cell : $branch_cell; ?></td>
-                    <?php if (!$scoped): ?>
-                    <td class="num muted"><?php echo $r['old_stock'] !== null ? number_format($r['old_stock']) : '—'; ?></td>
-                    <td class="num"><?php echo $r['new_stock'] !== null ? number_format($r['new_stock']) : '—'; ?></td>
-                    <?php endif; ?>
                     <td class="muted"><?php echo htmlspecialchars($r['purpose'] ?: '—'); ?></td>
                     <td class="muted"><?php echo htmlspecialchars($r['by_name'] ?? '—'); ?></td>
                 </tr>
