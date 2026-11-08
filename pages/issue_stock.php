@@ -15,8 +15,19 @@ if (!in_array($branch_id, $branch_ids, true)) {
     $mine = user_branch_id();
     $branch_id = in_array($mine, $branch_ids, true) ? $mine : ($branch_ids[0] ?? 0);
 }
+// Picking a company moves to one of its branches (the user's own if it is there, otherwise the first)
+$company_id = (int)($_GET['company_id'] ?? 0);
+$co_branches = array_values(array_filter($branches, fn($b) => (int)$b['company_id'] === $company_id));
+if ($co_branches && !in_array($branch_id, array_map(fn($b) => (int)$b['id'], $co_branches), true)) {
+    $mine = user_branch_id();
+    $branch_id = in_array($mine, array_map(fn($b) => (int)$b['id'], $co_branches), true) ? $mine : (int)$co_branches[0]['id'];
+}
 $branch = null;
 foreach ($branches as $b) if ((int)$b['id'] === $branch_id) $branch = $b;
+$company_id  = $branch ? (int)$branch['company_id'] : 0;
+$co_branches = array_values(array_filter($branches, fn($b) => (int)$b['company_id'] === $company_id));
+$companies   = [];
+foreach ($branches as $b) $companies[(int)$b['company_id']] = $b['company_name'];
 
 /** Items with stock at the branch (optionally in one category). */
 function items_at_branch(PDO $pdo, int $branch_id, int $cat_id): array {
@@ -121,26 +132,31 @@ include __DIR__ . '/../includes/header.php';
     <div class="form-title">Select item</div>
     <form method="GET" id="pickForm">
         <?php if ($recent_cat): ?><input type="hidden" name="rcat" value="<?php echo $recent_cat; ?>"><?php endif; ?>
-        <div class="form-row cols-3">
+        <div class="form-row cols-4">
         <div class="form-group">
-            <label for="branch_pick">Issuing from branch</label>
-            <?php if (count($branches) > 1): ?>
+            <label for="company_pick">Issuing from company</label>
+            <?php if (count($companies) > 1): ?>
+            <select id="company_pick" name="company_id" data-resets-item data-resets-branch>
+                <?php foreach ($companies as $cid => $cname): ?>
+                <option value="<?php echo $cid; ?>" <?php echo $cid === $company_id ? 'selected' : ''; ?>><?php echo htmlspecialchars($cname); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <?php else: ?>
+            <input type="text" id="company_pick" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars($branch['company_name']); ?>">
+            <?php endif; ?>
+        </div>
+        <div class="form-group">
+            <label for="branch_pick">Branch</label>
+            <?php if (count($co_branches) > 1): ?>
             <select id="branch_pick" name="branch_id" data-resets-item>
-                <?php $by_co = [];
-                foreach ($branches as $b) $by_co[$b['company_name']][] = $b;
-                foreach ($by_co as $co => $bs): ?>
-                <optgroup label="<?php echo htmlspecialchars($co); ?>">
-                    <?php foreach ($bs as $b): ?>
-                    <option value="<?php echo $b['id']; ?>" <?php echo (int)$b['id'] === $branch_id ? 'selected' : ''; ?>><?php echo htmlspecialchars($b['name']); ?></option>
-                    <?php endforeach; ?>
-                </optgroup>
+                <?php foreach ($co_branches as $b): ?>
+                <option value="<?php echo $b['id']; ?>" <?php echo (int)$b['id'] === $branch_id ? 'selected' : ''; ?>><?php echo htmlspecialchars($b['name']); ?></option>
                 <?php endforeach; ?>
             </select>
             <?php else: ?>
             <input type="text" id="branch_pick" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars($branch['name']); ?>">
             <input type="hidden" name="branch_id" value="<?php echo $branch_id; ?>">
             <?php endif; ?>
-            <small class="muted-text"><?php echo htmlspecialchars($branch['company_name']); ?></small>
         </div>
         <div class="form-group">
             <label for="cat_pick">Category</label>
@@ -282,7 +298,12 @@ include __DIR__ . '/../includes/header.php';
 <script>
 // Changing the branch or category starts the item choice again
 document.querySelectorAll('#pickForm [data-resets-item]').forEach(function (s) {
-    s.addEventListener('change', function () { document.getElementById('item_pick').value = ''; s.form.submit(); });
+    s.addEventListener('change', function () {
+        document.getElementById('item_pick').value = '';
+        // A new company picks its own branch
+        if (s.hasAttribute('data-resets-branch')) { var b = s.form.elements['branch_id']; if (b) b.disabled = true; }
+        s.form.submit();
+    });
 });
 function updateNewStock() {
     var current = <?php echo (int)($selected_item['available'] ?? 0); ?>;

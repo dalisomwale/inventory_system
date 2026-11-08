@@ -1099,6 +1099,9 @@ input.is-invalid { border-color: var(--danger); }
 .form-row.three { grid-template-columns: 1fr 160px 1fr; }
 .form-row.cols-3 { grid-template-columns: repeat(3, 1fr); }
 @media (max-width: 800px) { .form-row.cols-3 { grid-template-columns: 1fr; } }
+.form-row.cols-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 900px) { .form-row.cols-4 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .form-row.cols-4 { grid-template-columns: 1fr; } }
 @media (max-width: 800px) { .form-row.three { grid-template-columns: 1fr; } }
 .row-approved td { background: #f3f9ee; }
 .req-cancel { margin: 4px 0 16px; }
