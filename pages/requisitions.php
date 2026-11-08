@@ -163,32 +163,11 @@ if (!$departments || $raise_any) foreach (org_companies($pdo) as $c) if ($raise_
 asort($form_companies);
 $pre_co = isset($error) ? (int)($_POST['company_id'] ?? 0) : (count($form_companies) === 1 ? (int)array_key_first($form_companies) : ($raise_any ? 0 : req_my_company($pdo)));
 
-if (wants_xlsx()) {
-    // Amount of the quotation the Director approved, where there is one
-    $ids = array_map(fn($p) => (int)$p['quote_id'], array_filter($list, fn($p) => $p['quote_id']));
-    $amounts = $ids ? array_column($pdo->query("SELECT id, amount FROM requisition_files WHERE id IN (" . implode(',', $ids) . ")")->fetchAll(), 'amount', 'id') : [];
-    $co_name = '';
-    foreach ($companies as $c) if ((int)$c['id'] === $company_id) $co_name = $c['name'];
-    xlsx_download('Requisitions ' . $tabs[$tab][0] . ' ' . date('Y-m-d'), [[
-        'name'    => 'Requisitions',
-        'title'   => 'Requisitions - ' . $tabs[$tab][0],
-        'meta'    => array_filter([$co_name ? "Company: $co_name" : '', 'Exported: ' . date('d M Y, H:i')]),
-        'columns' => ['Ref', 'Date raised', 'Raised by', 'Item', ['Qty', 'int'], 'Category', 'Company', 'Department', 'Branch', 'IT-related',
-                      'Stage', ['Quotations', 'int'], 'Approved supplier', ['Approved amount (K)', 'money'], 'Paid on', 'Reason'],
-        'rows'    => array_map(fn($p) => [req_ref((int)$p['id']), date('d M Y', strtotime($p['created_at'])), $p['added_by'] ?? '', $p['item_name'], $p['quantity'],
-                      $p['category_name'] ?? $p['category'] ?? '', $p['company_name'] ?? '', $p['dept_name'] ?? '', $p['branch_name'] ?? '', $p['is_it'] ? 'Yes' : 'No',
-                      req_status_label($p['status']), $p['quotes'], $p['quote_id'] ? ($p['supplier'] ?? '') : '', $p['quote_id'] ? ($amounts[$p['quote_id']] ?? '') : '',
-                      $p['paid_at'] ? date('d M Y', strtotime($p['paid_at'])) : '', $p['reason'] ?? ''], $list),
-        'totals'  => ['Total', '', '', '', '', '', '', '', '', '', '', '', '', array_sum(array_map(fn($p) => $p['quote_id'] ? (float)($amounts[$p['quote_id']] ?? 0) : 0, $list))],
-    ]]);
-}
-
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
     <h1>Requisitions</h1>
-    <?php echo xlsx_button(); ?>
 </div>
 
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>

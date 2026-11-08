@@ -68,7 +68,6 @@ include __DIR__ . '/../includes/header.php';
 <div class="page-header">
     <h1>Transaction History<?php if ($scope_dept !== null): ?> &mdash; <?php echo htmlspecialchars(department_name($scope_dept) ?: 'your department'); ?><?php endif; ?></h1>
     <div style="display:flex; gap:8px; flex-wrap:wrap">
-        <?php echo xlsx_button(); ?>
         <a href="dashboard.php" class="btn btn-sm">Back to Dashboard</a>
     </div>
 </div>
@@ -122,7 +121,10 @@ include __DIR__ . '/../includes/header.php';
 <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0"><?php echo date('d/m/Y', strtotime($filter_date)); ?></h3>
-        <span style="font-size:.76rem; color:var(--muted)"><?php echo count($transactions); ?> result<?php echo count($transactions)!==1?'s':''; ?></span>
+        <div style="display:flex; align-items:center; gap:12px">
+            <span style="font-size:.76rem; color:var(--muted)"><?php echo count($transactions); ?> result<?php echo count($transactions)!==1?'s':''; ?></span>
+            <?php echo xlsx_button(); ?>
+        </div>
     </div>
     <div class="table-container">
         <table>
