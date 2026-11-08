@@ -11,13 +11,13 @@ function ins_stock_value(PDO $pdo): float {
 }
 
 /** Units issued in the last $days days, and in the $days before that. */
-function ins_issued_compare(PDO $pdo, int $days = 30): array {
+function ins_issued_compare(PDO $pdo, int $days = 30, ?int $dept = null): array {
     $st = $pdo->prepare("
         SELECT
           COALESCE(SUM(CASE WHEN created_at >= NOW() - INTERVAL ? DAY THEN quantity END), 0) AS cur,
           COALESCE(SUM(CASE WHEN created_at <  NOW() - INTERVAL ? DAY
                              AND created_at >= NOW() - INTERVAL ? DAY THEN quantity END), 0) AS prev
-        FROM stock_issuing WHERE created_at >= NOW() - INTERVAL ? DAY");
+        FROM stock_issuing WHERE created_at >= NOW() - INTERVAL ? DAY" . ($dept !== null ? ' AND department_id = ' . (int)$dept : ''));
     $st->execute([$days, $days, $days * 2, $days * 2]);
     $r = $st->fetch();
     $cur = (int)$r['cur']; $prev = (int)$r['prev'];
@@ -104,11 +104,11 @@ function ins_value_by_category(PDO $pdo): array {
 }
 
 /** Most-issued items in the last $days days. */
-function ins_top_issued(PDO $pdo, int $days = 30, int $limit = 6): array {
+function ins_top_issued(PDO $pdo, int $days = 30, int $limit = 6, ?int $dept = null): array {
     $st = $pdo->prepare("
         SELECT i.item_name AS label, SUM(s.quantity) AS value, COUNT(*) AS times
         FROM stock_issuing s JOIN items i ON i.id = s.item_id
-        WHERE s.created_at >= NOW() - INTERVAL ? DAY
+        WHERE s.created_at >= NOW() - INTERVAL ? DAY" . ($dept !== null ? ' AND s.department_id = ' . (int)$dept : '') . "
         GROUP BY i.id, i.item_name ORDER BY value DESC LIMIT " . (int)$limit);
     $st->execute([$days]);
     return $st->fetchAll();
@@ -277,13 +277,13 @@ function ins_daily_issued(PDO $pdo, int $days = 30): array {
 }
 
 /** Units and value issued per category in the last $days days. */
-function ins_issued_by_category(PDO $pdo, int $days = 30): array {
+function ins_issued_by_category(PDO $pdo, int $days = 30, ?int $dept = null): array {
     $st = $pdo->prepare("
         SELECT COALESCE(c.name, i.category, 'Other') AS label, SUM(s.quantity) AS value,
                SUM(s.quantity * i.unit_price) AS cost
         FROM stock_issuing s JOIN items i ON i.id = s.item_id
         LEFT JOIN categories c ON c.id = i.category_id
-        WHERE s.created_at >= NOW() - INTERVAL ? DAY
+        WHERE s.created_at >= NOW() - INTERVAL ? DAY" . ($dept !== null ? ' AND s.department_id = ' . (int)$dept : '') . "
         GROUP BY label ORDER BY value DESC");
     $st->execute([$days]);
     return $st->fetchAll();

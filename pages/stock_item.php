@@ -9,6 +9,14 @@ $st = $pdo->prepare("SELECT i.*, COALESCE(c.name, i.category, 'Other') AS catego
 $st->execute([(int)($_GET['id'] ?? 0)]);
 $item = $st->fetch();
 if (!$item) { $_SESSION['flash_error'] = 'That item no longer exists.'; header('Location: stock.php'); exit(); }
+// Department-limited users only see items issued to their department, and only those issues
+$scope_dept = my_scope_department();
+$scoped     = $scope_dept !== null;
+if ($scoped) {
+    $chk = $pdo->prepare("SELECT COUNT(*) FROM stock_issuing WHERE item_id = ? AND department_id = ?");
+    $chk->execute([$item['id'], $scope_dept]);
+    if (!$chk->fetchColumn()) { $_SESSION['flash_error'] = "That item hasn't been issued to your department."; header('Location: stock.php'); exit(); }
+}
 
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
 if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
@@ -17,14 +25,17 @@ $f = null;
 foreach (ins_item_forecast($pdo, 30) as $r) { if ((int)$r['id'] === (int)$item['id']) { $f = $r; break; } }
 $state = $item['current_quantity'] <= 0 ? 'out' : ($item['current_quantity'] <= $item['reorder_level'] ? 'low' : 'ok');
 
-$h = $pdo->prepare("
+$h = $pdo->prepare($scoped ? "
+    SELECT 'Issued' AS type, s.created_at, s.quantity, CONCAT(s.issued_to, IF(s.recipient IS NULL OR s.recipient = '', '', CONCAT(' (', s.recipient, ')'))) AS party, s.old_stock, s.new_stock, u.full_name AS by_name, s.purpose, b.name AS branch_name
+    FROM stock_issuing s LEFT JOIN users u ON u.id = s.issued_by LEFT JOIN branches b ON b.id = s.branch_id
+    WHERE s.item_id = ? AND s.department_id = " . (int)$scope_dept . " ORDER BY s.created_at DESC LIMIT 100" : "
     (SELECT 'Received' AS type, r.created_at, r.quantity, r.supplier AS party, r.old_stock, r.new_stock, u.full_name AS by_name, NULL AS purpose, b.name AS branch_name
      FROM stock_receiving r LEFT JOIN users u ON u.id = r.received_by LEFT JOIN branches b ON b.id = r.branch_id WHERE r.item_id = ?)
     UNION ALL
     (SELECT 'Issued', s.created_at, s.quantity, CONCAT(s.issued_to, IF(s.recipient IS NULL OR s.recipient = '', '', CONCAT(' (', s.recipient, ')'))), s.old_stock, s.new_stock, u.full_name, s.purpose, b.name
      FROM stock_issuing s LEFT JOIN users u ON u.id = s.issued_by LEFT JOIN branches b ON b.id = s.branch_id WHERE s.item_id = ?)
     ORDER BY created_at DESC LIMIT 100");
-$h->execute([$item['id'], $item['id']]);
+$h->execute($scoped ? [$item['id']] : [$item['id'], $item['id']]);
 $history     = $h->fetchAll();
 $has_history = count($history) > 0;
 $received    = array_sum(array_map(fn($r) => $r['type'] === 'Received' ? $r['quantity'] : 0, $history));
@@ -44,7 +55,7 @@ $open_req = $pdo->prepare("SELECT * FROM procurement p WHERE (p.item_id = ? OR L
 $open_req->execute([$item['id'], $item['item_name']]);
 $open_req = $open_req->fetch();
 
-$breadcrumbs = [['Manage Stock', 'stock.php'], [$item['item_name'], null]];
+$breadcrumbs = [[$scoped ? 'Stock' : 'Manage Stock', 'stock.php'], [$item['item_name'], null]];
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -52,7 +63,8 @@ include __DIR__ . '/../includes/header.php';
     <div>
         <h1 style="margin-bottom:4px"><?php echo htmlspecialchars($item['item_name']); ?></h1>
         <span class="cat-pill"><?php echo htmlspecialchars($item['category_name']); ?></span>
-        <?php if ($state === 'out'): ?><span class="status-issuing">&#9888; Out of stock</span>
+        <?php if ($scoped): ?>
+        <?php elseif ($state === 'out'): ?><span class="status-issuing">&#9888; Out of stock</span>
         <?php elseif ($state === 'low'): ?><span class="status-pending">&#9888; Below reorder level</span>
         <?php else: ?><span class="status-receiving">&#10003; In stock</span><?php endif; ?>
     </div>
@@ -93,7 +105,15 @@ include __DIR__ . '/../includes/header.php';
 <!-- Details -->
 <div class="grid-2">
     <div class="card">
-        <div class="card-head"><h3>Stock</h3></div>
+        <div class="card-head"><h3><?php echo $scoped ? 'Issued to ' . htmlspecialchars(department_name($scope_dept)) : 'Stock'; ?></h3></div>
+        <?php if ($scoped): ?>
+        <dl class="detail-list">
+            <div><dt>Total issued</dt><dd class="big"><?php echo number_format($issued); ?></dd></div>
+            <div><dt>Times issued</dt><dd><?php echo number_format(count($history)); ?></dd></div>
+            <div><dt>Last issued</dt><dd><?php echo $history ? date('d M Y', strtotime($history[0]['created_at'])) : '—'; ?></dd></div>
+            <div><dt>Value issued</dt><dd><?php echo kwacha($issued * (float)$item['unit_price']); ?></dd></div>
+        </dl>
+        <?php else: ?>
         <dl class="detail-list">
             <div><dt>In stock</dt><dd class="big qty-<?php echo $state; ?>"><?php echo number_format($item['current_quantity']); ?></dd></div>
             <div><dt>Reorder level</dt><dd><?php echo number_format($item['reorder_level']); ?></dd></div>
@@ -102,12 +122,13 @@ include __DIR__ . '/../includes/header.php';
             <div><dt>Total received</dt><dd><?php echo number_format($received); ?></dd></div>
             <div><dt>Total issued</dt><dd><?php echo number_format($issued); ?></dd></div>
         </dl>
+        <?php endif; ?>
     </div>
     <div class="card">
         <div class="card-head"><h3>Details</h3></div>
         <dl class="detail-list">
             <div><dt>Unit price</dt><dd><?php echo kwacha((float)$item['unit_price']); ?></dd></div>
-            <div><dt>Stock value</dt><dd><?php echo kwacha($item['current_quantity'] * $item['unit_price']); ?></dd></div>
+            <?php if (!$scoped): ?><div><dt>Stock value</dt><dd><?php echo kwacha($item['current_quantity'] * $item['unit_price']); ?></dd></div><?php endif; ?>
             <div><dt>Date added</dt><dd><?php echo date('d M Y', strtotime($item['created_at'])); ?></dd></div>
             <div><dt>Last updated</dt><dd><?php echo $item['updated_at'] ? date('d M Y, H:i', strtotime($item['updated_at'])) : '—'; ?></dd></div>
             <div class="wide"><dt>Description</dt><dd><?php echo $item['description'] ? nl2br(htmlspecialchars($item['description'])) : '—'; ?></dd></div>
@@ -115,7 +136,7 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<?php if (count($by_branch) > 1): ?>
+<?php if (!$scoped && count($by_branch) > 1): ?>
 <!-- Stock by branch -->
 <div class="card">
     <div class="card-head"><h3>Stock by branch</h3><span class="card-hint">Total <?php echo number_format($item['current_quantity']); ?></span></div>
@@ -144,7 +165,7 @@ include __DIR__ . '/../includes/header.php';
     <?php if ($history): ?>
     <div class="table-container">
         <table class="compact">
-            <thead><tr><th>Date</th><th>Type</th><th>Branch</th><th class="num">Qty</th><th class="num">Branch stock before &rarr; after</th><th>From / to</th><th>Purpose</th><th>By</th></tr></thead>
+            <thead><tr><th>Date</th><th>Type</th><th>Branch</th><th class="num">Qty</th><?php if (!$scoped): ?><th class="num">Branch stock before &rarr; after</th><?php endif; ?><th>From / to</th><th>Purpose</th><th>By</th></tr></thead>
             <tbody>
             <?php foreach ($history as $r): ?>
                 <tr>
@@ -152,7 +173,7 @@ include __DIR__ . '/../includes/header.php';
                     <td><span class="status-<?php echo strtolower($r['type']); ?>"><?php echo $r['type']; ?></span></td>
                     <td class="muted"><?php echo htmlspecialchars($r['branch_name'] ?? '—'); ?></td>
                     <td class="num"><strong><?php echo ($r['type'] === 'Issued' ? '−' : '+') . number_format($r['quantity']); ?></strong></td>
-                    <td class="num muted"><?php echo $r['old_stock'] !== null ? number_format($r['old_stock']) . ' &rarr; ' . number_format($r['new_stock']) : '—'; ?></td>
+                    <?php if (!$scoped): ?><td class="num muted"><?php echo $r['old_stock'] !== null ? number_format($r['old_stock']) . ' &rarr; ' . number_format($r['new_stock']) : '—'; ?></td><?php endif; ?>
                     <td><?php echo htmlspecialchars($r['party'] ?: '—'); ?></td>
                     <td class="muted"><?php echo htmlspecialchars($r['purpose'] ?: '—'); ?></td>
                     <td class="muted"><?php echo htmlspecialchars($r['by_name'] ?? '—'); ?></td>

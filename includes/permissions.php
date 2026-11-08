@@ -35,6 +35,11 @@ const ACCESS_AREAS = [
         ['View',          'See submitted monthly reports and category activity.', ['reports.view']],
         ['View & submit', 'Everything in View, plus submit or update the month-end report for a category.', ['reports.view', 'reports.submit']],
     ]],
+    // Narrows Stock, Transactions, Reports and the dashboard to what was issued to the user's own department
+    'scope' => ['Department limit', 'Whose stock, transactions and reports they see', [
+        ['Whole organisation',   'See stock, transactions and reports for every department (as far as their other access allows).', []],
+        ['Own department only',  'See only what was issued to their own department: its stock, its transactions and its monthly report. Set the department on Admin › Users.', ['scope.department']],
+    ]],
     'organisation' => ['Organisation', 'Companies, branches and departments', [
         ['No access', "Can't open Companies, Branches or Departments.", []],
         ['Manage',    'Add, rename, disable and delete companies, branches and departments.', ['admin.org']],
@@ -112,6 +117,28 @@ function can(string $perm): bool {
 function can_any(string ...$perms): bool {
     foreach ($perms as $p) if (can($p)) return true;
     return false;
+}
+
+/**
+ * The department a department-limited user is held to, or null if they see everything.
+ * Returns 0 when they are limited but have no department yet (so they see nothing).
+ */
+function my_scope_department(): ?int {
+    static $d = false;
+    if ($d !== false) return $d;
+    if (isAdmin() || !can('scope.department')) return $d = null;
+    global $pdo;
+    $st = $pdo->prepare("SELECT department_id FROM users WHERE id = ?");
+    $st->execute([$_SESSION['user_id'] ?? 0]);
+    return $d = (int)$st->fetchColumn();
+}
+
+/** The name of a department, e.g. for headings. */
+function department_name(int $id): string {
+    global $pdo;
+    $st = $pdo->prepare("SELECT d.name FROM departments d WHERE d.id = ?");
+    $st->execute([$id]);
+    return (string)$st->fetchColumn();
 }
 
 /** Can the user open the Requisitions pages at all? */

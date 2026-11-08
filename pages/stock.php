@@ -10,7 +10,13 @@ $categories = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetc
 $q       = is_string($_GET['q'] ?? null) ? trim(mb_substr($_GET['q'], 0, 100)) : '';
 $cat_id  = (int)($_GET['category_id'] ?? 0);
 $status  = in_array($_GET['status'] ?? '', ['ok', 'low', 'out', 'soon'], true) ? $_GET['status'] : '';
-$sorts   = ['name' => 'Name', 'stock' => 'Stock (lowest first)', 'value' => 'Value (highest first)', 'added' => 'Date added (newest first)'];
+// Department-limited users see only what was issued to their department
+$scope_dept = my_scope_department();
+$scoped     = $scope_dept !== null;
+$sorts   = $scoped
+    ? ['name' => 'Name', 'issued' => 'Most issued', 'value' => 'Value (highest first)', 'last' => 'Last issued (newest first)']
+    : ['name' => 'Name', 'stock' => 'Stock (lowest first)', 'value' => 'Value (highest first)', 'added' => 'Date added (newest first)'];
+if ($scoped) $status = '';
 $sort    = array_key_exists($_GET['sort'] ?? '', $sorts) ? $_GET['sort'] : 'name';
 $companies   = org_companies($pdo);
 $branches    = org_branches($pdo);
@@ -24,6 +30,13 @@ foreach ($branches as $b) if ((int)$b['id'] === $branch_id && (!$company_id || (
 $branch_id = $branch ? (int)$branch['id'] : 0;
 foreach ($departments as $d) if ((int)$d['id'] === $dept_id && (!$company_id || (int)$d['company_id'] === $company_id) && (!$branch_id || (int)$d['branch_id'] === $branch_id)) $dept = $d;
 $dept_id = $dept ? (int)$dept['id'] : 0;
+if ($scoped) {
+    $company_id = 0; $branch = null; $branch_id = 0;
+    $sd = $pdo->prepare("SELECT d.id, d.name, d.branch_id, b.name AS branch_name, b.company_id FROM departments d JOIN branches b ON b.id = d.branch_id WHERE d.id = ?");
+    $sd->execute([$scope_dept]);
+    $dept    = $sd->fetch() ?: null;
+    $dept_id = $scope_dept;
+}
 // A department's stock is held at its branch
 if ($dept && !$branch_id) { $branch_id = (int)$dept['branch_id']; foreach ($branches as $b) if ((int)$b['id'] === $branch_id) $branch = $b; }
 $company_name = '';
@@ -54,15 +67,18 @@ $company_qty = ($company_id && !$branch_id)
     ? array_column($pdo->query("SELECT item_id, SUM(quantity) AS q FROM branch_stock" . ($scope_sql ? " WHERE branch_id IN ($scope_sql)" : " WHERE 0") . " GROUP BY item_id")->fetchAll(), 'q', 'item_id')
     : null;
 // Department: only items issued to it, with how many it has had
-$dept_issued = null;
-if ($dept_id) {
-    $di = $pdo->prepare("SELECT item_id, SUM(quantity) AS q FROM stock_issuing WHERE department_id = ? GROUP BY item_id");
+$dept_issued = null; $dept_last = [];
+if ($dept_id || $scoped) {
+    $di = $pdo->prepare("SELECT item_id, SUM(quantity) AS q, MAX(created_at) AS last FROM stock_issuing WHERE department_id = ? GROUP BY item_id");
     $di->execute([$dept_id]);
-    $dept_issued = array_column($di->fetchAll(), 'q', 'item_id');
+    $di = $di->fetchAll();
+    $dept_issued = array_column($di, 'q', 'item_id');
+    $dept_last   = array_column($di, 'last', 'item_id');
 }
 
 $rows = [];
 foreach ($all as $r) {
+    if ($scoped && empty($dept_issued[$r['id']])) continue;
     $f = $forecast[$r['id']] ?? ['days_left' => null, 'per_day' => 0, 'suggest' => 0];
     $r['initial']   = isset($initial[$r['id']]) ? (int)$initial[$r['id']] : null;
     $r['days_left'] = $f['days_left'];
@@ -71,7 +87,8 @@ foreach ($all as $r) {
     if ($branch_id) $r['current_quantity'] = (int)($f['current_quantity'] ?? 0); // this branch's stock
     elseif ($company_qty !== null) $r['current_quantity'] = (int)($company_qty[$r['id']] ?? 0);
     $r['issued_to_dept'] = $dept_issued !== null ? (int)($dept_issued[$r['id']] ?? 0) : null;
-    $r['value']     = $r['current_quantity'] * $r['unit_price'];
+    $r['value']     = $scoped ? $r['issued_to_dept'] * $r['unit_price'] : $r['current_quantity'] * $r['unit_price'];
+    $r['last_issued'] = $dept_last[$r['id']] ?? null;
     $r['state']     = $r['current_quantity'] <= 0 ? 'out' : ($r['current_quantity'] <= $r['reorder_level'] ? 'low' : 'ok');
     $r['last_move'] = $r['last_move'] === '1970-01-01 00:00:00' || $r['last_move'] === '1970-01-01' ? null : $r['last_move'];
     $rows[] = $r;
@@ -99,6 +116,8 @@ usort($rows, function ($a, $b) use ($sort) {
         case 'stock':  return $a['current_quantity'] <=> $b['current_quantity'] ?: strcasecmp($a['item_name'], $b['item_name']);
         case 'value':  return $b['value'] <=> $a['value'];
         case 'added':  return strcmp($b['created_at'], $a['created_at']);
+        case 'issued': return $b['issued_to_dept'] <=> $a['issued_to_dept'] ?: strcasecmp($a['item_name'], $b['item_name']);
+        case 'last':   return strcmp((string)$b['last_issued'], (string)$a['last_issued']);
         default:       return strcasecmp($a['item_name'], $b['item_name']);
     }
 });
@@ -117,7 +136,7 @@ include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
-    <h1>Manage Stock</h1>
+    <h1><?php echo $scoped ? 'Stock &mdash; ' . htmlspecialchars($dept['name'] ?? 'your department') : 'Manage Stock'; ?></h1>
 </div>
 
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
@@ -129,7 +148,7 @@ include __DIR__ . '/../includes/header.php';
         <label for="q">Search</label>
         <input type="search" id="q" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="Item name or description" maxlength="100">
     </div>
-    <?php if (count($companies) > 1): ?>
+    <?php if (!$scoped && count($companies) > 1): ?>
     <div class="form-group">
         <label for="company_id">Company</label>
         <select id="company_id" name="company_id">
@@ -140,7 +159,7 @@ include __DIR__ . '/../includes/header.php';
         </select>
     </div>
     <?php endif; ?>
-    <?php if (count($branches) > 1): ?>
+    <?php if (!$scoped && count($branches) > 1): ?>
     <div class="form-group">
         <label for="branch_id">Branch</label>
         <select id="branch_id" name="branch_id">
@@ -151,7 +170,7 @@ include __DIR__ . '/../includes/header.php';
         </select>
     </div>
     <?php endif; ?>
-    <?php if ($departments): ?>
+    <?php if (!$scoped && $departments): ?>
     <div class="form-group">
         <label for="department_id">Department</label>
         <select id="department_id" name="department_id">
@@ -173,6 +192,7 @@ include __DIR__ . '/../includes/header.php';
             <?php endforeach; ?>
         </select>
     </div>
+    <?php if (!$scoped): ?>
     <div class="form-group">
         <label for="status">Status</label>
         <select id="status" name="status">
@@ -183,6 +203,7 @@ include __DIR__ . '/../includes/header.php';
             <option value="out"  <?php echo $status === 'out'  ? 'selected' : ''; ?>>Out of stock</option>
         </select>
     </div>
+    <?php endif; ?>
     <div class="form-group">
         <label for="sort">Sort by</label>
         <select id="sort" name="sort">
@@ -193,7 +214,7 @@ include __DIR__ . '/../includes/header.php';
     </div>
     <div class="form-group filter-buttons">
         <noscript><button type="submit" class="btn btn-primary">Apply</button></noscript>
-        <?php if ($q !== '' || $cat_id || $status || $sort !== 'name' || $branch_id || $company_id || $dept_id): ?><a href="stock.php" class="btn">Clear</a><?php endif; ?>
+        <?php if ($q !== '' || $cat_id || $status || $sort !== 'name' || (!$scoped && ($branch_id || $company_id || $dept_id))): ?><a href="stock.php" class="btn">Clear</a><?php endif; ?>
     </div>
 </form>
 
@@ -201,7 +222,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="card">
     <div class="card-head">
         <h3>
-            <?php echo count($rows) === $tot_items ? 'All items' : 'Showing ' . count($rows) . ' of ' . $tot_items . ' items'; ?><?php echo $dept ? ' issued to ' . htmlspecialchars($dept['name']) . ' (stock at ' . htmlspecialchars($branch_name) . ')' : ($branch_id ? ' at ' . htmlspecialchars($branch_name) : ($company_id ? ' at ' . htmlspecialchars($company_name) : '')); ?>
+            <?php echo count($rows) === $tot_items ? 'All items' : 'Showing ' . count($rows) . ' of ' . $tot_items . ' items'; ?><?php echo $scoped ? ' issued to ' . htmlspecialchars($dept['name'] ?? 'your department') : ($dept ? ' issued to ' . htmlspecialchars($dept['name']) . ' (stock at ' . htmlspecialchars($branch_name) . ')' : ($branch_id ? ' at ' . htmlspecialchars($branch_name) : ($company_id ? ' at ' . htmlspecialchars($company_name) : ''))); ?>
         </h3>
     </div>
 
@@ -209,10 +230,14 @@ include __DIR__ . '/../includes/header.php';
     <div class="table-container">
         <table class="stock-table">
             <thead>
+                <?php if ($scoped): ?>
+                <tr><th>Item</th><th>Category</th><th class="num">Issued to <?php echo htmlspecialchars($dept['name'] ?? 'department'); ?></th><th class="num">Unit price</th><th class="num">Value</th><th>Last issued</th><th></th></tr>
+                <?php else: ?>
                 <tr>
                     <th>Item</th><th>Category</th><th class="num">Initial stock</th><th class="num">Currently in stock</th><?php if ($dept): ?><th class="num">Issued to <?php echo htmlspecialchars($dept['name']); ?></th><?php endif; ?><th class="num">Reorder at</th>
                     <th class="num">Value</th><th>Date added</th><th></th>
                 </tr>
+                <?php endif; ?>
             </thead>
             <tbody>
             <?php foreach ($rows as $r): ?>
@@ -222,12 +247,19 @@ include __DIR__ . '/../includes/header.php';
                         <?php if ($r['description']): ?><div class="item-desc"><?php echo htmlspecialchars($r['description']); ?></div><?php endif; ?>
                     </td>
                     <td><span class="cat-pill"><?php echo htmlspecialchars($r['category_name']); ?></span></td>
+                    <?php if ($scoped): ?>
+                    <td class="num"><strong><?php echo number_format($r['issued_to_dept']); ?></strong></td>
+                    <td class="num muted"><?php echo kwacha((float)$r['unit_price']); ?></td>
+                    <td class="num"><?php echo kwacha_whole($r['value']); ?></td>
+                    <td class="muted" style="white-space:nowrap"><?php echo $r['last_issued'] ? date('d M Y', strtotime($r['last_issued'])) : '—'; ?></td>
+                    <?php else: ?>
                     <td class="num muted"><?php echo $r['initial'] === null ? '—' : number_format($r['initial']); ?></td>
                     <td class="num"><strong class="qty-<?php echo $r['state']; ?>"><?php echo number_format($r['current_quantity']); ?></strong></td>
                     <?php if ($dept): ?><td class="num"><?php echo number_format($r['issued_to_dept']); ?></td><?php endif; ?>
                     <td class="num muted"><?php echo number_format($r['reorder_level']); ?></td>
                     <td class="num"><?php echo kwacha_whole($r['value']); ?></td>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($r['created_at'])); ?></td>
+                    <?php endif; ?>
                     <td><div class="row-actions">
                         <a href="stock_item.php?id=<?php echo $r['id']; ?>" class="btn btn-icon" aria-label="View <?php echo htmlspecialchars($r['item_name']); ?>" data-tip="View"><?php echo row_icon('view'); ?></a>
 <?php if (can('items.manage')): ?>
@@ -251,6 +283,8 @@ include __DIR__ . '/../includes/header.php';
             </tbody>
         </table>
     </div>
+    <?php elseif ($scoped && $tot_items === 0): ?>
+    <div class="empty-state"><p><?php echo $dept ? 'Nothing has been issued to ' . htmlspecialchars($dept['name']) . ' yet.' : 'Your account has no department yet. Ask the System Admin to set it on Admin › Users.'; ?></p></div>
     <?php elseif ($tot_items === 0): ?>
     <div class="empty-state">
         <p>There are no items yet.</p>

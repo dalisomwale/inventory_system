@@ -25,6 +25,21 @@ $total_cats      = count($reports_data);
 $submitted_count = count(array_filter($reports_data, fn($r) => $r['submitted']));
 
 require_once __DIR__ . '/../includes/insights.php';
+// Department-limited users see only their department's figures
+$scope_dept = my_scope_department();
+$scoped     = $scope_dept !== null;
+if ($scoped) {
+    $dept_name     = $scope_dept ? department_name($scope_dept) : '';
+    $issued        = ins_issued_compare($pdo, 30, (int)$scope_dept);
+    $dv = $pdo->prepare("SELECT COALESCE(SUM(s.quantity * i.unit_price), 0) FROM stock_issuing s JOIN items i ON i.id = s.item_id WHERE s.department_id = ? AND s.created_at >= NOW() - INTERVAL 30 DAY");
+    $dv->execute([$scope_dept]);
+    $dept_value    = (float)$dv->fetchColumn();
+    $di = $pdo->prepare("SELECT COUNT(DISTINCT item_id) FROM stock_issuing WHERE department_id = ?");
+    $di->execute([$scope_dept]);
+    $dept_items    = (int)$di->fetchColumn();
+    $by_cat_issued = ins_issued_by_category($pdo, 30, (int)$scope_dept);
+    $top_issued    = ins_top_issued($pdo, 30, 6, (int)$scope_dept);
+} else {
 $stock_value   = ins_stock_value($pdo);
 $issued        = ins_issued_compare($pdo, 30);
 $forecast      = ins_item_forecast($pdo, 30);
@@ -38,6 +53,7 @@ $week_recv     = array_sum(array_column($weekly, 'received'));
 $week_issued   = array_sum(array_column($weekly, 'issued'));
 $health        = ins_stock_health($forecast);
 $by_cat_issued = ins_issued_by_category($pdo, 30);
+}
 
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
 if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
@@ -54,6 +70,26 @@ include __DIR__ . '/../includes/header.php';
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
 <!-- Headline numbers -->
+<?php if ($scoped): ?>
+<div class="kpi-row">
+    <div class="kpi">
+        <div class="kpi-label">Issued to <?php echo htmlspecialchars($dept_name ?: 'your department'); ?>, last 30 days</div>
+        <div class="kpi-value"><?php echo number_format($issued['current']); ?> <span class="kpi-unit">units</span></div>
+    </div>
+    <div class="kpi">
+        <div class="kpi-label">Value issued, last 30 days</div>
+        <div class="kpi-value"><?php echo kwacha($dept_value, true); ?></div>
+    </div>
+    <div class="kpi">
+        <div class="kpi-label">Items your department uses</div>
+        <div class="kpi-value"><?php echo number_format($dept_items); ?></div>
+    </div>
+    <div class="kpi">
+        <div class="kpi-label">Requisitions</div>
+        <div class="kpi-value <?php echo $to_order ? 'is-warn' : ''; ?>"><?php echo $to_order; ?> <span class="kpi-unit">waiting for you</span></div>
+    </div>
+</div>
+<?php else: ?>
 <div class="kpi-row">
     <div class="kpi">
         <div class="kpi-label">Stock value</div>
@@ -73,15 +109,31 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<?php endif; ?>
+
 <!-- Quick actions -->
 <div class="action-tiles stacked">
     <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive'), '', 'receive'); ?><?php endif; ?>
     <?php if (can('stock.issue')): ?><?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue'), '', 'issue'); ?><?php endif; ?>
-    <?php if (can('stock.view')): ?><?php echo action_tile('stock.php', 'Manage stock', 'All items and levels', icon('stock'), '', 'stock'); ?><?php endif; ?>
+    <?php if (can('stock.view')): ?><?php echo action_tile('stock.php', $scoped ? 'Stock' : 'Manage stock', $scoped ? 'Your department\'s items' : 'All items and levels', icon('stock'), '', 'stock'); ?><?php endif; ?>
     <?php if (req_can_open()): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), '', 'request'); ?><?php endif; ?>
-    <?php if (can_any('reports.view','reports.submit')): ?><?php echo action_tile('reports.php', 'Monthly reports', $submitted_count . ' of ' . $total_cats . ' submitted', icon('chart'), '', 'reports'); ?><?php endif; ?>
+    <?php if (can_any('reports.view','reports.submit')): ?><?php echo action_tile('reports.php', 'Monthly reports', $scoped ? 'Your department, by month' : $submitted_count . ' of ' . $total_cats . ' submitted', icon('chart'), '', 'reports'); ?><?php endif; ?>
 </div>
 
+<?php if ($scoped): ?>
+<div class="grid-2">
+    <div class="card">
+        <div class="card-head"><h3>Issued by category &mdash; last 30 days</h3><span class="card-hint">Units</span></div>
+        <?php echo $by_cat_issued
+            ? chart_hbars(array_map(fn($r) => ['label' => $r['label'], 'value' => $r['value']], $by_cat_issued), fn($v) => number_format($v) . ' units')
+            : '<div class="empty-state"><p>Nothing issued to your department in the last 30 days.</p></div>'; ?>
+    </div>
+    <div class="card">
+        <div class="card-head"><h3>Most issued &mdash; last 30 days</h3><?php if (can('transactions.view')): ?><a href="view_transactions.php" class="btn btn-sm">Transactions</a><?php endif; ?></div>
+        <?php echo $top_issued ? chart_hbars($top_issued, fn($v) => number_format($v) . ' units') : '<div class="empty-state"><p>Nothing issued to your department in the last 30 days.</p></div>'; ?>
+    </div>
+</div>
+<?php else: ?>
 <!-- Movement + health -->
 <div class="grid-2 wide-left">
     <div class="card">
@@ -184,5 +236,6 @@ include __DIR__ . '/../includes/header.php';
                                              fn($v) => kwacha_whole((float)$v)) : '<div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>'; ?>
     </div>
 </div>
+<?php endif; ?>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

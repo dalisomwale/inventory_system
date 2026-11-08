@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 requirePermission('reports.view');
+// Department-limited users see their department's report instead of the organisation-wide ones
+if (my_scope_department() !== null) { header('Location: reports.php'); exit(); }
 
 $selected_month       = $_GET['month']       ?? date('Y-m');
 $selected_category_id = (int)($_GET['category_id'] ?? 0);

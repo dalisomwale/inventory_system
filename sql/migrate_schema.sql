@@ -268,6 +268,12 @@ DROP PROCEDURE IF EXISTS add_email_index;
 -- Give total_value a default so older code paths can't fail on insert
 ALTER TABLE category_monthly_reports MODIFY total_value DECIMAL(15,2) NOT NULL DEFAULT 0.00;
 
+-- Department Managers see only their own department's stock, transactions and monthly report
+INSERT IGNORE INTO role_permissions (role_id, permission)
+    SELECT r.id, p.perm FROM roles r
+    JOIN (SELECT 'scope.department' AS perm UNION SELECT 'stock.view' UNION SELECT 'transactions.view' UNION SELECT 'reports.view') p
+    WHERE r.name = 'Department Manager';
+
 SELECT 'Schema is up to date.' AS result;
 
 -- Accounts that can't sign in until an email is set:

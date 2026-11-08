@@ -2,6 +2,8 @@
 // category_reports.php — front desk view
 require_once __DIR__ . '/../includes/auth.php';
 requirePermission('reports.view');
+// Department-limited users see their department's report instead of the organisation-wide ones
+if (my_scope_department() !== null) { header('Location: reports.php'); exit(); }
 
 $categories           = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 $selected_category_id = (int)($_GET['category_id'] ?? 0);

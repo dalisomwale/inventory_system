@@ -6,8 +6,12 @@ $filter_type = $_GET['type']    ?? 'all';
 $filter_date = $_GET['date']    ?? date('Y-m-d');
 $filter_item = (int)($_GET['item_id'] ?? 0);
 $filter_cat  = $_GET['cat']     ?? '';
+// Department-limited users only see what was issued to their department
+$scope_dept  = my_scope_department();
+if ($scope_dept !== null) $filter_type = 'issuing';
+$cond_dept   = $scope_dept !== null ? " AND si.department_id = " . (int)$scope_dept : "";
 
-$all_items = $pdo->query("SELECT * FROM items ORDER BY category, item_name")->fetchAll();
+$all_items = $pdo->query("SELECT * FROM items" . ($scope_dept !== null ? " WHERE id IN (SELECT item_id FROM stock_issuing WHERE department_id = " . (int)$scope_dept . ")" : "") . " ORDER BY category, item_name")->fetchAll();
 $grouped   = [];
 foreach ($all_items as $it) { $grouped[$it['category']?:'General'][] = $it; }
 $all_cats  = getCategories($pdo);
@@ -17,7 +21,7 @@ $base_r = "SELECT 'Receiving' as type, r.id, r.item_id, r.quantity, r.supplier, 
            WHERE DATE(r.created_at) = ?";
 $base_i = "SELECT 'Issuing' as type, si.id, si.item_id, si.quantity, NULL as supplier, si.issued_to, si.purpose, si.created_at, i.item_name, i.category, u.full_name as user_name, b.name as branch_name
            FROM stock_issuing si JOIN items i ON si.item_id=i.id LEFT JOIN users u ON si.issued_by=u.id LEFT JOIN branches b ON b.id=si.branch_id
-           WHERE DATE(si.created_at) = ?";
+           WHERE DATE(si.created_at) = ?" . $cond_dept;
 $cond_item = $filter_item ? " AND {tbl}.item_id = ?" : "";
 $cond_cat  = $filter_cat  ? " AND i.category = ?"   : "";
 
@@ -44,13 +48,14 @@ include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
-    <h1>Transaction History</h1>
+    <h1>Transaction History<?php if ($scope_dept !== null): ?> &mdash; <?php echo htmlspecialchars(department_name($scope_dept) ?: 'your department'); ?><?php endif; ?></h1>
     <a href="dashboard.php" class="btn btn-sm">Back to Dashboard</a>
 </div>
 
 <!-- Filters -->
 <div class="card" style="margin-bottom:16px;">
     <form method="GET" class="filter-form">
+        <?php if ($scope_dept === null): ?>
         <div class="form-group">
             <label>Type</label>
             <select name="type">
@@ -59,6 +64,7 @@ include __DIR__ . '/../includes/header.php';
                 <option value="issuing"   <?php echo $filter_type==='issuing'   ?'selected':'';?>>Issuing</option>
             </select>
         </div>
+        <?php endif; ?>
         <div class="form-group">
             <label>Date</label>
             <input type="date" name="date" value="<?php echo htmlspecialchars($filter_date); ?>" required>

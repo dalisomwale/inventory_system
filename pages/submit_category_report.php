@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 requirePermission('reports.submit');
+// Department-limited users see their department's report instead of the organisation-wide ones
+if (my_scope_department() !== null) { header('Location: reports.php'); exit(); }
 
 $current_month        = date('Y-m');
 $selected_month       = safe_month($_GET['month'] ?? null);

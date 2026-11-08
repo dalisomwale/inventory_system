@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 requirePermission('reports.view');
+// Department-limited users get their own department's report
+if (my_scope_department() !== null) { require __DIR__ . '/../includes/department_report.php'; exit(); }
 
 $selected_month       = $_GET['month']       ?? date('Y-m');
 $selected_category_id = (int)($_GET['category_id'] ?? 0);

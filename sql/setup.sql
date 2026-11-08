@@ -73,7 +73,7 @@ INSERT IGNORE INTO role_permissions (role_id, permission)
                       UNION SELECT 'categories.manage' UNION SELECT 'requisitions.raise'
                       UNION SELECT 'transactions.view' UNION SELECT 'reports.view' UNION SELECT 'reports.submit') x;
 INSERT IGNORE INTO role_permissions (role_id, permission) VALUES
-    (3, 'requisitions.raise'), (3, 'stock.view'),
+    (3, 'requisitions.raise'), (3, 'stock.view'), (3, 'scope.department'), (3, 'transactions.view'), (3, 'reports.view'),
     (4, 'requisitions.it_quotes'), (4, 'stock.view'),
     (5, 'requisitions.approve'), (5, 'requisitions.view_all'), (5, 'stock.view'), (5, 'reports.view'),
     (6, 'requisitions.accounts'),
