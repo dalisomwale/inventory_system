@@ -44,6 +44,20 @@ $issued      = array_sum(array_map(fn($r) => $r['type'] === 'Issued'   ? $r['qua
 
 
 $breadcrumbs = [[$scoped ? 'Stock' : 'Manage Stock', 'stock.php'], [$item['item_name'], null]];
+if (wants_xlsx()) {
+    xlsx_download("Stock history {$item['item_name']} " . date('Y-m-d'), [[
+        'name'    => 'Stock history',
+        'title'   => "Stock history - {$item['item_name']}",
+        'meta'    => array_filter(['Category: ' . $item['category_name'], $scoped ? 'Department: ' . department_name($scope_dept) : '',
+                                   count($history) === 100 ? 'Latest 100 movements' : '', 'Exported: ' . date('d M Y, H:i')]),
+        'columns' => ['Date', 'Type', ['Qty', 'int'], 'From', 'To', 'Purpose', 'By'],
+        'rows'    => array_map(fn($r) => [date('d M Y, H:i', strtotime($r['created_at'])), $r['type'], ($r['type'] === 'Issued' ? -1 : 1) * (int)$r['quantity'],
+                                          $r['type'] === 'Issued' ? ($r['branch_name'] ?? '') : ($r['party'] ?? ''),
+                                          $r['type'] === 'Issued' ? ($r['party'] ?? '') : ($r['branch_name'] ?? ''),
+                                          $r['purpose'] ?? '', $r['by_name'] ?? ''], $history),
+    ]]);
+}
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -113,7 +127,7 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- History -->
 <div class="card">
-    <div class="card-head"><h3>Stock history &mdash; <?php echo htmlspecialchars($item['item_name']); ?></h3><?php if (count($history) === 100): ?><span class="card-hint">Latest 100 movements</span><?php endif; ?></div>
+    <div class="card-head"><h3>Stock history &mdash; <?php echo htmlspecialchars($item['item_name']); ?></h3><div style="display:flex; align-items:center; gap:12px"><?php if (count($history) === 100): ?><span class="card-hint">Latest 100 movements</span><?php endif; ?><?php if ($history) echo xlsx_button(); ?></div></div>
     <?php if ($history): ?>
     <div class="table-container">
         <table class="compact">
