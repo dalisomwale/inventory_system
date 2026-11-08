@@ -48,6 +48,8 @@ if ($id) {
     if (!$item) { $_SESSION['flash_error'] = 'That item no longer exists.'; header('Location: stock.php'); exit(); }
 }
 $is_new = !$item;
+// Once an item has stock history its price is set by deliveries (Receive Existing Item), not edited here
+$locked = !$is_new && item_history_count($pdo, (int)$item['id']) > 0;
 
 // ── Save ────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_item'])) {
@@ -55,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_item'])) {
     $item_name     = $v->text('item_name', 'Item name', 200, true, 2);
     $cat           = $v->exists($pdo, 'category_id', 'category', 'categories', 'id, name');
     $description   = $v->textarea('description', 'Description', 500);
-    $unit_price    = $v->money('unit_price', 'Unit price');
+    $unit_price    = $locked ? (float)$item['unit_price'] : $v->money('unit_price', 'Unit price');
     $reorder_level = $v->int('reorder_level', 'Reorder level', 0, 1000000);
     $opening       = $is_new ? ($v->int('opening_quantity', 'Opening stock', 0, 1000000, false) ?? 0) : 0;
     $supplier      = $is_new ? $v->text('supplier', 'Supplier', 200, false) : '';
@@ -156,9 +158,14 @@ include __DIR__ . '/../includes/header.php';
 
         <div class="form-row">
             <div class="form-group">
-                <label for="unit_price">Unit price (K) *</label>
+                <label for="unit_price">Unit price (K)<?php echo $locked ? '' : ' *'; ?></label>
+                <?php if ($locked): ?>
+                <input type="text" id="unit_price" class="readonly-field" readonly tabindex="-1" value="<?php echo number_format((float)$item['unit_price'], 2); ?>">
+                <small>This item has stock history, so its price changes when you <a href="receive_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>">receive it as an existing item</a>.</small>
+                <?php else: ?>
                 <input type="number" id="unit_price" name="unit_price" step="0.01" min="0" max="100000000" required
                        value="<?php echo htmlspecialchars($val('unit_price', '')); ?>" placeholder="0.00">
+                <?php endif; ?>
             </div>
             <div class="form-group">
                 <label for="reorder_level">Reorder level *</label>

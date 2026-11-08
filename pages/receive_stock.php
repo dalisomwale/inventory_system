@@ -71,7 +71,7 @@ function complete_purchase(PDO $pdo, ?array $purchase, int $item_id): void {
 }
 
 // Every item, grouped by category, for the Receive Existing Item form
-$items = $pdo->query("SELECT i.id, i.item_name, i.category_id, COALESCE(c.name, i.category) AS category_name
+$items = $pdo->query("SELECT i.id, i.item_name, i.category_id, COALESCE(c.name, i.category) AS category_name, i.unit_price, i.reorder_level
                       FROM items i LEFT JOIN categories c ON c.id = i.category_id ORDER BY category_name, i.item_name")->fetchAll();
 $last_supplier = [];
 foreach ($pdo->query("SELECT r.item_id, r.supplier FROM stock_receiving r
@@ -144,6 +144,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['receive_existing'])) 
     $item_data     = $v->exists($pdo, 'item_id', 'item', 'items', 'id, item_name');
     $supplier      = $v->text('supplier', 'Supplier', 200, true, 2);
     $quantity      = $v->int('quantity', 'Quantity received', 1, 1000000);
+    $unit_price    = $v->money('unit_price', 'Unit price');
+    $reorder_level = $v->int('reorder_level', 'Reorder level', 0, 1000000);
     $date_received = $v->date('date_received', 'Date received');
     $item_id       = $item_data ? (int)$item_data['id'] : 0;
     if (!$branch) $v->fail('Please choose the branch receiving the stock.');
@@ -155,9 +157,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['receive_existing'])) 
     try {
         [$old_stock, $new_stock] = branch_stock_change($pdo, $item_id, $branch_id, $quantity);
         $pdo->prepare("INSERT INTO stock_receiving (item_id, supplier, quantity, unit_price, date_received, received_by, branch_id, old_stock, new_stock) VALUES (?,?,?,?,?,?,?,?,?)")
-            ->execute([$item_id, $supplier, $quantity, 0.00, $date_received, $_SESSION['user_id'], $branch_id, $old_stock, $new_stock]);
+            ->execute([$item_id, $supplier, $quantity, $unit_price, $date_received, $_SESSION['user_id'], $branch_id, $old_stock, $new_stock]);
+        // The delivery sets the item's current price and reorder level
+        $was = $pdo->prepare("SELECT unit_price, reorder_level FROM items WHERE id = ?"); $was->execute([$item_id]); $was = $was->fetch();
+        $pdo->prepare("UPDATE items SET unit_price = ?, reorder_level = ? WHERE id = ?")->execute([$unit_price, $reorder_level, $item_id]);
+        $changes = [];
+        if ((float)$was['unit_price'] !== (float)$unit_price) $changes[] = 'price K' . number_format((float)$was['unit_price'], 2) . ' -> K' . number_format($unit_price, 2);
+        if ((int)$was['reorder_level'] !== $reorder_level) $changes[] = "reorder level {$was['reorder_level']} -> $reorder_level";
         logAudit($pdo, $_SESSION['user_id'], 'RECEIVE_STOCK', $item_id, $quantity,
-                 "Received $quantity of {$item_data['item_name']} at {$branch['name']}. Old: $old_stock, New: $new_stock. Supplier: $supplier");
+                 "Received $quantity of {$item_data['item_name']} at {$branch['name']}. Old: $old_stock, New: $new_stock. Supplier: $supplier" . ($changes ? '. Updated ' . implode(', ', $changes) : ''));
         $pdo->commit();
         complete_purchase($pdo, $purchase, $item_id);
         $success = "Stock received at " . htmlspecialchars($branch['name']) . ". Previous: $old_stock &rarr; New: $new_stock" . ($purchase ? '. The requisition is marked as received.' : '');
@@ -283,7 +291,7 @@ include __DIR__ . '/../includes/header.php';
                     if ($it['category_name'] !== $grp): if ($grp !== null) echo '</optgroup>'; $grp = $it['category_name']; ?>
                 <optgroup label="<?php echo htmlspecialchars($grp ?? 'Uncategorised'); ?>">
                 <?php endif; ?>
-                    <option value="<?php echo $it['id']; ?>" <?php echo $ex_item === (int)$it['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($it['item_name']); ?></option>
+                    <option value="<?php echo $it['id']; ?>" data-price="<?php echo htmlspecialchars(number_format((float)$it['unit_price'], 2, '.', '')); ?>" data-reorder="<?php echo (int)$it['reorder_level']; ?>" <?php echo $ex_item === (int)$it['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($it['item_name']); ?></option>
                 <?php endforeach; if ($grp !== null) echo '</optgroup>'; ?>
             </select>
             <?php if (!$items): ?><small>No items yet. Add one with the form on the left.</small><?php endif; ?>
@@ -304,6 +312,19 @@ include __DIR__ . '/../includes/header.php';
                 <label for="qty">Quantity Received *</label>
                 <input type="number" name="quantity" id="qty" min="1" max="1000000" step="1" required placeholder="0"
                        value="<?php echo htmlspecialchars($ex_err ? ($_POST['quantity'] ?? '') : (!$show_new_item ? ($purchase['quantity'] ?? '') : '')); ?>">
+            </div>
+            <div class="form-group">
+                <label for="ex_price">Unit price (K) *</label>
+                <input type="number" id="ex_price" name="unit_price" step="0.01" min="0" max="100000000" required placeholder="0.00"
+                       value="<?php echo htmlspecialchars($ex_err ? ($_POST['unit_price'] ?? '') : ''); ?>">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="ex_reorder">Reorder level *</label>
+                <input type="number" id="ex_reorder" name="reorder_level" step="1" min="0" max="1000000" required
+                       value="<?php echo htmlspecialchars($ex_err ? ($_POST['reorder_level'] ?? '') : ''); ?>">
+                <small>You'll be warned when stock falls to this level.</small>
             </div>
             <div class="form-group">
                 <label for="ex_date">Date Received *</label>
@@ -369,10 +390,20 @@ include __DIR__ . '/../includes/header.php';
     function showStock() {
         avail.value = item.value ? String((stock[item.value] || {})[branch.value] || 0) : '—';
     }
+    // Price and reorder level start at the item's current values
+    var price = document.getElementById('ex_price'), reorder = document.getElementById('ex_reorder');
+    function fillItemValues(force) {
+        var o = item.options[item.selectedIndex];
+        if (!o || !o.value) return;
+        if (force || price.value === '') price.value = o.dataset.price || '';
+        if (force || reorder.value === '') reorder.value = o.dataset.reorder || '';
+    }
     item.addEventListener('change', function () {
         if (autoFilled) supplier.value = suppliers[item.value] || '';
+        fillItemValues(true);
         showStock();
     });
+    fillItemValues(false);
     branch.addEventListener('change', showStock);
     if (autoFilled && item.value && suppliers[item.value]) supplier.value = suppliers[item.value];
     showStock();
