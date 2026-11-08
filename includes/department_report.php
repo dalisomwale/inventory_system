@@ -71,10 +71,6 @@ include __DIR__ . '/header.php';
 
 <div class="page-header">
     <h1>Monthly Report &mdash; <?php echo htmlspecialchars($dept_name ?: 'your department'); ?></h1>
-    <div style="display:flex; gap:8px">
-        <?php if ($dept_id) echo xlsx_button(); ?>
-        <button type="button" onclick="window.print()" class="btn">Print</button>
-    </div>
 </div>
 
 <?php if (!$dept_id): ?>
@@ -130,7 +126,7 @@ include __DIR__ . '/header.php';
 <?php endif; ?>
 
 <div class="card">
-    <div class="card-head"><h3>By item<?php echo $cat_name ? ' &mdash; ' . htmlspecialchars($cat_name) : ''; ?></h3></div>
+    <div class="card-head"><h3>By item<?php echo $cat_name ? ' &mdash; ' . htmlspecialchars($cat_name) : ''; ?></h3><?php echo xlsx_button(); ?></div>
     <div class="table-container">
         <table>
             <thead><tr><th>Item</th><th>Category</th><th class="num">Units</th><th class="num">Unit price</th><th class="num">Value</th><th class="num">Times</th></tr></thead>

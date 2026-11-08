@@ -1,170 +1,285 @@
 <?php
-// Monthly Reports: worked out from stock movements for any month, to view, print or export to Excel.
+// Monthly Reports, by category, company, branch or department. Worked out from stock movements for any month,
+// to view or export to Excel.
 require_once __DIR__ . '/../includes/auth.php';
 requirePermission('reports.view');
 // Department-limited users get their own department's report
 if (my_scope_department() !== null) { require __DIR__ . '/../includes/department_report.php'; exit(); }
 require_once __DIR__ . '/../includes/insights.php';
 
+const REPORT_VIEWS = ['category' => 'Category', 'company' => 'Company', 'branch' => 'Branch', 'department' => 'Department'];
+$by = array_key_exists($_GET['by'] ?? '', REPORT_VIEWS) ? $_GET['by'] : 'category';
+// Older links used category_id
+$sel = (int)($_GET['id'] ?? ($by === 'category' ? ($_GET['category_id'] ?? 0) : 0));
+
 $month = safe_month($_GET['month'] ?? null);
 if ($month > date('Y-m')) $month = date('Y-m');
-$from   = $month . '-01';
-$to     = date('Y-m-t', strtotime($from));
-$cat_id = (int)($_GET['category_id'] ?? 0);
-
-$categories = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
-if (!in_array($cat_id, array_map(fn($c) => (int)$c['id'], $categories), true)) $cat_id = 0;
-$cat_name = '';
-foreach ($categories as $c) if ((int)$c['id'] === $cat_id) $cat_name = $c['name'];
-
-// Per item: received and issued in the month, and movements since, to work back from today's stock
-$st = $pdo->prepare("
-    SELECT i.id, i.item_name, i.category_id, COALESCE(c.name, i.category, 'Other') AS category_name,
-           i.current_quantity, i.reorder_level, i.unit_price,
-           COALESCE(r.in_month, 0) AS received, COALESCE(r.after, 0) AS received_after,
-           COALESCE(s.in_month, 0) AS issued,   COALESCE(s.after, 0) AS issued_after
-    FROM items i
-    LEFT JOIN categories c ON c.id = i.category_id
-    LEFT JOIN (SELECT item_id, SUM(CASE WHEN DATE(created_at) BETWEEN :f1 AND :t1 THEN quantity END) AS in_month,
-                               SUM(CASE WHEN DATE(created_at) > :t2 THEN quantity END) AS after
-               FROM stock_receiving GROUP BY item_id) r ON r.item_id = i.id
-    LEFT JOIN (SELECT item_id, SUM(CASE WHEN DATE(created_at) BETWEEN :f2 AND :t3 THEN quantity END) AS in_month,
-                               SUM(CASE WHEN DATE(created_at) > :t4 THEN quantity END) AS after
-               FROM stock_issuing GROUP BY item_id) s ON s.item_id = i.id
-    WHERE DATE(i.created_at) <= :t5" . ($cat_id ? " AND i.category_id = $cat_id" : "") . "
-    ORDER BY category_name, i.item_name");
-$st->execute(['f1' => $from, 't1' => $to, 't2' => $to, 'f2' => $from, 't3' => $to, 't4' => $to, 't5' => $to]);
-$items = [];
-foreach ($st->fetchAll() as $r) {
-    $r['closing'] = (int)$r['current_quantity'] - (int)$r['received_after'] + (int)$r['issued_after'];
-    $r['opening'] = $r['closing'] - (int)$r['received'] + (int)$r['issued'];
-    $r['value']   = $r['closing'] * (float)$r['unit_price'];
-    $r['status']  = $r['closing'] <= 0 ? 'Out of stock' : ($r['closing'] <= $r['reorder_level'] ? 'Below reorder' : 'OK');
-    $items[] = $r;
-}
-
-// Totals per category
-$by_cat = [];
-foreach ($items as $r) {
-    $k = $r['category_name'];
-    $by_cat[$k] ??= ['id' => (int)$r['category_id'], 'name' => $k, 'items' => 0, 'opening' => 0, 'received' => 0, 'issued' => 0, 'closing' => 0, 'value' => 0.0, 'low' => 0];
-    $by_cat[$k]['items']++;
-    foreach (['opening', 'received', 'issued', 'closing', 'value'] as $f) $by_cat[$k][$f] += $r[$f];
-    if ($r['status'] !== 'OK') $by_cat[$k]['low']++;
-}
-$sum = fn(string $f) => array_sum(array_column($items, $f));
+$from = $month . '-01';
+$to   = date('Y-m-t', strtotime($from));
 $month_label = date('F Y', strtotime($from));
 
+/** Work out opening/closing from today's quantity and the movements in and after the month. */
+function rpt_finish(array $r): array {
+    $r['closing'] = (int)$r['current'] - (int)$r['received_after'] + (int)$r['issued_after'];
+    $r['opening'] = $r['closing'] - (int)$r['received'] + (int)$r['issued'];
+    $r['value']   = $r['closing'] * (float)$r['unit_price'];
+    return $r;
+}
+// Each use needs its own placeholder names
+$in_month = fn(int $n) => "SUM(CASE WHEN DATE(created_at) BETWEEN :f$n AND :t$n THEN quantity END)";
+$after    = fn(int $n) => "SUM(CASE WHEN DATE(created_at) > :a$n THEN quantity END)";
+$params   = ['f1' => $from, 't1' => $to, 'a1' => $to, 'f2' => $from, 't2' => $to, 'a2' => $to];
+
+$groups = [];   // id => ['name', 'sub', metrics...]
+$rows   = [];   // item rows for the chosen group (or all items for the category view)
+
+if ($by === 'department') {
+    // Departments don't hold stock: what was issued to each one in the month
+    $st = $pdo->prepare("
+        SELECT d.id AS gid, d.name, CONCAT(b.name, ' · ', co.name) AS sub, i.id, i.item_name, COALESCE(c.name, i.category, 'Other') AS category_name,
+               i.unit_price, SUM(s.quantity) AS units, SUM(s.quantity * i.unit_price) AS value, COUNT(*) AS times
+        FROM stock_issuing s JOIN departments d ON d.id = s.department_id JOIN branches b ON b.id = d.branch_id JOIN companies co ON co.id = b.company_id
+        JOIN items i ON i.id = s.item_id LEFT JOIN categories c ON c.id = i.category_id
+        WHERE DATE(s.created_at) BETWEEN :f AND :t
+        GROUP BY d.id, d.name, sub, i.id, i.item_name, category_name, i.unit_price
+        ORDER BY d.name, units DESC");
+    $st->execute(['f' => $from, 't' => $to]);
+    foreach ($st->fetchAll() as $r) {
+        $g = &$groups[(int)$r['gid']];
+        $g ??= ['name' => $r['name'], 'sub' => $r['sub'], 'items' => 0, 'units' => 0, 'value' => 0.0, 'times' => 0];
+        $g['items']++; $g['units'] += $r['units']; $g['value'] += $r['value']; $g['times'] += $r['times'];
+        unset($g);
+        if (!$sel || (int)$r['gid'] === $sel) $rows[] = $r;
+    }
+} elseif ($by === 'category') {
+    // Per item, from the item's total stock
+    $st = $pdo->prepare("
+        SELECT i.id, i.item_name, COALESCE(i.category_id, 0) AS gid, COALESCE(c.name, i.category, 'Other') AS category_name,
+               i.current_quantity AS current, i.reorder_level, i.unit_price,
+               COALESCE(r.m, 0) AS received, COALESCE(r.a, 0) AS received_after, COALESCE(s.m, 0) AS issued, COALESCE(s.a, 0) AS issued_after
+        FROM items i LEFT JOIN categories c ON c.id = i.category_id
+        LEFT JOIN (SELECT item_id, {$in_month(1)} AS m, {$after(1)} AS a FROM stock_receiving GROUP BY item_id) r ON r.item_id = i.id
+        LEFT JOIN (SELECT item_id, {$in_month(2)} AS m, {$after(2)} AS a FROM stock_issuing GROUP BY item_id) s ON s.item_id = i.id
+        WHERE DATE(i.created_at) <= :t3
+        ORDER BY category_name, i.item_name");
+    $st->execute($params + ['t3' => $to]);
+    foreach ($st->fetchAll() as $r) {
+        $r = rpt_finish($r);
+        $r['status'] = $r['closing'] <= 0 ? 'Out of stock' : ($r['closing'] <= $r['reorder_level'] ? 'Below reorder' : 'OK');
+        $g = &$groups[(int)$r['gid']];
+        $g ??= ['name' => $r['category_name'], 'sub' => '', 'items' => 0, 'opening' => 0, 'received' => 0, 'issued' => 0, 'closing' => 0, 'value' => 0.0, 'low' => 0];
+        $g['items']++;
+        foreach (['opening', 'received', 'issued', 'closing', 'value'] as $f) $g[$f] += $r[$f];
+        if ($r['status'] !== 'OK') $g['low']++;
+        unset($g);
+        if (!$sel || (int)$r['gid'] === $sel) $rows[] = $r;
+    }
+} else {
+    // Company and branch: from each branch's own stock and movements
+    $st = $pdo->prepare("
+        SELECT b.id AS branch_id, b.name AS branch_name, co.id AS company_id, co.name AS company_name,
+               i.id, i.item_name, COALESCE(c.name, i.category, 'Other') AS category_name, i.unit_price,
+               COALESCE(bs.quantity, 0) AS current,
+               COALESCE(r.m, 0) AS received, COALESCE(r.a, 0) AS received_after, COALESCE(s.m, 0) AS issued, COALESCE(s.a, 0) AS issued_after
+        FROM branches b JOIN companies co ON co.id = b.company_id
+        CROSS JOIN items i LEFT JOIN categories c ON c.id = i.category_id
+        LEFT JOIN branch_stock bs ON bs.branch_id = b.id AND bs.item_id = i.id
+        LEFT JOIN (SELECT item_id, branch_id, {$in_month(1)} AS m, {$after(1)} AS a FROM stock_receiving GROUP BY item_id, branch_id) r ON r.item_id = i.id AND r.branch_id = b.id
+        LEFT JOIN (SELECT item_id, branch_id, {$in_month(2)} AS m, {$after(2)} AS a FROM stock_issuing GROUP BY item_id, branch_id) s ON s.item_id = i.id AND s.branch_id = b.id
+        WHERE bs.quantity <> 0 OR r.item_id IS NOT NULL OR s.item_id IS NOT NULL
+        ORDER BY co.name, b.name, i.item_name");
+    $st->execute($params);
+    $per_item = [];   // company view: one row per item within the chosen company
+    foreach ($st->fetchAll() as $r) {
+        $r = rpt_finish($r);
+        if (!$r['opening'] && !$r['received'] && !$r['issued'] && !$r['closing']) continue;
+        $gid = $by === 'company' ? (int)$r['company_id'] : (int)$r['branch_id'];
+        $g = &$groups[$gid];
+        $g ??= ['name' => $by === 'company' ? $r['company_name'] : $r['branch_name'], 'sub' => $by === 'company' ? '' : $r['company_name'],
+                'items' => [], 'opening' => 0, 'received' => 0, 'issued' => 0, 'closing' => 0, 'value' => 0.0];
+        $g['items'][$r['id']] = true;
+        foreach (['opening', 'received', 'issued', 'closing', 'value'] as $f) $g[$f] += $r[$f];
+        unset($g);
+        if ($sel && $gid !== $sel) continue;
+        $p = &$per_item[$r['id']];
+        $p ??= ['id' => $r['id'], 'item_name' => $r['item_name'], 'category_name' => $r['category_name'], 'unit_price' => $r['unit_price'],
+                'opening' => 0, 'received' => 0, 'issued' => 0, 'closing' => 0, 'value' => 0.0];
+        foreach (['opening', 'received', 'issued', 'closing', 'value'] as $f) $p[$f] += $r[$f];
+        unset($p);
+    }
+    foreach ($groups as &$g) $g['items'] = count($g['items']);
+    unset($g);
+    $rows = array_values($per_item);
+    usort($rows, fn($a, $b) => strcasecmp($a['category_name'], $b['category_name']) ?: strcasecmp($a['item_name'], $b['item_name']));
+}
+uasort($groups, fn($a, $b) => strcasecmp($a['name'], $b['name']));
+if ($sel && !isset($groups[$sel])) $sel = 0;
+$sel_name = $sel ? $groups[$sel]['name'] : '';
+if ($sel && $by === 'department' && $groups[$sel]['sub']) $sel_name .= ' (' . $groups[$sel]['sub'] . ')';
+
+$is_issue = $by === 'department';
+$sum = fn(array $list, string $f) => array_sum(array_column($list, $f));
+$view = REPORT_VIEWS[$by];
+
+// ── Excel ───────────────────────────────────────────────────
 if (wants_xlsx()) {
-    $title = "Monthly Report - $month_label" . ($cat_name ? " - $cat_name" : '');
-    $meta  = ['Stock from ' . date('d M Y', strtotime($from)) . ' to ' . date('d M Y', strtotime($to)), 'Exported: ' . date('d M Y, H:i')];
-    $item_sheet = ['name' => 'By item', 'title' => $title, 'meta' => $meta,
-        'columns' => ['Item', 'Category', ['Opening', 'int'], ['Received', 'int'], ['Issued', 'int'], ['Closing', 'int'], ['Reorder at', 'int'], 'Status', ['Unit price (K)', 'money'], ['Closing value (K)', 'money']],
-        'rows'    => array_map(fn($r) => [$r['item_name'], $r['category_name'], $r['opening'], $r['received'], $r['issued'], $r['closing'], $r['reorder_level'], $r['status'], $r['unit_price'], $r['value']], $items),
-        'totals'  => ['Total', '', $sum('opening'), $sum('received'), $sum('issued'), $sum('closing'), '', '', '', $sum('value')]];
-    $sheets = $cat_id ? [$item_sheet] : [
-        ['name' => 'By category', 'title' => $title, 'meta' => $meta,
-         'columns' => ['Category', ['Items', 'int'], ['Opening', 'int'], ['Received', 'int'], ['Issued', 'int'], ['Closing', 'int'], ['Closing value (K)', 'money'], ['Low or out', 'int']],
-         'rows'    => array_map(fn($c) => [$c['name'], $c['items'], $c['opening'], $c['received'], $c['issued'], $c['closing'], $c['value'], $c['low']], array_values($by_cat)),
-         'totals'  => ['Total', count($items), $sum('opening'), $sum('received'), $sum('issued'), $sum('closing'), $sum('value'), array_sum(array_column($by_cat, 'low'))]],
-        $item_sheet,
-    ];
-    xlsx_download("Monthly report $month" . ($cat_name ? " $cat_name" : ''), $sheets);
+    $title = "Monthly Report by $view - $month_label" . ($sel_name ? " - $sel_name" : '');
+    $meta  = [$is_issue ? 'Stock issued to departments, ' . date('d M Y', strtotime($from)) . ' to ' . date('d M Y', strtotime($to))
+                        : 'Stock from ' . date('d M Y', strtotime($from)) . ' to ' . date('d M Y', strtotime($to)),
+              'Exported: ' . date('d M Y, H:i')];
+    $glist = array_values($groups);
+    if ($is_issue) {
+        $group_sheet = ['columns' => ['Department', 'Branch / company', ['Items', 'int'], ['Units issued', 'int'], ['Value issued (K)', 'money'], ['Times issued', 'int']],
+            'rows'   => array_map(fn($g) => [$g['name'], $g['sub'], $g['items'], $g['units'], $g['value'], $g['times']], $glist),
+            'totals' => ['Total', '', '', $sum($glist, 'units'), $sum($glist, 'value'), $sum($glist, 'times')]];
+        $item_sheet = ['columns' => ['Item', 'Category', ['Units issued', 'int'], ['Unit price (K)', 'money'], ['Value issued (K)', 'money'], ['Times issued', 'int']],
+            'rows'   => array_map(fn($r) => [$r['item_name'], $r['category_name'], $r['units'], $r['unit_price'], $r['value'], $r['times']], $rows),
+            'totals' => ['Total', '', $sum($rows, 'units'), '', $sum($rows, 'value'), $sum($rows, 'times')]];
+    } else {
+        $group_sheet = ['columns' => array_merge([$view], $by === 'branch' ? ['Company'] : [], [['Items', 'int'], ['Opening', 'int'], ['Received', 'int'], ['Issued', 'int'], ['Closing', 'int'], ['Closing value (K)', 'money']]),
+            'rows'   => array_map(fn($g) => array_merge([$g['name']], $by === 'branch' ? [$g['sub']] : [], [$g['items'], $g['opening'], $g['received'], $g['issued'], $g['closing'], $g['value']]), $glist),
+            'totals' => array_merge(['Total'], $by === 'branch' ? [''] : [], ['', $sum($glist, 'opening'), $sum($glist, 'received'), $sum($glist, 'issued'), $sum($glist, 'closing'), $sum($glist, 'value')])];
+        $cat_cols = $by === 'category';
+        $item_sheet = ['columns' => array_merge(['Item', 'Category', ['Opening', 'int'], ['Received', 'int'], ['Issued', 'int'], ['Closing', 'int']], $cat_cols ? [['Reorder at', 'int'], 'Status'] : [], [['Unit price (K)', 'money'], ['Closing value (K)', 'money']]),
+            'rows'   => array_map(fn($r) => array_merge([$r['item_name'], $r['category_name'], $r['opening'], $r['received'], $r['issued'], $r['closing']], $cat_cols ? [$r['reorder_level'], $r['status']] : [], [$r['unit_price'], $r['value']]), $rows),
+            'totals' => array_merge(['Total', '', $sum($rows, 'opening'), $sum($rows, 'received'), $sum($rows, 'issued'), $sum($rows, 'closing')], $cat_cols ? ['', ''] : [], ['', $sum($rows, 'value')])];
+    }
+    $sheets = [];
+    if (!$sel) $sheets[] = ['name' => "By $by", 'title' => $title, 'meta' => $meta] + $group_sheet;
+    if ($sel || $by === 'category') $sheets[] = ['name' => 'By item', 'title' => $title, 'meta' => $meta] + $item_sheet;
+    xlsx_download("Monthly report by $by $month" . ($sel_name ? " $sel_name" : ''), $sheets);
 }
 
-$report_url = fn(array $p) => 'reports.php?' . http_build_query(array_filter($p + ['month' => $month]));
+$report_url = fn(array $p = []) => 'reports.php?' . http_build_query(array_filter($p + ['by' => $by, 'month' => $month]));
+$kpi_rows = $sel ? $rows : array_values($groups);
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
-    <h1>Monthly Reports</h1>
-    <div style="display:flex; gap:8px; flex-wrap:wrap">
-        <a href="category_reports.php" class="btn btn-sm">Category activity</a>
-        <?php echo xlsx_button(); ?>
-        <button type="button" onclick="window.print()" class="btn btn-sm">Print</button>
-    </div>
+    <h1>Monthly Report by <?php echo $view; ?><?php echo $sel_name ? ' &mdash; ' . htmlspecialchars($sel_name) : ''; ?></h1>
 </div>
 
 <form method="GET" class="card" style="margin-bottom:14px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-    <?php if ($cat_id): ?><input type="hidden" name="category_id" value="<?php echo $cat_id; ?>"><?php endif; ?>
+    <input type="hidden" name="by" value="<?php echo $by; ?>">
+    <?php if ($sel): ?><input type="hidden" name="id" value="<?php echo $sel; ?>"><?php endif; ?>
     <label for="month" style="font-size:.78rem; font-weight:500; color:var(--text2)">Month</label>
     <input type="month" id="month" name="month" value="<?php echo $month; ?>" max="<?php echo date('Y-m'); ?>" onchange="this.form.submit()"
            style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:.84rem; background:var(--surface);">
     <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
-    <span class="muted-text">Opening and closing stock for <?php echo $month_label; ?>, worked out from deliveries and issues<?php echo $month === date('Y-m') ? ' (closing = stock today)' : ''; ?>.</span>
+    <span class="muted-text"><?php echo $is_issue
+        ? "Stock issued to each department in $month_label."
+        : "Opening and closing stock for $month_label, worked out from deliveries and issues" . ($month === date('Y-m') ? ' (closing = stock today)' : '') . '.'; ?></span>
 </form>
 
 <div class="kpi-row">
-    <div class="kpi"><div class="kpi-label">Items</div><div class="kpi-value"><?php echo number_format(count($items)); ?></div></div>
-    <div class="kpi"><div class="kpi-label">Received</div><div class="kpi-value"><?php echo number_format($sum('received')); ?> <span class="kpi-unit">units</span></div></div>
-    <div class="kpi"><div class="kpi-label">Issued</div><div class="kpi-value"><?php echo number_format($sum('issued')); ?> <span class="kpi-unit">units</span></div></div>
-    <div class="kpi"><div class="kpi-label">Closing value</div><div class="kpi-value"><?php echo kwacha($sum('value'), true); ?></div></div>
+<?php if ($is_issue): ?>
+    <div class="kpi"><div class="kpi-label"><?php echo $sel ? 'Items' : 'Departments'; ?></div><div class="kpi-value"><?php echo number_format($sel ? count($rows) : count($groups)); ?></div></div>
+    <div class="kpi"><div class="kpi-label">Units issued</div><div class="kpi-value"><?php echo number_format($sum($kpi_rows, 'units')); ?></div></div>
+    <div class="kpi"><div class="kpi-label">Value issued</div><div class="kpi-value"><?php echo kwacha($sum($kpi_rows, 'value'), true); ?></div></div>
+    <div class="kpi"><div class="kpi-label">Times issued</div><div class="kpi-value"><?php echo number_format($sum($kpi_rows, 'times')); ?></div></div>
+<?php else: ?>
+    <div class="kpi"><div class="kpi-label"><?php echo $sel ? 'Items' : ['category' => 'Categories', 'company' => 'Companies', 'branch' => 'Branches'][$by]; ?></div><div class="kpi-value"><?php echo number_format($sel ? count($rows) : count($groups)); ?></div></div>
+    <div class="kpi"><div class="kpi-label">Received</div><div class="kpi-value"><?php echo number_format($sum($kpi_rows, 'received')); ?> <span class="kpi-unit">units</span></div></div>
+    <div class="kpi"><div class="kpi-label">Issued</div><div class="kpi-value"><?php echo number_format($sum($kpi_rows, 'issued')); ?> <span class="kpi-unit">units</span></div></div>
+    <div class="kpi"><div class="kpi-label">Closing value</div><div class="kpi-value"><?php echo kwacha($sum($kpi_rows, 'value'), true); ?></div></div>
+<?php endif; ?>
 </div>
 
+<?php if ($groups): ?>
 <div class="pill-tabs pill-tabs-inline">
-    <a href="<?php echo htmlspecialchars($report_url([])); ?>" class="pill-tab <?php echo $cat_id ? '' : 'active'; ?>">All categories</a>
-    <?php foreach ($categories as $c): ?>
-    <a href="<?php echo htmlspecialchars($report_url(['category_id' => (int)$c['id']])); ?>" class="pill-tab <?php echo $cat_id === (int)$c['id'] ? 'active' : ''; ?>"><?php echo htmlspecialchars($c['name']); ?></a>
+    <a href="<?php echo htmlspecialchars($report_url()); ?>" class="pill-tab <?php echo $sel ? '' : 'active'; ?>">All</a>
+    <?php foreach ($groups as $gid => $g): ?>
+    <a href="<?php echo htmlspecialchars($report_url(['id' => $gid])); ?>" class="pill-tab <?php echo $sel === $gid ? 'active' : ''; ?>"><?php echo htmlspecialchars($g['name']); ?></a>
     <?php endforeach; ?>
 </div>
+<?php endif; ?>
 
-<?php if (!$items): ?>
-<div class="empty-state card"><p>There were no items<?php echo $cat_name ? ' in ' . htmlspecialchars($cat_name) : ''; ?> in <?php echo $month_label; ?>.</p></div>
+<?php if (!$groups): ?>
+<div class="empty-state card"><p><?php echo $is_issue ? "Nothing was issued to a department in $month_label." : "There was no stock in $month_label."; ?></p></div>
 <?php else: ?>
 
-<?php if (!$cat_id): ?>
+<?php if (!$sel): ?>
+<!-- One row per <?php echo $by; ?> -->
 <div class="card">
-    <div class="card-head"><h3>By category &mdash; <?php echo $month_label; ?></h3></div>
+    <div class="card-head"><h3>By <?php echo strtolower($view); ?> &mdash; <?php echo $month_label; ?></h3><?php echo xlsx_button(); ?></div>
     <div class="table-container">
         <table>
-            <thead><tr><th>Category</th><th class="num">Items</th><th class="num">Opening</th><th class="num">Received</th><th class="num">Issued</th><th class="num">Closing</th><th class="num">Closing value</th><th class="num">Low or out</th></tr></thead>
+        <?php if ($is_issue): ?>
+            <thead><tr><th>Department</th><th>Branch</th><th class="num">Items</th><th class="num">Units issued</th><th class="num">Value issued</th><th class="num">Times</th></tr></thead>
             <tbody>
-            <?php foreach ($by_cat as $c): ?>
-                <tr>
-                    <td><a href="<?php echo htmlspecialchars($report_url(['category_id' => $c['id']])); ?>" style="font-weight:600"><?php echo htmlspecialchars($c['name']); ?></a></td>
-                    <td class="num"><?php echo number_format($c['items']); ?></td>
-                    <td class="num muted"><?php echo number_format($c['opening']); ?></td>
-                    <td class="num"><?php echo number_format($c['received']); ?></td>
-                    <td class="num"><?php echo number_format($c['issued']); ?></td>
-                    <td class="num"><strong><?php echo number_format($c['closing']); ?></strong></td>
-                    <td class="num"><?php echo kwacha($c['value']); ?></td>
-                    <td class="num"><?php echo $c['low'] ? '<span style="color:var(--danger)">' . $c['low'] . '</span>' : '0'; ?></td>
-                </tr>
+            <?php foreach ($groups as $gid => $g): ?>
+                <tr><td><a href="<?php echo htmlspecialchars($report_url(['id' => $gid])); ?>" style="font-weight:600"><?php echo htmlspecialchars($g['name']); ?></a></td>
+                    <td class="muted"><?php echo htmlspecialchars($g['sub']); ?></td>
+                    <td class="num"><?php echo number_format($g['items']); ?></td><td class="num"><strong><?php echo number_format($g['units']); ?></strong></td>
+                    <td class="num"><?php echo kwacha($g['value']); ?></td><td class="num muted"><?php echo number_format($g['times']); ?></td></tr>
             <?php endforeach; ?>
             </tbody>
-            <tfoot><tr><td>Total</td><td class="num"><?php echo number_format(count($items)); ?></td><td class="num"><?php echo number_format($sum('opening')); ?></td><td class="num"><?php echo number_format($sum('received')); ?></td>
-                <td class="num"><?php echo number_format($sum('issued')); ?></td><td class="num"><?php echo number_format($sum('closing')); ?></td><td class="num"><?php echo kwacha($sum('value')); ?></td><td></td></tr></tfoot>
+            <tfoot><tr><td colspan="3">Total</td><td class="num"><?php echo number_format($sum($groups, 'units')); ?></td><td class="num"><?php echo kwacha($sum($groups, 'value')); ?></td><td class="num"><?php echo number_format($sum($groups, 'times')); ?></td></tr></tfoot>
+        <?php else: ?>
+            <thead><tr><th><?php echo $view; ?></th><?php if ($by === 'branch'): ?><th>Company</th><?php endif; ?><th class="num">Items</th><th class="num">Opening</th><th class="num">Received</th><th class="num">Issued</th><th class="num">Closing</th><th class="num">Closing value</th><?php if ($by === 'category'): ?><th class="num">Low or out</th><?php endif; ?></tr></thead>
+            <tbody>
+            <?php foreach ($groups as $gid => $g): ?>
+                <tr><td><a href="<?php echo htmlspecialchars($report_url(['id' => $gid])); ?>" style="font-weight:600"><?php echo htmlspecialchars($g['name']); ?></a></td>
+                    <?php if ($by === 'branch'): ?><td class="muted"><?php echo htmlspecialchars($g['sub']); ?></td><?php endif; ?>
+                    <td class="num"><?php echo number_format($g['items']); ?></td>
+                    <td class="num muted"><?php echo number_format($g['opening']); ?></td>
+                    <td class="num"><?php echo number_format($g['received']); ?></td>
+                    <td class="num"><?php echo number_format($g['issued']); ?></td>
+                    <td class="num"><strong><?php echo number_format($g['closing']); ?></strong></td>
+                    <td class="num"><?php echo kwacha($g['value']); ?></td>
+                    <?php if ($by === 'category'): ?><td class="num"><?php echo $g['low'] ? '<span style="color:var(--danger)">' . $g['low'] . '</span>' : '0'; ?></td><?php endif; ?></tr>
+            <?php endforeach; ?>
+            </tbody>
+            <tfoot><tr><td<?php echo $by === 'branch' ? ' colspan="2"' : ''; ?>>Total</td><td></td><td class="num"><?php echo number_format($sum($groups, 'opening')); ?></td><td class="num"><?php echo number_format($sum($groups, 'received')); ?></td>
+                <td class="num"><?php echo number_format($sum($groups, 'issued')); ?></td><td class="num"><?php echo number_format($sum($groups, 'closing')); ?></td><td class="num"><?php echo kwacha($sum($groups, 'value')); ?></td><?php if ($by === 'category'): ?><td></td><?php endif; ?></tr></tfoot>
+        <?php endif; ?>
         </table>
     </div>
 </div>
 <?php endif; ?>
 
+<?php if ($sel || $by === 'category'): ?>
+<!-- Item by item -->
 <div class="card">
-    <div class="card-head"><h3>By item<?php echo $cat_name ? ' &mdash; ' . htmlspecialchars($cat_name) : ''; ?></h3></div>
+    <div class="card-head"><h3>By item<?php echo $sel_name ? ' &mdash; ' . htmlspecialchars($sel_name) : ''; ?></h3><?php if ($sel) echo xlsx_button(); ?></div>
     <div class="table-container">
         <table>
-            <thead><tr><th>Item</th><?php if (!$cat_id): ?><th>Category</th><?php endif; ?><th class="num">Opening</th><th class="num">Received</th><th class="num">Issued</th><th class="num">Closing</th><th class="num">Reorder at</th><th>Status</th><th class="num">Unit price</th><th class="num">Closing value</th></tr></thead>
+        <?php if ($is_issue): ?>
+            <thead><tr><th>Item</th><th>Category</th><th class="num">Units issued</th><th class="num">Unit price</th><th class="num">Value issued</th><th class="num">Times</th></tr></thead>
             <tbody>
-            <?php foreach ($items as $r): ?>
-                <tr>
-                    <td><a class="item-link" href="stock_item.php?id=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['item_name']); ?></a></td>
-                    <?php if (!$cat_id): ?><td><span class="cat-pill"><?php echo htmlspecialchars($r['category_name']); ?></span></td><?php endif; ?>
+            <?php foreach ($rows as $r): ?>
+                <tr><td><a class="item-link" href="stock_item.php?id=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['item_name']); ?></a></td>
+                    <td><span class="cat-pill"><?php echo htmlspecialchars($r['category_name']); ?></span></td>
+                    <td class="num"><strong><?php echo number_format($r['units']); ?></strong></td><td class="num muted"><?php echo kwacha((float)$r['unit_price']); ?></td>
+                    <td class="num"><?php echo kwacha((float)$r['value']); ?></td><td class="num muted"><?php echo number_format($r['times']); ?></td></tr>
+            <?php endforeach; ?>
+            </tbody>
+            <tfoot><tr><td colspan="2">Total</td><td class="num"><?php echo number_format($sum($rows, 'units')); ?></td><td></td><td class="num"><?php echo kwacha($sum($rows, 'value')); ?></td><td class="num"><?php echo number_format($sum($rows, 'times')); ?></td></tr></tfoot>
+        <?php else: $cat_cols = $by === 'category'; ?>
+            <thead><tr><th>Item</th><th>Category</th><th class="num">Opening</th><th class="num">Received</th><th class="num">Issued</th><th class="num">Closing</th><?php if ($cat_cols): ?><th class="num">Reorder at</th><th>Status</th><?php endif; ?><th class="num">Unit price</th><th class="num">Closing value</th></tr></thead>
+            <tbody>
+            <?php foreach ($rows as $r): ?>
+                <tr><td><a class="item-link" href="stock_item.php?id=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['item_name']); ?></a></td>
+                    <td><span class="cat-pill"><?php echo htmlspecialchars($r['category_name']); ?></span></td>
                     <td class="num muted"><?php echo number_format($r['opening']); ?></td>
                     <td class="num"><?php echo number_format($r['received']); ?></td>
                     <td class="num"><?php echo number_format($r['issued']); ?></td>
                     <td class="num"><strong><?php echo number_format($r['closing']); ?></strong></td>
+                    <?php if ($cat_cols): ?>
                     <td class="num muted"><?php echo number_format($r['reorder_level']); ?></td>
                     <td><span class="<?php echo $r['status'] === 'OK' ? 'status-receiving' : ($r['status'] === 'Out of stock' ? 'status-issuing' : 'status-pending'); ?>"><?php echo $r['status']; ?></span></td>
+                    <?php endif; ?>
                     <td class="num muted"><?php echo kwacha((float)$r['unit_price']); ?></td>
-                    <td class="num"><?php echo kwacha($r['value']); ?></td>
-                </tr>
+                    <td class="num"><?php echo kwacha($r['value']); ?></td></tr>
             <?php endforeach; ?>
             </tbody>
-            <tfoot><tr><td<?php echo $cat_id ? '' : ' colspan="2"'; ?>>Total</td><td class="num"><?php echo number_format($sum('opening')); ?></td><td class="num"><?php echo number_format($sum('received')); ?></td>
-                <td class="num"><?php echo number_format($sum('issued')); ?></td><td class="num"><?php echo number_format($sum('closing')); ?></td><td colspan="3"></td><td class="num"><?php echo kwacha($sum('value')); ?></td></tr></tfoot>
+            <tfoot><tr><td colspan="2">Total</td><td class="num"><?php echo number_format($sum($rows, 'opening')); ?></td><td class="num"><?php echo number_format($sum($rows, 'received')); ?></td>
+                <td class="num"><?php echo number_format($sum($rows, 'issued')); ?></td><td class="num"><?php echo number_format($sum($rows, 'closing')); ?></td><?php if ($cat_cols): ?><td colspan="2"></td><?php endif; ?><td></td><td class="num"><?php echo kwacha($sum($rows, 'value')); ?></td></tr></tfoot>
+        <?php endif; ?>
         </table>
     </div>
 </div>
+<?php endif; ?>
 <?php endif; ?>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

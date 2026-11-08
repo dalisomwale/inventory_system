@@ -585,8 +585,8 @@ table.compact thead th { padding: 7px 10px; }
 }
 
 /* Export to Excel button */
-.btn-excel { display: inline-flex; align-items: center; gap: 6px; background: #1d6f42; border-color: #1d6f42; color: #fff; }
-.btn-excel:hover { background: #155232; border-color: #155232; color: #fff; }
+.btn-excel { display: inline-flex; align-items: center; gap: 6px; background: #6b7280; border-color: #6b7280; color: #fff; }
+.btn-excel:hover { background: #4b5563; border-color: #4b5563; color: #fff; }
 @media print { .btn-excel { display: none; } }
 
 /* Action tiles (big dashboard buttons) */
