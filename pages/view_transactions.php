@@ -121,10 +121,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0"><?php echo date('d/m/Y', strtotime($filter_date)); ?></h3>
-        <div style="display:flex; align-items:center; gap:12px">
-            <span style="font-size:.76rem; color:var(--muted)"><?php echo count($transactions); ?> result<?php echo count($transactions)!==1?'s':''; ?></span>
-            <?php echo xlsx_button(); ?>
-        </div>
+        <?php echo xlsx_button(); ?>
     </div>
     <div class="table-container">
         <table>
