@@ -30,12 +30,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
     if ($departments) {
         // A department manager raises for their own department
         $want = $my_dept ?: (int)($_POST['department_id'] ?? 0);
+        $want_co = (int)($_POST['company_id'] ?? 0);
+        if (!$my_dept && !$want_co) $v->fail('Please choose the company.');
         foreach ($departments as $d) if ((int)$d['id'] === $want) $dept = $d;
         if (!$dept) $v->fail('Please choose the department that needs this.');
+        elseif (!$my_dept && $want_co && (int)$dept['company_id'] !== $want_co) { $v->fail("That department isn't in the company you chose."); $dept = null; }
     }
     $req_branch  = $dept ? (int)$dept['branch_id'] : (user_branch_id() ?: null);
     // The company decides whose IT, Director and Accounts handle it
-    $req_company = $dept ? (int)$dept['company_id'] : (req_my_company($pdo) ?: null);
+    $req_company = $dept ? (int)$dept['company_id'] : null;
+    if (!$dept) {
+        $want_co = (int)($_POST['company_id'] ?? 0);
+        if ($want_co && (isAdmin() || !req_my_company($pdo) || $want_co === req_my_company($pdo))) {
+            $ok_co = $pdo->prepare("SELECT id FROM companies WHERE id = ? AND active = 1"); $ok_co->execute([$want_co]);
+            $req_company = (int)$ok_co->fetchColumn() ?: null;
+        }
+        $req_company = $req_company ?: (req_my_company($pdo) ?: null);
+        if (!$req_company) $v->fail('Please choose the company.');
+    }
     if (!$req_company && $req_branch) {
         $bc = $pdo->prepare("SELECT company_id FROM branches WHERE id = ?"); $bc->execute([$req_branch]); $req_company = (int)$bc->fetchColumn() ?: null;
     }
@@ -105,6 +117,12 @@ $pre_cat  = (int)($_GET['category_id'] ?? 0);
 $pre_qty  = max(1, min(100000, (int)($_GET['qty'] ?? 1)));
 $my_dept_row = null;
 foreach ($departments as $d) if ((int)$d['id'] === $my_dept) $my_dept_row = $d;
+// Companies that have departments to raise for
+$form_companies = [];
+foreach ($departments as $d) $form_companies[(int)$d['company_id']] = $d['company_name'];
+if (!$departments) foreach (org_companies($pdo) as $c) if (isAdmin() || !req_my_company($pdo) || (int)$c['id'] === req_my_company($pdo)) $form_companies[(int)$c['id']] = $c['name'];
+asort($form_companies);
+$pre_co = isset($error) ? (int)($_POST['company_id'] ?? 0) : (count($form_companies) === 1 ? (int)array_key_first($form_companies) : req_my_company($pdo));
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -121,9 +139,42 @@ include __DIR__ . '/../includes/header.php';
     <div class="form-title">New requisition</div>
     <form method="POST"
           data-confirm-title="Raise requisition"
-          data-confirm="Raise a requisition for {quantity} &times; {item_name} ({category_id})<?php echo $departments && !$my_dept_row ? ' for {department_id}' : ''; ?>?"
+          data-confirm="Raise a requisition for {quantity} &times; {item_name} ({category_id})<?php echo $departments && !$my_dept_row ? ' for {department_id}, {company_id}' : ''; ?>?"
           data-confirm-ok="Raise requisition">
         <input type="hidden" name="add_purchase" value="1">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="company_id">Company *</label>
+                <?php if ($my_dept_row || count($form_companies) === 1): ?>
+                <input type="text" id="company_id" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars($my_dept_row['company_name'] ?? reset($form_companies)); ?>">
+                <?php if (!$my_dept_row): ?><input type="hidden" name="company_id" value="<?php echo (int)array_key_first($form_companies); ?>"><?php endif; ?>
+                <?php else: ?>
+                <select id="company_id" name="company_id" required>
+                    <option value="">— Select company —</option>
+                    <?php foreach ($form_companies as $cid => $cname): ?>
+                    <option value="<?php echo $cid; ?>" <?php echo $pre_co === $cid ? 'selected' : ''; ?>><?php echo htmlspecialchars($cname); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?php endif; ?>
+                <small>This company's IT, Director and Accounts will handle it.</small>
+            </div>
+            <?php if ($departments): ?>
+            <div class="form-group">
+                <label for="department_id">Department *</label>
+                <?php if ($my_dept_row): ?>
+                <input type="text" id="department_id" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars(dept_label($my_dept_row)); ?>">
+                <?php else: ?>
+                <select id="department_id" name="department_id" required>
+                    <option value="">— Select department —</option>
+                    <?php $sel = (int)($_POST['department_id'] ?? 0);
+                    foreach ($departments as $d): ?>
+                    <option value="<?php echo $d['id']; ?>" data-company="<?php echo (int)$d['company_id']; ?>" <?php echo $sel === (int)$d['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars(dept_label($d)); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+        </div>
         <div class="form-row">
             <div class="form-group">
                 <label for="item_name">Item *</label>
@@ -148,26 +199,6 @@ include __DIR__ . '/../includes/header.php';
                 <input type="number" id="quantity" name="quantity" min="1" max="100000" step="1" required
                        value="<?php echo isset($error) ? (int)($_POST['quantity'] ?? 1) : $pre_qty; ?>">
             </div>
-            <?php if ($departments): ?>
-            <div class="form-group">
-                <label for="department_id">For department *</label>
-                <?php if ($my_dept_row): ?>
-                <input type="text" id="department_id" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars($my_dept_row['company_name'] . ' › ' . dept_label($my_dept_row)); ?>">
-                <?php else: ?>
-                <select id="department_id" name="department_id" required>
-                    <option value="">— Select department —</option>
-                    <?php $sel = (int)($_POST['department_id'] ?? 0); $groups = [];
-                    foreach ($departments as $d) $groups[$d['company_name'] . ' › ' . $d['branch_name']][] = $d;
-                    foreach ($groups as $g => $ds): ?>
-                    <optgroup label="<?php echo htmlspecialchars($g); ?>">
-                        <?php foreach ($ds as $d): ?><option value="<?php echo $d['id']; ?>" <?php echo $sel === (int)$d['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars(dept_label($d)); ?></option><?php endforeach; ?>
-                    </optgroup>
-                    <?php endforeach; ?>
-                </select>
-                <?php endif; ?>
-                <small>Its company's IT, Director and Accounts will handle it.</small>
-            </div>
-            <?php endif; ?>
         </div>
         <div class="form-group">
             <label for="reason">Reason *</label>
@@ -232,5 +263,24 @@ include __DIR__ . '/../includes/header.php';
     <div class="empty-state"><p><?php echo $tab === 'mine' ? 'Nothing is waiting for you.' : 'No requisitions here.'; ?></p></div>
     <?php endif; ?>
 </div>
+
+<script>
+// Only show the chosen company's departments
+(function () {
+    var co = document.querySelector('select#company_id'), dept = document.querySelector('select#department_id');
+    if (!co || !dept) return;
+    function sync() {
+        Array.prototype.forEach.call(dept.options, function (o) {
+            if (!o.value) return;
+            var show = co.value !== '' && o.dataset.company === co.value;
+            o.hidden = !show; o.disabled = !show;
+            if (!show && o.selected) dept.value = '';
+        });
+        dept.disabled = co.value === '';
+    }
+    co.addEventListener('change', sync);
+    sync();
+})();
+</script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
