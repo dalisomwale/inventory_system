@@ -232,13 +232,14 @@ include __DIR__ . '/../includes/header.php';
 <div class="card">
     <div class="table-container">
         <table class="users-table">
-            <thead><tr><th>Name</th><th>Email</th><th>Branch</th><th>Department</th><th>Role</th><th>Status</th><th>Last sign-in</th><th class="col-added">Date added</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Branch</th><th>Department</th><th>Role</th><th>Status</th><th>Last sign-in</th><th class="col-added">Date added</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($users as $u): $self = (int)$u['id'] === $me; ?>
                 <tr class="<?php echo $u['active'] ? '' : 'row-disabled'; ?>">
                     <td style="font-weight:600"><?php echo htmlspecialchars($u['full_name']); ?><?php echo $self ? ' <span class="muted-text">(you)</span>' : ''; ?></td>
                     <td><?php echo htmlspecialchars($u['email'] ?? '—'); ?></td>
-                    <td><?php echo $u['branch_name'] ? htmlspecialchars($u['branch_name']) . '<div class="item-desc">' . htmlspecialchars($u['company_name'] ?? '') . '</div>' : '<span class="muted-text">Not set</span>'; ?></td>
+                    <td><?php echo $u['company_name'] ? htmlspecialchars($u['company_name']) : '<span class="muted-text">Not set</span>'; ?></td>
+                    <td><?php echo $u['branch_name'] ? htmlspecialchars($u['branch_name']) : '<span class="muted-text">Not set</span>'; ?></td>
                     <td><?php echo $u['department_name'] ? htmlspecialchars($u['department_name']) : '<span class="muted-text">—</span>'; ?></td>
                     <td><?php echo $u['role_name'] ? ((int)$u['is_system'] ? '<span class="status-ordered">' . htmlspecialchars($u['role_name']) . '</span>' : '<span class="cat-pill">' . htmlspecialchars($u['role_name']) . '</span>') : '<span class="status-issuing">No role</span>'; ?></td>
                     <td><?php echo $u['active'] ? '<span class="status-receiving">Active</span>' : '<span class="status-issuing">Disabled</span>'; ?></td>
