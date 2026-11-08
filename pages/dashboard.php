@@ -133,18 +133,6 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <?php if ($week_recv + $week_issued > 0): ?>
             <?php echo chart_weekly($weekly); ?>
-            <details class="table-view">
-                <summary>Show as table</summary>
-                <table>
-                    <thead><tr><th>Week of</th><th class="num">Received</th><th class="num">Issued</th><th class="num">Net</th></tr></thead>
-                    <tbody>
-                    <?php foreach ($weekly as $w): $net = $w['received'] - $w['issued']; ?>
-                        <tr><td><?php echo $w['week']->format('d M Y'); ?></td><td class="num"><?php echo number_format($w['received']); ?></td>
-                            <td class="num"><?php echo number_format($w['issued']); ?></td><td class="num"><?php echo ($net > 0 ? '+' : '') . number_format($net); ?></td></tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </details>
         <?php else: ?>
             <div class="empty-state"><p>No stock received or issued in the last 8 weeks.</p></div>
         <?php endif; ?>

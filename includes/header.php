@@ -24,13 +24,13 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
     Dashboard
 </a>
+<?php if (can_any('stock.view','stock.receive','stock.issue','categories.manage') || req_can_open()): ?><div class="nav-section-label">Stock</div><?php endif; ?>
 <?php if (can('stock.view')): ?>
 <a href="stock.php" class="nav-link <?php echo ($cur==='stock.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="5" rx="1"/><rect x="3" y="11" width="18" height="5" rx="1"/><line x1="7" y1="6.5" x2="7.01" y2="6.5"/><line x1="7" y1="13.5" x2="7.01" y2="13.5"/><path d="M3 20h18"/></svg>
     Manage Stock
 </a>
 <?php endif; ?>
-<?php if (can_any('stock.receive','stock.issue','categories.manage') || req_can_open()): ?><div class="nav-section-label">Stock</div><?php endif; ?>
 <?php if (can('stock.receive')): ?>
 <a href="receive_stock.php" class="nav-link <?php echo ($cur==='receive_stock.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
