@@ -28,8 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
     $item_name = $v->text('item_name', 'Item', 200, true, 2);
     $category  = $v->exists($pdo, 'category_id', 'category', 'categories', 'id, name');
     $quantity  = $v->int('quantity', 'Quantity', 1, 100000);
-    $supplier  = $v->text('supplier', 'Supplier', 200, false);
-    $notes     = $v->textarea('reason', 'Notes', 500);
+    $supplier  = $v->text('supplier', 'Supplier', 200, true, 2);
+    $notes     = $v->textarea('reason', 'Reason', 500, true, 3);
     $dept = null;
     if ($departments) {
         foreach ($departments as $d) if ((int)$d['id'] === (int)($_POST['department_id'] ?? 0)) $dept = $d;
@@ -166,8 +166,8 @@ include __DIR__ . '/../includes/header.php';
                        value="<?php echo isset($error) ? (int)($_POST['quantity'] ?? 1) : $pre_qty; ?>">
             </div>
             <div class="form-group">
-                <label for="supplier">Supplier</label>
-                <input type="text" id="supplier" name="supplier" list="supplier-names" maxlength="200" placeholder="Optional"
+                <label for="supplier">Supplier *</label>
+                <input type="text" id="supplier" name="supplier" list="supplier-names" required minlength="2" maxlength="200" placeholder="Who will supply it"
                        value="<?php echo isset($error) ? htmlspecialchars($_POST['supplier'] ?? '') : ''; ?>">
                 <datalist id="supplier-names"><?php foreach ($suppliers as $n): ?><option value="<?php echo htmlspecialchars($n); ?>"><?php endforeach; ?></datalist>
             </div>
@@ -189,8 +189,8 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <?php endif; ?>
         <div class="form-group">
-            <label for="reason">Notes</label>
-            <textarea id="reason" name="reason" rows="2" maxlength="500" placeholder="Optional, e.g. for the Credit department"><?php echo isset($error) ? htmlspecialchars($_POST['reason'] ?? '') : ''; ?></textarea>
+            <label for="reason">Reason *</label>
+            <textarea id="reason" name="reason" rows="2" required minlength="3" maxlength="500" placeholder="Why it is needed, e.g. toner for the Credit department printer"><?php echo isset($error) ? htmlspecialchars($_POST['reason'] ?? '') : ''; ?></textarea>
         </div>
         <div class="form-actions"><button type="submit" class="btn btn-primary">Raise requisition</button></div>
     </form>
@@ -210,7 +210,7 @@ include __DIR__ . '/../includes/header.php';
     <?php if ($list): ?>
     <div class="table-container">
         <table>
-            <thead><tr><th>Added</th><th>Item</th><th>For</th><th class="num">Qty</th><th>Supplier</th><th>Notes</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Added</th><th>Item</th><th>For</th><th class="num">Qty</th><th>Supplier</th><th>Reason</th><th>Status</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($list as $p): ?>
                 <tr>
