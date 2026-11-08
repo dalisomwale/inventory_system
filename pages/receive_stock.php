@@ -201,9 +201,13 @@ include __DIR__ . '/../includes/header.php';
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
 <!-- Mode toggle -->
-<div class="action-group" style="margin-bottom:18px;">
-    <a href="receive_stock.php?category_id=<?php echo $selected_cat_id; ?>&branch_id=<?php echo $branch_id; ?>" class="btn <?php echo !$show_new_item ? 'btn-primary' : ''; ?>">Receive Existing Item</a>
-    <a href="receive_stock.php?category_id=<?php echo $selected_cat_id; ?>&branch_id=<?php echo $branch_id; ?>&new_item=1" class="btn <?php echo $show_new_item ? 'btn-primary' : ''; ?>">Add New Item</a>
+<div class="receive-modes">
+    <a href="receive_stock.php?category_id=<?php echo $selected_cat_id; ?>&branch_id=<?php echo $branch_id; ?>&new_item=1" class="receive-mode <?php echo $show_new_item ? 'active' : ''; ?>">
+        <strong>Add New Item</strong><span>An item that isn't in stock yet</span>
+    </a>
+    <a href="receive_stock.php?category_id=<?php echo $selected_cat_id; ?>&branch_id=<?php echo $branch_id; ?>" class="receive-mode <?php echo !$show_new_item ? 'active' : ''; ?>">
+        <strong>Receive Existing Item</strong><span>More of something already in stock</span>
+    </a>
 </div>
 
 <?php if ($show_new_item): ?>
