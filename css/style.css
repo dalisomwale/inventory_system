@@ -617,6 +617,7 @@ table.compact thead th { padding: 7px 10px; }
 .page-requisitions .btn,
 .page-categories .btn,
 .page-users .btn,
+.page-roles .btn,
 .page-companies .btn,
 .page-branches .btn,
 .page-departments .btn,
@@ -629,6 +630,7 @@ table.compact thead th { padding: 7px 10px; }
 .page-requisitions .btn-sm,
 .page-categories .btn-sm,
 .page-users .btn-sm,
+.page-roles .btn-sm,
 .page-companies .btn-sm,
 .page-branches .btn-sm,
 .page-departments .btn-sm,
@@ -692,6 +694,23 @@ a.ss:hover { border-color: var(--navy); }
 .org-pickers.two { grid-template-columns: repeat(2, 1fr); }
 .login-card .org-pickers { grid-template-columns: 1fr; gap: 0; }
 @media (max-width: 768px) { .org-pickers { grid-template-columns: 1fr; } }
+.perm-head { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 12px; }
+.perm-bulk { display: flex; gap: 8px; }
+.perm-groups { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 8px; }
+@media (max-width: 900px) { .perm-groups { grid-template-columns: 1fr; } }
+.perm-group { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px 6px; }
+.perm-group legend { font-family: var(--head); font-weight: 700; color: var(--navy); font-size: .9rem; padding: 0 6px; }
+.perm { display: flex; gap: 10px; align-items: flex-start; padding: 8px 2px; border-bottom: 1px solid #f0f1f5; cursor: pointer; }
+.perm:last-child { border-bottom: 0; }
+.perm input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--navy); flex-shrink: 0; }
+.perm strong { display: block; font-size: .9rem; color: var(--text); font-weight: 600; }
+.perm small { display: block; font-size: .78rem; color: var(--muted); }
+.perm-group legend small { font-family: var(--body); font-weight: 400; color: var(--muted); font-size: .78rem; margin-left: 4px; }
+.perm:has(input:checked) strong { color: var(--navy); }
+.perm-none strong { color: var(--muted); }
+.level-chip { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 8px; border-radius: 999px; background: #eef0f7; color: var(--text); font-size: .76rem; white-space: nowrap; }
+.level-chip b { font-weight: 600; color: var(--navy); }
+.level-chip.full { background: #e8f2dc; }
 .row-disabled td { color: var(--muted); }
 .row-disabled td:first-child { text-decoration: line-through; text-decoration-color: #c5cad6; }
 .btn-danger-outline { color: var(--danger); border-color: #efc4c4; }

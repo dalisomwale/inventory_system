@@ -1,7 +1,7 @@
 <?php
 // Add or edit a stock item, and delete items.
 require_once __DIR__ . '/../includes/auth.php';
-redirectIfNotLoggedIn();
+requirePermission('items.manage');
 
 $categories = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 

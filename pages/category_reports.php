@@ -1,7 +1,7 @@
 <?php
 // category_reports.php — front desk view
 require_once __DIR__ . '/../includes/auth.php';
-redirectIfNotLoggedIn();
+requirePermission('reports.view');
 
 $categories           = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 $selected_category_id = (int)($_GET['category_id'] ?? 0);
@@ -52,7 +52,9 @@ if ($selected_category_id > 0) {
 }
 
 $low_stock_count = 0;
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_report'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_report']) && !can('reports.submit')) {
+    $error = "You can view reports but not submit them.";
+} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_report'])) {
     $v            = new Validator($_POST);
     $cat_row      = $v->exists($pdo, 'category_id', 'category', 'categories', 'id, name');
     $report_month = $v->month('report_month', 'Report month');
@@ -239,7 +241,9 @@ include __DIR__ . '/../includes/header.php';
             <textarea name="notes" rows="3" maxlength="1000" placeholder="Any observations about this month's stock..."><?php echo htmlspecialchars($existing_report['notes']??''); ?></textarea>
         </div>
         <div class="form-actions">
-            <?php if ($existing_report): ?>
+            <?php if (!can('reports.submit')): ?>
+            <span class="muted-text">You can view this report but not submit it.</span>
+            <?php elseif ($existing_report): ?>
             <button type="submit" name="submit_report" class="btn btn-warning">Update Report</button>
             <?php else: ?>
             <button type="submit" name="submit_report" class="btn btn-success">Submit Report</button>

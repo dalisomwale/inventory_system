@@ -1,7 +1,7 @@
 <?php
 // Issue Stock — give items from a branch to a department.
 require_once __DIR__ . '/../includes/auth.php';
-redirectIfNotLoggedIn();
+requirePermission('stock.issue');
 
 $categories  = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 $branches    = org_branches($pdo);

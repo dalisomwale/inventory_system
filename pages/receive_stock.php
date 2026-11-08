@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-redirectIfNotLoggedIn();
+requirePermission('stock.receive');
 
 $categories        = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 $selected_cat_id   = isset($_GET['category_id']) ? (int)$_GET['category_id'] : 0;

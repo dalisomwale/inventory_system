@@ -91,6 +91,36 @@ ALTER TABLE users MODIFY role ENUM('manager','front_desk','admin','staff') NOT N
 UPDATE users SET role = 'staff' WHERE role IN ('manager','front_desk');
 ALTER TABLE users MODIFY role ENUM('admin','staff') NOT NULL DEFAULT 'staff';
 
+-- Roles and access rights (managed on Admin › Roles)
+CREATE TABLE IF NOT EXISTS roles (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL UNIQUE,
+    description VARCHAR(255) NULL,
+    is_system   TINYINT(1)   NOT NULL DEFAULT 0,
+    is_default  TINYINT(1)   NOT NULL DEFAULT 0,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_id    INT         NOT NULL,
+    permission VARCHAR(50) NOT NULL,
+    PRIMARY KEY (role_id, permission),
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+INSERT INTO roles (name, description, is_system, is_default)
+    SELECT 'System Admin', 'Full access, including users, roles and the organisation', 1, 0 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM roles WHERE is_system = 1);
+INSERT INTO roles (name, description, is_system, is_default)
+    SELECT 'Staff', 'All stock work: receive, issue, requisitions, items and reports', 0, 1 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'Staff');
+SET @admin_role = (SELECT MIN(id) FROM roles WHERE is_system = 1);
+SET @staff_role = (SELECT id FROM roles WHERE name = 'Staff');
+INSERT IGNORE INTO role_permissions (role_id, permission)
+    SELECT @staff_role, p FROM (SELECT 'stock.view' p UNION SELECT 'stock.receive' UNION SELECT 'stock.issue' UNION SELECT 'items.manage'
+                      UNION SELECT 'categories.manage' UNION SELECT 'requisitions.view' UNION SELECT 'requisitions.manage'
+                      UNION SELECT 'transactions.view' UNION SELECT 'reports.view' UNION SELECT 'reports.submit') x
+    WHERE NOT EXISTS (SELECT 1 FROM role_permissions WHERE role_id = @staff_role);
+CALL add_column_if_missing('users', 'role_id', 'INT NULL AFTER role');
+UPDATE users SET role_id = @admin_role WHERE role_id IS NULL AND role = 'admin';
+UPDATE users SET role_id = @staff_role WHERE role_id IS NULL;
+
 -- Users sign in with email; username is kept only for old records
 CALL add_column_if_missing('users', 'email', 'VARCHAR(190) NULL AFTER full_name');
 ALTER TABLE users MODIFY username VARCHAR(80) NULL;
@@ -136,6 +166,7 @@ BEGIN
     END IF;
 END //
 DELIMITER ;
+CALL add_fk_if_missing('users', 'role_id', 'roles');
 CALL add_fk_if_missing('users', 'company_id', 'companies');
 CALL add_fk_if_missing('users', 'branch_id', 'branches');
 CALL add_fk_if_missing('users', 'department_id', 'departments');

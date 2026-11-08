@@ -79,11 +79,11 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Quick actions -->
 <div class="action-tiles">
-    <?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive')); ?>
-    <?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue')); ?>
-    <?php echo action_tile('stock.php', 'Manage stock', 'All items and levels', icon('box')); ?>
-    <?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), $to_order ? $to_order . ' to order' : ''); ?>
-    <?php echo action_tile('reports.php', 'Monthly reports', $submitted_count . ' of ' . $total_cats . ' submitted', icon('report')); ?>
+    <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive')); ?><?php endif; ?>
+    <?php if (can('stock.issue')): ?><?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue')); ?><?php endif; ?>
+    <?php if (can('stock.view')): ?><?php echo action_tile('stock.php', 'Manage stock', 'All items and levels', icon('box')); ?><?php endif; ?>
+    <?php if (can('requisitions.view')): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), $to_order ? $to_order . ' to order' : ''); ?><?php endif; ?>
+    <?php if (can_any('reports.view','reports.submit')): ?><?php echo action_tile('reports.php', 'Monthly reports', $submitted_count . ' of ' . $total_cats . ' submitted', icon('report')); ?><?php endif; ?>
 </div>
 
 <!-- Movement + health -->
@@ -170,8 +170,8 @@ include __DIR__ . '/../includes/header.php';
                     <td><span class="<?php echo $urgent ? 'status-issuing' : 'status-pending'; ?>"><?php echo $urgent ? '&#9888; ' : ''; ?><?php echo days_left_label($r['days_left'], (int)$r['current_quantity']); ?></span></td>
                     <td class="num"><strong><?php echo number_format($r['suggest']); ?></strong></td>
                     <td><div class="row-actions">
-                        <a href="requisitions.php?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm">Raise requisition</a>
-                        <a href="receive_stock.php?category_id=<?php echo (int)$r['category_id']; ?>&item_id=<?php echo $r['id']; ?>" class="btn btn-sm">Receive</a>
+                        <?php if (can('requisitions.manage')): ?><a href="requisitions.php?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm">Raise requisition</a><?php endif; ?>
+                        <?php if (can('stock.receive')): ?><a href="receive_stock.php?category_id=<?php echo (int)$r['category_id']; ?>&item_id=<?php echo $r['id']; ?>" class="btn btn-sm">Receive</a><?php endif; ?>
                     </div></td>
                 </tr>
             <?php endforeach; ?>
@@ -185,13 +185,13 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Requisitions -->
-<?php if ($to_order + $on_order > 0):
+<?php if ($to_order + $on_order > 0 && can('requisitions.view')):
 $open_purchases = $pdo->query("SELECT * FROM procurement WHERE status IN ('needed','ordered')
                                ORDER BY FIELD(status,'needed','ordered'), created_at LIMIT 6")->fetchAll(); ?>
 <div class="card">
     <div class="card-head">
         <h3>Open requisitions &mdash; <?php echo $to_order; ?> to order, <?php echo $on_order; ?> on order</h3>
-        <a href="requisitions.php" class="btn btn-sm">All requisitions</a>
+        <?php if (can('requisitions.view')): ?><a href="requisitions.php" class="btn btn-sm">All requisitions</a><?php endif; ?>
     </div>
     <table class="compact">
         <thead><tr><th>Item</th><th class="num">Qty</th><th>Supplier</th><th>Status</th><th></th></tr></thead>
@@ -203,7 +203,7 @@ $open_purchases = $pdo->query("SELECT * FROM procurement WHERE status IN ('neede
                 <td class="muted"><?php echo htmlspecialchars($p['supplier'] ?: '—'); ?></td>
                 <td><?php echo $p['status'] === 'needed' ? '<span class="status-pending">To order</span>' : '<span class="status-ordered">Ordered</span>'; ?></td>
                 <td><div class="row-actions">
-                    <?php if ($p['status'] === 'needed'): ?>
+                    <?php if ($p['status'] === 'needed' && can('requisitions.manage')): ?>
                     <form method="POST" action="requisitions.php" class="inline-form"
                           data-confirm-title="Mark as ordered"
                           data-confirm="Mark <?php echo htmlspecialchars($p['quantity'] . ' × ' . $p['item_name']); ?> as ordered?"
@@ -213,7 +213,7 @@ $open_purchases = $pdo->query("SELECT * FROM procurement WHERE status IN ('neede
                         <button type="submit" name="purchase_action" value="ordered" class="btn btn-sm btn-primary">Mark ordered</button>
                     </form>
                     <?php endif; ?>
-                    <a href="receive_stock.php?purchase_id=<?php echo $p['id']; ?>" class="btn btn-sm btn-success">Receive</a>
+                    <?php if (can('stock.receive')): ?><a href="receive_stock.php?purchase_id=<?php echo $p['id']; ?>" class="btn btn-sm btn-success">Receive</a><?php endif; ?>
                 </div></td>
             </tr>
         <?php endforeach; ?>
@@ -225,7 +225,7 @@ $open_purchases = $pdo->query("SELECT * FROM procurement WHERE status IN ('neede
 <!-- Usage -->
 <div class="grid-2">
     <div class="card">
-        <div class="card-head"><h3>Most issued &mdash; last 30 days</h3><a href="view_transactions.php" class="btn btn-sm">Transactions</a></div>
+        <div class="card-head"><h3>Most issued &mdash; last 30 days</h3><?php if (can('transactions.view')): ?><a href="view_transactions.php" class="btn btn-sm">Transactions</a><?php endif; ?></div>
         <?php echo $top_issued ? chart_hbars($top_issued, fn($v) => number_format($v) . ' units') : '<div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>'; ?>
     </div>
     <div class="card">
@@ -278,7 +278,7 @@ $open_purchases = $pdo->query("SELECT * FROM procurement WHERE status IN ('neede
 <div class="card" style="margin-bottom:16px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0">Monthly Reports &mdash; <?php echo date('F Y'); ?></h3>
-        <a href="reports.php" class="btn btn-sm">View All</a>
+        <?php if (can('reports.view')): ?><a href="reports.php" class="btn btn-sm">View All</a><?php endif; ?>
     </div>
     <div class="progress-track">
         <div class="progress-fill" style="width:<?php echo $total_cats > 0 ? round(($submitted_count / $total_cats) * 100) : 0; ?>%"></div>

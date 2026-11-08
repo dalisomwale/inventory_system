@@ -1,7 +1,7 @@
 <?php
 // Requisitions — what needs buying: To order -> Ordered -> Received (or Cancelled).
 require_once __DIR__ . '/../includes/auth.php';
-redirectIfNotLoggedIn();
+requirePermission('requisitions.view');
 
 $categories = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 $departments = org_departments($pdo);
@@ -14,6 +14,12 @@ if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['f
 function back_to_list(string $tab): void {
     header('Location: requisitions.php' . ($tab !== 'open' ? '?tab=' . urlencode($tab) : ''));
     exit();
+}
+
+// Raising, ordering and cancelling need the "manage" right; viewing doesn't
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !can('requisitions.manage')) {
+    $_SESSION['flash_error'] = "You can view requisitions but not change them.";
+    header('Location: requisitions.php'); exit();
 }
 
 // ── Add to the list ─────────────────────────────────────────
@@ -126,6 +132,7 @@ include __DIR__ . '/../includes/header.php';
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
+<?php if (can('requisitions.manage')): ?>
 <!-- Add -->
 <div class="form-container wide">
     <div class="form-title">New requisition</div>
@@ -188,6 +195,7 @@ include __DIR__ . '/../includes/header.php';
         <div class="form-actions"><button type="submit" class="btn btn-primary">Raise requisition</button></div>
     </form>
 </div>
+<?php endif; ?>
 
 <!-- Tabs -->
 <div class="pill-tabs">
@@ -220,7 +228,7 @@ include __DIR__ . '/../includes/header.php';
                     </td>
                     <td>
                         <div class="row-actions">
-                        <?php if ($p['status'] === 'needed'): ?>
+                        <?php if ($p['status'] === 'needed' && can('requisitions.manage')): ?>
                             <form method="POST" class="inline-form"
                                   data-confirm-title="Mark as ordered"
                                   data-confirm="Mark <?php echo htmlspecialchars($p['quantity'] . ' × ' . $p['item_name']); ?> as ordered<?php echo $p['supplier'] ? ' from ' . htmlspecialchars($p['supplier']) : ''; ?>?"
@@ -231,7 +239,8 @@ include __DIR__ . '/../includes/header.php';
                             </form>
                         <?php endif; ?>
                         <?php if (in_array($p['status'], ['needed', 'ordered'], true)): ?>
-                            <a href="receive_stock.php?purchase_id=<?php echo $p['id']; ?>" class="btn btn-sm btn-success">Receive</a>
+                            <?php if (can('stock.receive')): ?><a href="receive_stock.php?purchase_id=<?php echo $p['id']; ?>" class="btn btn-sm btn-success">Receive</a><?php endif; ?>
+                            <?php if (can('requisitions.manage')): ?>
                             <form method="POST" class="inline-form"
                                   data-confirm-title="Cancel requisition"
                                   data-confirm="Cancel the requisition for <?php echo htmlspecialchars($p['quantity'] . ' × ' . $p['item_name']); ?>?"
@@ -240,6 +249,7 @@ include __DIR__ . '/../includes/header.php';
                                 <input type="hidden" name="return" value="<?php echo htmlspecialchars('requisitions.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : '')); ?>">
                                 <button type="submit" name="purchase_action" value="cancel" class="btn btn-sm">Cancel</button>
                             </form>
+                            <?php endif; ?>
                         <?php endif; ?>
                         </div>
                     </td>

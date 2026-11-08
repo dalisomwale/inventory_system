@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-redirectIfNotLoggedIn();
+requirePermission('reports.submit');
 
 $current_month        = date('Y-m');
 $selected_month       = safe_month($_GET['month'] ?? null);

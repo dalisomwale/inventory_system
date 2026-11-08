@@ -12,7 +12,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $v         = new Validator($_POST);
     $full_name = $v->text('full_name', 'Full name', 150, true, 3);
     $email     = $v->email('email', 'Work email');
-    $role      = 'staff'; // new accounts are staff; the System Admin can change roles
+    $role      = 'staff';
+    // New accounts get the role marked "default for sign-ups" on Admin › Roles
+    $role_id   = (int)$pdo->query("SELECT id FROM roles WHERE is_default = 1 AND is_system = 0 ORDER BY id LIMIT 1")->fetchColumn() ?: null;
     $password  = (string)($_POST['password'] ?? '');
     [$cid, $bid, $did] = org_validate($pdo, $v, $_POST);
     $confirm   = (string)($_POST['confirm_password'] ?? '');
@@ -41,8 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'An account with this email already exists. <a href="login.php">Sign in</a> instead.';
             } else {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $pdo->prepare("INSERT INTO users (full_name, email, password, role, company_id, branch_id, department_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
-                    ->execute([$full_name, $email, $hash, $role, $cid, $bid, $did]);
+                $pdo->prepare("INSERT INTO users (full_name, email, password, role, role_id, company_id, branch_id, department_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+                    ->execute([$full_name, $email, $hash, $role, $role_id, $cid, $bid, $did]);
                 try {
                     $new_id = (int)$pdo->lastInsertId();
                     $pdo->prepare("INSERT INTO audit_trail (user_id, action, details) VALUES (?, 'CREATE_ACCOUNT', ?)")

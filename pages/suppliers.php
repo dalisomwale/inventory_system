@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
-redirectIfNotLoggedIn();
+require_once __DIR__ . '/../includes/auth.php';
+requirePermission('stock.view');
 
 // Get unique suppliers from receiving records
 $suppliers = $pdo->query("SELECT DISTINCT supplier FROM stock_receiving WHERE supplier IS NOT NULL AND supplier != '' ORDER BY supplier")->fetchAll(PDO::FETCH_COLUMN);

@@ -2,7 +2,7 @@
 // Manage Stock — every item's stock level in one place, for both roles.
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/insights.php';
-redirectIfNotLoggedIn();
+requirePermission('stock.view');
 
 $categories = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 
@@ -92,10 +92,10 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Big actions -->
 <div class="action-tiles">
-    <?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive')); ?>
-    <?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue')); ?>
-    <?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request')); ?>
-    <?php echo action_tile('categories.php?add=1#add', 'Add Categories', 'Create a new category', icon('box')); ?>
+    <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive')); ?><?php endif; ?>
+    <?php if (can('stock.issue')): ?><?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue')); ?><?php endif; ?>
+    <?php if (can('requisitions.view')): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request')); ?><?php endif; ?>
+    <?php if (can('categories.manage')): ?><?php echo action_tile('categories.php?add=1#add', 'Add Categories', 'Create a new category', icon('box')); ?><?php endif; ?>
 </div>
 
 <!-- Search and filters -->
@@ -202,6 +202,7 @@ include __DIR__ . '/../includes/header.php';
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($r['created_at'])); ?></td>
                     <td><div class="row-actions">
                         <a href="stock_item.php?id=<?php echo $r['id']; ?>" class="btn btn-icon" aria-label="View <?php echo htmlspecialchars($r['item_name']); ?>" data-tip="View"><?php echo row_icon('view'); ?></a>
+<?php if (can('items.manage')): ?>
                         <a href="stock_edit.php?id=<?php echo $r['id']; ?>" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($r['item_name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
                         <?php if ((int)$r['moves'] === 0): ?>
                         <form method="POST" action="stock_edit.php" class="inline-form"
@@ -215,6 +216,7 @@ include __DIR__ . '/../includes/header.php';
                         <?php else: ?>
                         <span class="btn btn-icon" aria-disabled="true" role="img" aria-label="Can't delete: has stock history" data-tip="Can't delete: has stock history"><?php echo row_icon('delete'); ?></span>
                         <?php endif; ?>
+                        <?php endif; ?>
                     </div></td>
                 </tr>
             <?php endforeach; ?>
@@ -224,7 +226,7 @@ include __DIR__ . '/../includes/header.php';
     <?php elseif ($tot_items === 0): ?>
     <div class="empty-state">
         <p>There are no items yet.</p>
-        <a href="stock_edit.php" class="btn btn-primary">Add your first item</a>
+        <?php if (can('items.manage')): ?><a href="stock_edit.php" class="btn btn-primary">Add your first item</a><?php endif; ?>
     </div>
     <?php else: ?>
     <div class="empty-state"><p>No items match these filters.</p><a href="stock.php" class="btn">Clear filters</a></div>

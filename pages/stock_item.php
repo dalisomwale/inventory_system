@@ -2,7 +2,7 @@
 // View one stock item: details, actions and full history.
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/insights.php';
-redirectIfNotLoggedIn();
+requirePermission('stock.view');
 
 $st = $pdo->prepare("SELECT i.*, COALESCE(c.name, i.category, 'Other') AS category_name
                      FROM items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.id = ?");
@@ -55,6 +55,7 @@ include __DIR__ . '/../includes/header.php';
         <?php elseif ($state === 'low'): ?><span class="status-pending">&#9888; Below reorder level</span>
         <?php else: ?><span class="status-receiving">&#10003; In stock</span><?php endif; ?>
     </div>
+    <?php if (can('items.manage')): ?>
     <div style="display:flex; gap:8px; flex-wrap:wrap">
         <a href="stock_edit.php?id=<?php echo $item['id']; ?>" class="btn">Edit</a>
         <?php if (!$has_history): ?>
@@ -69,6 +70,7 @@ include __DIR__ . '/../includes/header.php';
         <span class="btn" aria-disabled="true" data-tip="Items with stock history can't be deleted">Delete</span>
         <?php endif; ?>
     </div>
+    <?php endif; ?>
 </div>
 
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
@@ -76,13 +78,13 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Actions -->
 <div class="action-tiles">
-    <?php echo action_tile('receive_stock.php?category_id=' . (int)$item['category_id'] . '&item_id=' . $item['id'], 'Receive', 'Add stock that arrived', icon('receive')); ?>
-    <?php if ($item['current_quantity'] > 0): ?>
+    <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php?category_id=' . (int)$item['category_id'] . '&item_id=' . $item['id'], 'Receive', 'Add stock that arrived', icon('receive')); ?><?php endif; ?>
+    <?php if ($item['current_quantity'] > 0 && can('stock.issue')): ?>
         <?php echo action_tile('issue_stock.php?category_id=' . (int)$item['category_id'] . '&item_id=' . $item['id'], 'Issue', 'Give out to a department', icon('issue')); ?>
     <?php endif; ?>
-    <?php if ($open_req): ?>
+    <?php if ($open_req && can('requisitions.view')): ?>
         <?php echo action_tile('requisitions.php', 'Requisition open', $open_req['quantity'] . ' ' . ($open_req['status'] === 'ordered' ? 'ordered' : 'to order'), icon('request')); ?>
-    <?php else: ?>
+    <?php elseif (!$open_req && can('requisitions.manage')): ?>
         <?php echo action_tile('requisitions.php?item_name=' . urlencode($item['item_name']) . '&qty=' . max(1, (int)($f['suggest'] ?? 1)) . '&category_id=' . (int)$item['category_id'], 'Raise requisition', 'Order more of this item', icon('request')); ?>
     <?php endif; ?>
 </div>
@@ -125,8 +127,8 @@ include __DIR__ . '/../includes/header.php';
                 <td class="muted"><?php echo htmlspecialchars($bb['company_name']); ?></td>
                 <td class="num"><strong class="qty-<?php echo $bb['quantity'] <= 0 ? 'out' : ($bb['quantity'] <= $item['reorder_level'] ? 'low' : 'ok'); ?>"><?php echo number_format($bb['quantity']); ?></strong></td>
                 <td><div class="row-actions">
-                    <a href="receive_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>&branch_id=<?php echo $bb['id']; ?>" class="btn btn-sm">Receive</a>
-                    <?php if ($bb['quantity'] > 0): ?><a href="issue_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>&branch_id=<?php echo $bb['id']; ?>" class="btn btn-sm">Issue</a><?php endif; ?>
+                    <?php if (can('stock.receive')): ?><a href="receive_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>&branch_id=<?php echo $bb['id']; ?>" class="btn btn-sm">Receive</a><?php endif; ?>
+                    <?php if ($bb['quantity'] > 0 && can('stock.issue')): ?><a href="issue_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>&branch_id=<?php echo $bb['id']; ?>" class="btn btn-sm">Issue</a><?php endif; ?>
                 </div></td>
             </tr>
         <?php endforeach; ?>

@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-redirectIfNotLoggedIn();
+requirePermission('transactions.view');
 
 $filter_type = $_GET['type']    ?? 'all';
 $filter_date = $_GET['date']    ?? date('Y-m-d');

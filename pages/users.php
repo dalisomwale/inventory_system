@@ -1,10 +1,14 @@
 <?php
-// Users — System Admin only: add accounts, change roles, disable/enable, reset passwords, delete.
+// Users — add accounts, choose their role, disable/enable, reset passwords, delete.
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/insights.php';
-requireAdmin();
+requirePermission('admin.users');
 
-$roles = ['staff' => 'Staff', 'admin' => 'System Admin'];
+$role_rows = $pdo->query("SELECT id, name, is_system, is_default FROM roles ORDER BY is_system DESC, name")->fetchAll();
+$roles = []; foreach ($role_rows as $r) $roles[(string)$r['id']] = $r['name'];
+$admin_role_ids = array_map(fn($r) => (int)$r['id'], array_filter($role_rows, fn($r) => (int)$r['is_system']));
+$default_role = 0; foreach ($role_rows as $r) if ((int)$r['is_default']) $default_role = (int)$r['id'];
+$filter_role = (int)($_GET['role_id'] ?? 0);
 $me    = (int)$_SESSION['user_id'];
 
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
@@ -14,7 +18,7 @@ function back_to_users(): void { header('Location: users.php'); exit(); }
 
 /** Number of other active admins besides $id. */
 function other_admins(PDO $pdo, int $id): int {
-    $st = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1 AND id <> ?");
+    $st = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id WHERE r.is_system = 1 AND u.active = 1 AND u.id <> ?");
     $st->execute([$id]);
     return (int)$st->fetchColumn();
 }
@@ -31,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_user'])) {
     $v     = new Validator($_POST);
     $name  = $v->text('full_name', 'Full name', 150, true, 3);
     $email = $v->email('email', 'Work email');
-    $role  = $v->choice('role', 'role', array_keys($roles));
+    $role  = (int)$v->choice('role_id', 'role', array_map('strval', array_keys($roles)));
     $pw    = (string)($_POST['password'] ?? '');
     [$cid, $bid, $did] = org_validate($pdo, $v, $_POST);
     if ($v->ok() && !email_domain_allowed($email)) $v->fail('Use an Altus work email (' . implode(', ', array_map(fn($d) => '@' . $d, ALLOWED_EMAIL_DOMAINS)) . ').');
@@ -41,9 +45,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_user'])) {
         if ($d->fetch()) $v->fail("An account for $email already exists.");
     }
     if ($v->ok()) {
-        $pdo->prepare("INSERT INTO users (full_name, email, password, role, active, company_id, branch_id, department_id) VALUES (?,?,?,?,1,?,?,?)")
-            ->execute([$name, $email, password_hash($pw, PASSWORD_DEFAULT), $role, $cid, $bid, $did]);
-        logAudit($pdo, $me, 'USER_CREATED', null, null, "Created $email ($role)");
+        $pdo->prepare("INSERT INTO users (full_name, email, password, role, role_id, active, company_id, branch_id, department_id) VALUES (?,?,?,?,?,1,?,?,?)")
+            ->execute([$name, $email, password_hash($pw, PASSWORD_DEFAULT), in_array($role, $admin_role_ids, true) ? 'admin' : 'staff', $role, $cid, $bid, $did]);
+        logAudit($pdo, $me, 'USER_CREATED', null, null, "Created $email ({$roles[$role]})");
         $_SESSION['flash'] = "Account created for $name ($email). Give them the password you set; they can change it in Settings.";
         back_to_users();
     }
@@ -53,23 +57,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_user'])) {
 // ── Edit user (name, email, role) ───────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_user'])) {
     $v     = new Validator($_POST);
-    $u     = $v->exists($pdo, 'id', 'user', 'users', 'id, email, role, active');
+    $u     = $v->exists($pdo, 'id', 'user', 'users', 'id, email, role_id, active');
     $name  = $v->text('full_name', 'Full name', 150, true, 3);
     $email = $v->email('email', 'Work email');
-    $role  = $v->choice('role', 'role', array_keys($roles));
+    $role  = (int)$v->choice('role_id', 'role', array_map('strval', array_keys($roles)));
     [$cid, $bid, $did] = org_validate($pdo, $v, $_POST);
     if ($v->ok()) {
         $d = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id <> ?"); $d->execute([$email, $u['id']]);
         if ($d->fetch()) $v->fail("Another account already uses $email.");
-        if ($u['role'] === 'admin' && $role !== 'admin') {
+        if ($v->ok() && (int)$u['id'] === $me && $role !== (int)$u['role_id']) {
+            $v->fail("You can't change your own role.");
+        } elseif (in_array((int)$u['role_id'], $admin_role_ids, true) && !in_array($role, $admin_role_ids, true)) {
             if ((int)$u['id'] === $me)                 $v->fail("You can't remove your own System Admin role.");
             elseif (other_admins($pdo, (int)$u['id']) === 0) $v->fail('There must always be at least one System Admin.');
         }
     }
     if ($v->ok()) {
-        $pdo->prepare("UPDATE users SET full_name=?, email=?, role=?, company_id=?, branch_id=?, department_id=? WHERE id=?")
-            ->execute([$name, $email, $role, $cid, $bid, $did, $u['id']]);
-        $what = $u['role'] !== $role ? " role {$u['role']} → $role" : '';
+        $pdo->prepare("UPDATE users SET full_name=?, email=?, role=?, role_id=?, company_id=?, branch_id=?, department_id=? WHERE id=?")
+            ->execute([$name, $email, in_array($role, $admin_role_ids, true) ? 'admin' : 'staff', $role, $cid, $bid, $did, $u['id']]);
+        $what = (int)$u['role_id'] !== $role ? " role → {$roles[$role]}" : '';
         logAudit($pdo, $me, 'USER_UPDATED', null, null, "Updated {$u['email']}$what");
         $_SESSION['flash'] = "$name saved.";
         back_to_users();
@@ -97,10 +103,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_password'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_action'])) {
     $v      = new Validator($_POST);
     $action = $v->choice('user_action', 'action', ['disable', 'enable', 'delete']);
-    $u      = $v->exists($pdo, 'id', 'user', 'users', 'id, full_name, email, role, active');
+    $u      = $v->exists($pdo, 'id', 'user', 'users', 'id, full_name, email, role_id, active');
     if ($v->ok() && $action !== 'enable') {
         if ((int)$u['id'] === $me) $v->fail("You can't " . $action . " your own account.");
-        elseif ($u['role'] === 'admin' && other_admins($pdo, (int)$u['id']) === 0) $v->fail('There must always be at least one System Admin.');
+        elseif (in_array((int)$u['role_id'], $admin_role_ids, true) && other_admins($pdo, (int)$u['id']) === 0) $v->fail('There must always be at least one System Admin.');
     }
     if ($v->ok()) {
         if ($action === 'delete') {
@@ -124,16 +130,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_action'])) {
 
 // ── Data ────────────────────────────────────────────────────
 $users = $pdo->query("
-    SELECT u.id, u.full_name, u.email, u.role, u.active, u.last_login_at, u.created_at,
+    SELECT u.id, u.full_name, u.email, u.role_id, rl.name AS role_name, rl.is_system, u.active, u.last_login_at, u.created_at,
            u.company_id, u.branch_id, u.department_id, b.name AS branch_name, d.name AS department_name, c.name AS company_name,
            (SELECT COUNT(*) FROM stock_receiving WHERE received_by = u.id) + (SELECT COUNT(*) FROM stock_issuing WHERE issued_by = u.id)
          + (SELECT COUNT(*) FROM procurement WHERE requested_by = u.id OR approved_by = u.id)
          + (SELECT COUNT(*) FROM category_monthly_reports WHERE submitted_by = u.id) AS records
     FROM users u
+    LEFT JOIN roles rl ON rl.id = u.role_id
     LEFT JOIN companies c ON c.id = u.company_id
     LEFT JOIN branches b ON b.id = u.branch_id
     LEFT JOIN departments d ON d.id = u.department_id
-    ORDER BY u.active DESC, FIELD(u.role,'admin','staff'), u.full_name")->fetchAll();
+    " . ($filter_role ? "WHERE u.role_id = " . $filter_role : "") . "
+    ORDER BY u.active DESC, rl.is_system DESC, u.full_name")->fetchAll();
 
 $editing = $resetting = null;
 foreach ($users as $u) {
@@ -150,7 +158,7 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="page-header">
     <h1>Users</h1>
-    <span class="card-hint"><?php echo count($users); ?> account<?php echo count($users) === 1 ? '' : 's'; ?> &middot; Staff can do all stock work; System Admins can also manage users</span>
+    <span class="card-hint"><?php echo count($users); ?> account<?php echo count($users) === 1 ? '' : 's'; ?><?php echo $filter_role ? ' with the ' . htmlspecialchars($roles[$filter_role] ?? '') . ' role &middot; <a href="users.php">Show all</a>' : ''; ?> &middot; What each role can do is set under <a href="roles.php">Roles</a></span>
 </div>
 
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
@@ -159,7 +167,7 @@ include __DIR__ . '/../includes/header.php';
 <?php if ($editing): ?>
 <div class="form-container wide">
     <div class="form-title">Edit <?php echo htmlspecialchars($editing['full_name']); ?></div>
-    <form method="POST" data-confirm-title="Save user" data-confirm="Save the changes to {full_name} ({email}) as {role}?" data-confirm-ok="Save changes">
+    <form method="POST" data-confirm-title="Save user" data-confirm="Save the changes to {full_name} ({email}) as {role_id}?" data-confirm-ok="Save changes">
         <input type="hidden" name="edit_user" value="1"><input type="hidden" name="id" value="<?php echo $editing['id']; ?>">
         <div class="form-row">
             <div class="form-group"><label for="full_name">Full name *</label>
@@ -167,11 +175,11 @@ include __DIR__ . '/../includes/header.php';
             <div class="form-group"><label for="email">Work email *</label>
                 <input type="email" id="email" name="email" required maxlength="190" value="<?php echo htmlspecialchars($val('email', $editing['email'])); ?>"></div>
         </div>
-        <div class="form-group" style="max-width:300px"><label for="role">Role *</label>
-            <select id="role" name="role" required <?php echo (int)$editing['id'] === $me ? 'disabled' : ''; ?>>
-                <?php foreach ($roles as $k => $label): ?><option value="<?php echo $k; ?>" <?php echo $val('role', $editing['role']) === $k ? 'selected' : ''; ?>><?php echo $label; ?></option><?php endforeach; ?>
+        <div class="form-group" style="max-width:300px"><label for="role_id">Role *</label>
+            <select id="role_id" name="role_id" required <?php echo (int)$editing['id'] === $me ? 'disabled' : ''; ?>>
+                <?php foreach ($roles as $k => $label): ?><option value="<?php echo $k; ?>" <?php echo (int)$val('role_id', $editing['role_id']) === (int)$k ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option><?php endforeach; ?>
             </select>
-            <?php if ((int)$editing['id'] === $me): ?><input type="hidden" name="role" value="<?php echo htmlspecialchars($editing['role']); ?>"><small>You can't change your own role.</small><?php endif; ?>
+            <?php if ((int)$editing['id'] === $me): ?><input type="hidden" name="role_id" value="<?php echo (int)$editing['role_id']; ?>"><small>You can't change your own role.</small><?php endif; ?>
         </div>
         <?php echo org_pickers($pdo, ($form ?? '') ? $_POST : $editing); ?>
         <div class="form-actions"><button type="submit" class="btn btn-primary">Save changes</button><a href="users.php" class="btn">Cancel</a></div>
@@ -196,7 +204,7 @@ include __DIR__ . '/../includes/header.php';
 <?php else: ?>
 <div class="form-container wide">
     <div class="form-title">Add user</div>
-    <form method="POST" data-confirm-title="Add user" data-confirm="Create a {role} account for {full_name} ({email}) at {branch_id}?" data-confirm-ok="Add user">
+    <form method="POST" data-confirm-title="Add user" data-confirm="Create an account for {full_name} ({email}) as {role_id} at {branch_id}?" data-confirm-ok="Add user">
         <input type="hidden" name="add_user" value="1">
         <div class="form-row">
             <div class="form-group"><label for="full_name">Full name *</label>
@@ -205,10 +213,11 @@ include __DIR__ . '/../includes/header.php';
                 <input type="email" id="email" name="email" required maxlength="190" placeholder="name@altus.co.zm" value="<?php echo htmlspecialchars($val('email')); ?>"></div>
         </div>
         <div class="form-row">
-            <div class="form-group"><label for="role">Role *</label>
-                <select id="role" name="role" required>
-                    <?php foreach ($roles as $k => $label): ?><option value="<?php echo $k; ?>" <?php echo $val('role', 'staff') === $k ? 'selected' : ''; ?>><?php echo $label; ?></option><?php endforeach; ?>
-                </select></div>
+            <div class="form-group"><label for="role_id">Role *</label>
+                <select id="role_id" name="role_id" required>
+                    <?php foreach ($roles as $k => $label): ?><option value="<?php echo $k; ?>" <?php echo (int)$val('role_id', $default_role) === (int)$k ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option><?php endforeach; ?>
+                </select>
+                <small><a href="roles.php">Roles and access rights</a></small></div>
             <div class="form-group"><label for="password">Temporary password *</label>
                 <input type="password" id="password" name="password" required minlength="8" maxlength="128" autocomplete="new-password"
                        pattern="(?=.*[A-Za-z])(?=.*\d).{8,}" title="At least 8 characters, with a letter and a number.">
@@ -230,7 +239,7 @@ include __DIR__ . '/../includes/header.php';
                     <td style="font-weight:600"><?php echo htmlspecialchars($u['full_name']); ?><?php echo $self ? ' <span class="muted-text">(you)</span>' : ''; ?></td>
                     <td><?php echo htmlspecialchars($u['email'] ?? '—'); ?></td>
                     <td><?php echo $u['branch_name'] ? htmlspecialchars($u['branch_name']) . ($u['department_name'] ? ' &middot; ' . htmlspecialchars($u['department_name']) : '') . '<div class="item-desc">' . htmlspecialchars($u['company_name'] ?? '') . '</div>' : '<span class="muted-text">Not set</span>'; ?></td>
-                    <td><?php echo $u['role'] === 'admin' ? '<span class="status-ordered">System Admin</span>' : '<span class="cat-pill">Staff</span>'; ?></td>
+                    <td><?php echo $u['role_name'] ? ((int)$u['is_system'] ? '<span class="status-ordered">' . htmlspecialchars($u['role_name']) . '</span>' : '<span class="cat-pill">' . htmlspecialchars($u['role_name']) . '</span>') : '<span class="status-issuing">No role</span>'; ?></td>
                     <td><?php echo $u['active'] ? '<span class="status-receiving">Active</span>' : '<span class="status-issuing">Disabled</span>'; ?></td>
                     <td class="muted" style="white-space:nowrap"><?php echo $u['last_login_at'] ? date('d M Y, H:i', strtotime($u['last_login_at'])) : 'Never'; ?></td>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($u['created_at'])); ?></td>

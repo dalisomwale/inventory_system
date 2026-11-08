@@ -38,15 +38,17 @@ if (strlen($pw) < 8 || !preg_match('/[A-Za-z]/', $pw) || !preg_match('/\d/', $pw
 }
 
 $hash = password_hash($pw, PASSWORD_DEFAULT);
+$admin_role = (int)$pdo->query("SELECT id FROM roles WHERE is_system = 1 ORDER BY id LIMIT 1")->fetchColumn();
+if (!$admin_role) { fwrite(STDERR, "The roles table isn't set up. Run: mysql -u root -p < sql/migrate_schema.sql\n"); exit(1); }
 $st = $pdo->prepare("SELECT id FROM users WHERE email = ?");
 $st->execute([$email]);
 $id = $st->fetchColumn();
 
 if ($id) {
-    $pdo->prepare("UPDATE users SET password = ?, role = 'admin', active = 1 WHERE id = ?")->execute([$hash, $id]);
+    $pdo->prepare("UPDATE users SET password = ?, role = 'admin', role_id = ?, active = 1 WHERE id = ?")->execute([$hash, $admin_role, $id]);
     echo "Updated: $email is now a System Admin with the new password.\n";
 } else {
-    $pdo->prepare("INSERT INTO users (full_name, email, password, role, active) VALUES (?, ?, ?, 'admin', 1)")->execute([$name, $email, $hash]);
+    $pdo->prepare("INSERT INTO users (full_name, email, password, role, role_id, active) VALUES (?, ?, ?, 'admin', ?, 1)")->execute([$name, $email, $hash, $admin_role]);
     $id = (int)$pdo->lastInsertId();
     echo "Created System Admin account for $name ($email).\n";
 }

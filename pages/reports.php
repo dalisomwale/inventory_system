@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-redirectIfNotLoggedIn();
+requirePermission('reports.view');
 
 $selected_month       = $_GET['month']       ?? date('Y-m');
 $selected_category_id = (int)($_GET['category_id'] ?? 0);
@@ -46,7 +46,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="page-header">
     <h1>Monthly Reports</h1>
     <div style="display:flex; gap:8px; flex-wrap:wrap">
-        <a href="submit_category_report.php" class="btn btn-primary">Submit a monthly report</a>
+        <?php if (can('reports.submit')): ?><a href="submit_category_report.php" class="btn btn-primary">Submit a monthly report</a><?php endif; ?>
         <a href="category_reports.php" class="btn">Category activity</a>
     </div>
 </div>

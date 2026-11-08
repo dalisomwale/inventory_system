@@ -43,6 +43,29 @@ CREATE TABLE IF NOT EXISTS departments (
 INSERT IGNORE INTO companies (id, name) VALUES (1, 'Altus Financial Services Limited');
 INSERT IGNORE INTO branches (id, company_id, name) VALUES (1, 1, 'Head Office');
 
+-- ── ROLES AND ACCESS RIGHTS (managed on Admin › Roles) ─────
+CREATE TABLE IF NOT EXISTS roles (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL UNIQUE,
+    description VARCHAR(255) NULL,
+    is_system   TINYINT(1)   NOT NULL DEFAULT 0,   -- System Admin: all rights, can't be changed
+    is_default  TINYINT(1)   NOT NULL DEFAULT 0,   -- given to people who sign up themselves
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_id    INT         NOT NULL,
+    permission VARCHAR(50) NOT NULL,
+    PRIMARY KEY (role_id, permission),
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+INSERT IGNORE INTO roles (id, name, description, is_system, is_default) VALUES
+    (1, 'System Admin', 'Full access, including users, roles and the organisation', 1, 0),
+    (2, 'Staff', 'All stock work: receive, issue, requisitions, items and reports', 0, 1);
+INSERT IGNORE INTO role_permissions (role_id, permission)
+    SELECT 2, p FROM (SELECT 'stock.view' p UNION SELECT 'stock.receive' UNION SELECT 'stock.issue' UNION SELECT 'items.manage'
+                      UNION SELECT 'categories.manage' UNION SELECT 'requisitions.view' UNION SELECT 'requisitions.manage'
+                      UNION SELECT 'transactions.view' UNION SELECT 'reports.view' UNION SELECT 'reports.submit') x;
+
 -- ── USERS ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
     id         INT AUTO_INCREMENT PRIMARY KEY,
@@ -50,13 +73,15 @@ CREATE TABLE IF NOT EXISTS users (
     email      VARCHAR(190) NOT NULL UNIQUE,
     username   VARCHAR(80)  NULL UNIQUE,     -- legacy, no longer used to sign in
     password   VARCHAR(255) NOT NULL,
-    role       ENUM('admin','staff') NOT NULL DEFAULT 'staff',
+    role       ENUM('admin','staff') NOT NULL DEFAULT 'staff',   -- legacy; access comes from role_id
+    role_id    INT          NULL,
     active     TINYINT(1)   NOT NULL DEFAULT 1,
     last_login_at DATETIME  NULL,
     company_id    INT       NULL,
     branch_id     INT       NULL,
     department_id INT       NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (role_id)       REFERENCES roles(id),
     FOREIGN KEY (company_id)    REFERENCES companies(id),
     FOREIGN KEY (branch_id)     REFERENCES branches(id),
     FOREIGN KEY (department_id) REFERENCES departments(id)

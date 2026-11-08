@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-redirectIfNotLoggedIn();
+requirePermission('reports.view');
 
 $selected_month       = $_GET['month']       ?? date('Y-m');
 $selected_category_id = (int)($_GET['category_id'] ?? 0);

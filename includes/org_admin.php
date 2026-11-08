@@ -3,7 +3,7 @@
 // Used by pages/companies.php, pages/branches.php and pages/departments.php, which set $ORG_TAB.
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/insights.php';
-requireAdmin();
+requirePermission('admin.org');
 
 $tabs = ['companies' => 'Companies', 'branches' => 'Branches', 'departments' => 'Departments'];
 $tab  = $ORG_TAB ?? 'companies';
