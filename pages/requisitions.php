@@ -71,7 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
     }
     // Optional supporting documents (specs, photos, a quote already in hand)
     $attached = [];
-    if ($v->ok()) {
+    // Not needed when it's IT-related: IT gets the quotations
+    if ($v->ok() && !$is_it) {
         $up = $_FILES['attachments'] ?? null;
         $files = [];
         if ($up && is_array($up['name'])) {
@@ -257,8 +258,8 @@ include __DIR__ . '/../includes/header.php';
                 <input type="number" id="quantity" name="quantity" min="1" max="100000" step="1" required
                        value="<?php echo isset($error) ? (int)($_POST['quantity'] ?? 1) : $pre_qty; ?>">
             </div>
-            <div class="form-group">
-                <label for="attachments">Attachments *</label>
+            <div class="form-group" id="attachments-group">
+                <label for="attachments">Attachments <span class="attach-star">*</span></label>
                 <input type="file" id="attachments" name="attachments[]" multiple required accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
             </div>
         </div>
@@ -327,6 +328,21 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
+// IT-related: IT gets the quotations, so attachments are greyed out and not needed
+(function () {
+    var it = document.querySelector('input[name="is_it"]'), file = document.getElementById('attachments'), group = document.getElementById('attachments-group');
+    if (!it || !file || !group) return;
+    function sync() {
+        file.disabled = it.checked;
+        file.required = !it.checked;
+        if (it.checked) file.value = '';
+        group.classList.toggle('is-disabled', it.checked);
+        group.title = it.checked ? 'Not needed: IT will get the quotations' : '';
+    }
+    it.addEventListener('change', sync);
+    sync();
+})();
+
 // Only show the chosen company's departments
 (function () {
     var co = document.querySelector('select#company_id'), dept = document.querySelector('select#department_id');

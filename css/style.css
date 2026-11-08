@@ -851,6 +851,9 @@ input.is-invalid { border-color: var(--danger); }
 .receive-card .form-title { color: var(--card-accent); font-size: 1.05rem; }
 .receive-new      { --card-accent: var(--success); background: linear-gradient(#f6f9f1, #fff 90px); }
 .receive-existing { --card-accent: var(--navy);    background: linear-gradient(#f3f5fb, #fff 90px); }
+.form-group.is-disabled { opacity: .5; }
+.form-group.is-disabled input[type="file"] { cursor: not-allowed; background: #f6f7f9; }
+.form-group.is-disabled .attach-star { display: none; }
 .readonly-field, .readonly-field:focus { background: #f6f7f9; color: var(--muted); border-color: var(--border); box-shadow: none; cursor: default; }
 @media (max-width: 1000px) { .receive-forms { grid-template-columns: 1fr; } }
 
