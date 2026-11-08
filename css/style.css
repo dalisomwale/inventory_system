@@ -724,6 +724,8 @@ a.ss:hover { border-color: var(--navy); }
 .detail-list dd.big.qty-low { color: var(--warning); }
 .detail-list dd.big.qty-out { color: var(--danger); }
 @media (max-width: 1400px) { .stock-table .col-level { display: none; } }
+@media (max-width: 1500px) { .users-table .col-added { display: none; } }
+.users-table td:nth-child(5) span { white-space: nowrap; }
 @media (max-width: 1300px) { .stock-table .col-level { display: none; } .item-desc { max-width: 180px; } }
 
 /* Donut */
