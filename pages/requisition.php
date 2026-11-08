@@ -315,15 +315,14 @@ function action_form(string $act, string $label, array $o = []): string {
         <?php endif; ?>
 
         <?php if ($can_quote): ?>
-        <form method="POST" enctype="multipart/form-data" class="req-upload"
-              data-confirm-title="Attach quotation" data-confirm="Attach the quotation from {supplier}?" data-confirm-ok="Attach">
+        <form method="POST" enctype="multipart/form-data" class="req-upload">
             <input type="hidden" name="id" value="<?php echo $p['id']; ?>"><input type="hidden" name="act" value="add_quote">
             <div class="form-row three">
                 <div class="form-group"><label for="q_supplier">Supplier *</label><input type="text" id="q_supplier" name="supplier" required minlength="2" maxlength="200"></div>
                 <div class="form-group"><label for="q_amount">Amount (K) *</label><input type="number" id="q_amount" name="amount" required min="0.01" step="0.01" placeholder="0.00"></div>
                 <div class="form-group"><label for="q_file">Quotation file *</label><input type="file" id="q_file" name="file" required accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"></div>
             </div>
-            <button type="submit" class="btn">Attach quotation</button> <span class="muted-text" style="font-size:.8rem">PDF, image, Word or Excel, up to 10 MB.</span>
+            <button type="submit" class="btn btn-primary">Attach quotation</button>
         </form>
         <?php endif; ?>
     </div>
