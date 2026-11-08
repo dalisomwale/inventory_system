@@ -145,7 +145,9 @@ if (wants_xlsx()) {
             'totals' => array_merge(['Total', '', $sum($rows, 'opening'), $sum($rows, 'received'), $sum($rows, 'issued'), $sum($rows, 'closing')], $cat_cols ? ['', ''] : [], ['', $sum($rows, 'value')])];
     }
     $sheets = [];
-    if (!$sel) $sheets[] = ['name' => "By $by", 'title' => $title, 'meta' => $meta] + $group_sheet;
+    // The By item card's button exports just the items
+    $items_only = ($_GET['part'] ?? '') === 'items';
+    if (!$sel && !$items_only) $sheets[] = ['name' => "By $by", 'title' => $title, 'meta' => $meta] + $group_sheet;
     if ($sel || $by === 'category') $sheets[] = ['name' => 'By item', 'title' => $title, 'meta' => $meta] + $item_sheet;
     xlsx_download("Monthly report by $by $month" . ($sel_name ? " $sel_name" : ''), $sheets);
 }
@@ -241,7 +243,7 @@ include __DIR__ . '/../includes/header.php';
 <?php if ($sel || $by === 'category'): ?>
 <!-- Item by item -->
 <div class="card">
-    <div class="card-head"><h3>By item<?php echo $sel_name ? ' &mdash; ' . htmlspecialchars($sel_name) : ''; ?></h3><?php if ($sel) echo xlsx_button(); ?></div>
+    <div class="card-head"><h3>By item<?php echo $sel_name ? ' &mdash; ' . htmlspecialchars($sel_name) : ''; ?></h3><?php echo $sel ? xlsx_button() : xlsx_button(['part' => 'items']); ?></div>
     <div class="table-container">
         <table>
         <?php if ($is_issue): ?>
