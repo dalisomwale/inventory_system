@@ -102,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $items = $company_id ? items_in_company($pdo, $company_id, $selected_cat_id) : [];
 $company_total = 0;
 foreach ($items as $it) if ((int)$it['id'] === $selected_item_id) $company_total = (int)$it['available'];
-// Branches holding the chosen item: keep the one asked for, else the user's own, else the one with the most
+// The branch the stock comes from: the user's own if it holds the item, otherwise the one with the most
 $item_branches = $selected_item_id && $company_id ? item_branches($pdo, $company_id, $selected_item_id) : [];
 if ($item_branches) {
     $ids = array_map(fn($b) => (int)$b['id'], $item_branches);
@@ -152,7 +152,7 @@ include __DIR__ . '/../includes/header.php';
     <div class="form-title">Select item</div>
     <form method="GET" id="pickForm">
         <?php if ($recent_cat): ?><input type="hidden" name="rcat" value="<?php echo $recent_cat; ?>"><?php endif; ?>
-        <div class="form-row cols-4">
+        <div class="form-row cols-3">
         <div class="form-group">
             <label for="company_pick">Issuing from company</label>
             <?php if (count($companies) > 1): ?>
@@ -175,7 +175,7 @@ include __DIR__ . '/../includes/header.php';
             </select>
         </div>
         <div class="form-group">
-            <label for="item_pick">Item in stock at <?php echo htmlspecialchars($companies[$company_id] ?? 'this company'); ?></label>
+            <label for="item_pick">Item in stock</label>
             <select id="item_pick" name="item_id" onchange="this.form.submit()">
                 <option value="">— Select an item —</option>
                 <?php foreach ($items as $it): ?>
@@ -185,21 +185,6 @@ include __DIR__ . '/../includes/header.php';
                 <?php endforeach; ?>
             </select>
             <?php if (!$items): ?><small style="color:var(--muted)">Nothing in stock in this company<?php echo $selected_cat_id ? ' in this category' : ''; ?>.</small><?php endif; ?>
-        </div>
-        <div class="form-group">
-            <label for="branch_pick">From branch</label>
-            <?php if (!$item_branches): ?>
-            <input type="text" id="branch_pick" class="readonly-field" readonly tabindex="-1" value="Choose an item first">
-            <?php elseif (count($item_branches) > 1): ?>
-            <select id="branch_pick" name="branch_id" onchange="this.form.submit()">
-                <?php foreach ($item_branches as $b): ?>
-                <option value="<?php echo $b['id']; ?>" <?php echo (int)$b['id'] === $branch_id ? 'selected' : ''; ?>><?php echo htmlspecialchars($b['name']); ?> (<?php echo number_format($b['quantity']); ?> in stock)</option>
-                <?php endforeach; ?>
-            </select>
-            <?php else: ?>
-            <input type="text" id="branch_pick" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars($item_branches[0]['name'] . ' (' . number_format($item_branches[0]['quantity']) . ' in stock)'); ?>">
-            <input type="hidden" name="branch_id" value="<?php echo $branch_id; ?>">
-            <?php endif; ?>
         </div>
         </div>
         <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
