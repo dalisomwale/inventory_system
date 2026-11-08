@@ -41,14 +41,6 @@ $has_history = count($history) > 0;
 $received    = array_sum(array_map(fn($r) => $r['type'] === 'Received' ? $r['quantity'] : 0, $history));
 $issued      = array_sum(array_map(fn($r) => $r['type'] === 'Issued'   ? $r['quantity'] : 0, $history));
 
-$by_branch = $pdo->prepare("
-    SELECT b.id, b.name, c.name AS company_name, COALESCE(bs.quantity, 0) AS quantity
-    FROM branches b JOIN companies c ON c.id = b.company_id
-    LEFT JOIN branch_stock bs ON bs.branch_id = b.id AND bs.item_id = ?
-    WHERE (b.active = 1 AND c.active = 1) OR COALESCE(bs.quantity, 0) <> 0
-    ORDER BY c.name, b.name");
-$by_branch->execute([$item['id']]);
-$by_branch = $by_branch->fetchAll();
 
 
 $breadcrumbs = [[$scoped ? 'Stock' : 'Manage Stock', 'stock.php'], [$item['item_name'], null]];
@@ -119,32 +111,9 @@ include __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<?php if (!$scoped && count($by_branch) > 1): ?>
-<!-- Stock by branch -->
-<div class="card">
-    <div class="card-head"><h3>Stock by branch</h3><span class="card-hint">Total <?php echo number_format($item['current_quantity']); ?></span></div>
-    <table class="compact">
-        <thead><tr><th>Branch</th><th>Company</th><th class="num">In stock</th><th></th></tr></thead>
-        <tbody>
-        <?php foreach ($by_branch as $bb): ?>
-            <tr>
-                <td style="font-weight:600"><?php echo htmlspecialchars($bb['name']); ?></td>
-                <td class="muted"><?php echo htmlspecialchars($bb['company_name']); ?></td>
-                <td class="num"><strong class="qty-<?php echo $bb['quantity'] <= 0 ? 'out' : ($bb['quantity'] <= $item['reorder_level'] ? 'low' : 'ok'); ?>"><?php echo number_format($bb['quantity']); ?></strong></td>
-                <td><div class="row-actions">
-                    <?php if (can('stock.receive')): ?><a href="receive_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>&branch_id=<?php echo $bb['id']; ?>" class="btn btn-sm">Receive</a><?php endif; ?>
-                    <?php if ($bb['quantity'] > 0 && can('stock.issue')): ?><a href="issue_stock.php?category_id=<?php echo (int)$item['category_id']; ?>&item_id=<?php echo $item['id']; ?>&branch_id=<?php echo $bb['id']; ?>" class="btn btn-sm">Issue</a><?php endif; ?>
-                </div></td>
-            </tr>
-        <?php endforeach; ?>
-        </tbody>
-    </table>
-</div>
-<?php endif; ?>
-
 <!-- History -->
 <div class="card">
-    <div class="card-head"><h3>Stock history</h3><?php if (count($history) === 100): ?><span class="card-hint">Latest 100 movements</span><?php endif; ?></div>
+    <div class="card-head"><h3>Stock history &mdash; <?php echo htmlspecialchars($item['item_name']); ?></h3><?php if (count($history) === 100): ?><span class="card-hint">Latest 100 movements</span><?php endif; ?></div>
     <?php if ($history): ?>
     <div class="table-container">
         <table class="compact">
