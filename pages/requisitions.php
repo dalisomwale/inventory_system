@@ -235,7 +235,7 @@ include __DIR__ . '/../includes/header.php';
                                   data-confirm="Mark <?php echo htmlspecialchars($p['quantity'] . ' × ' . $p['item_name']); ?> as ordered<?php echo $p['supplier'] ? ' from ' . htmlspecialchars($p['supplier']) : ''; ?>?"
                                   data-confirm-ok="Mark ordered">
                                 <input type="hidden" name="id" value="<?php echo $p['id']; ?>">
-                                <input type="hidden" name="return" value="<?php echo htmlspecialchars('requisitions.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : '')); ?>">
+                                <input type="hidden" name="return" value="<?php echo htmlspecialchars('requisitions.php' . (($_SERVER['QUERY_STRING'] ?? '') ? '?' . ($_SERVER['QUERY_STRING'] ?? '') : '')); ?>">
                                 <button type="submit" name="purchase_action" value="ordered" class="btn btn-sm btn-primary">Mark ordered</button>
                             </form>
                         <?php endif; ?>
@@ -247,7 +247,7 @@ include __DIR__ . '/../includes/header.php';
                                   data-confirm="Cancel the requisition for <?php echo htmlspecialchars($p['quantity'] . ' × ' . $p['item_name']); ?>?"
                                   data-confirm-ok="Cancel requisition" data-confirm-danger="1">
                                 <input type="hidden" name="id" value="<?php echo $p['id']; ?>">
-                                <input type="hidden" name="return" value="<?php echo htmlspecialchars('requisitions.php' . ($_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : '')); ?>">
+                                <input type="hidden" name="return" value="<?php echo htmlspecialchars('requisitions.php' . (($_SERVER['QUERY_STRING'] ?? '') ? '?' . ($_SERVER['QUERY_STRING'] ?? '') : '')); ?>">
                                 <button type="submit" name="purchase_action" value="cancel" class="btn btn-sm">Cancel</button>
                             </form>
                             <?php endif; ?>

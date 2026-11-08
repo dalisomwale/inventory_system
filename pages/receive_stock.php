@@ -50,9 +50,9 @@ $branch = null;
 foreach ($branches as $b) if ((int)$b['id'] === $branch_id) $branch = $b;
 
 /** Branch picker for the receive forms (hidden when there is only one branch). */
-function branch_field(array $branches, int $branch_id): string {
+function branch_field(array $branches, int $branch_id, string $id = 'branch_id'): string {
     if (count($branches) <= 1) return '<input type="hidden" name="branch_id" value="' . $branch_id . '">';
-    $h = '<div class="form-group"><label for="branch_id">Receiving at branch *</label><select id="branch_id" name="branch_id" required>';
+    $h = '<div class="form-group"><label for="' . $id . '">Receiving at branch *</label><select id="' . $id . '" name="branch_id" required>';
     foreach ($branches as $b) {
         $h .= '<option value="' . $b['id'] . '"' . ((int)$b['id'] === $branch_id ? ' selected' : '') . '>' . htmlspecialchars($b['company_name'] . ' › ' . $b['name']) . '</option>';
     }
@@ -67,11 +67,11 @@ function complete_purchase(PDO $pdo, ?array $purchase, int $item_id): void {
     logAudit($pdo, $_SESSION['user_id'], 'REQUISITION_RECEIVED', $item_id, $purchase['quantity'], "Requisition received: {$purchase['item_name']}");
 }
 
-if ($selected_cat_id > 0) {
-    $stmt = $pdo->prepare("SELECT * FROM items WHERE category_id = ? ORDER BY item_name");
-    $stmt->execute([$selected_cat_id]);
-    $items = $stmt->fetchAll();
-}
+// Every item, grouped by category, for the Receive Existing Item form
+$items = $pdo->query("SELECT i.id, i.item_name, i.category_id, COALESCE(c.name, i.category) AS category_name
+                      FROM items i LEFT JOIN categories c ON c.id = i.category_id ORDER BY category_name, i.item_name")->fetchAll();
+$stock_by_branch = [];
+foreach ($pdo->query("SELECT item_id, branch_id, quantity FROM branch_stock") as $r) $stock_by_branch[$r['item_id']][$r['branch_id']] = (int)$r['quantity'];
 if ($selected_item_id > 0) {
     $stmt = $pdo->prepare("SELECT * FROM items WHERE id = ?");
     $stmt->execute([$selected_item_id]);
@@ -96,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_new_item'])) {
         $dup = $pdo->prepare("SELECT id FROM items WHERE category_id = ? AND LOWER(item_name) = LOWER(?)");
         $dup->execute([$category_id, $item_name]);
         if ($dup_id = $dup->fetchColumn()) {
-            $v->fail("\"$item_name\" already exists in $cat_name. Use Receive Existing Item instead.");
+            $v->fail("\"$item_name\" already exists in $cat_name. Use Receive Existing Item on the right instead.");
         }
     }
 
@@ -192,31 +192,24 @@ include __DIR__ . '/../includes/header.php';
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
-<!-- Mode toggle -->
-<div class="receive-modes">
-    <a href="receive_stock.php?category_id=<?php echo $selected_cat_id; ?>&branch_id=<?php echo $branch_id; ?>&new_item=1" class="receive-mode <?php echo $show_new_item ? 'active' : ''; ?>">
-        <strong>Add New Item</strong><span>An item that isn't in stock yet</span>
-    </a>
-    <a href="receive_stock.php?category_id=<?php echo $selected_cat_id; ?>&branch_id=<?php echo $branch_id; ?>" class="receive-mode <?php echo !$show_new_item ? 'active' : ''; ?>">
-        <strong>Receive Existing Item</strong><span>More of something already in stock</span>
-    </a>
-</div>
-
-<?php if ($show_new_item): ?>
+<?php $new_err = isset($error) && isset($_POST['add_new_item']); $ex_err = isset($error) && isset($_POST['receive_existing']);
+      $ex_item = $ex_err ? (int)($_POST['item_id'] ?? 0) : (int)$selected_item_id; ?>
+<div class="receive-forms">
 <!-- Add New Item -->
 <div class="form-container">
-    <div class="form-title">Add New Item to Inventory</div>
+    <div class="form-title">Add New Item</div>
+    <p class="form-hint">For something that isn't in stock yet.</p>
     <form method="POST"
           data-confirm-title="Add new item"
           data-confirm="Add {item_name} to {category_id} with {quantity} units received from {supplier}?"
           data-confirm-ok="Add item">
         <input type="hidden" name="add_new_item" value="1">
-        <?php echo branch_field($branches, $branch_id); ?>
-        <?php if ($purchase): ?><input type="hidden" name="purchase_id" value="<?php echo $purchase['id']; ?>"><?php endif; ?>
+        <?php echo branch_field($branches, $branch_id, 'new_branch_id'); ?>
+        <?php if ($purchase && $show_new_item): ?><input type="hidden" name="purchase_id" value="<?php echo $purchase['id']; ?>"><?php endif; ?>
         <div class="form-group">
-            <label>Item Name *</label>
-            <input type="text" name="item_name" required minlength="2" maxlength="200" placeholder="e.g., A4 Paper Ream"
-                   value="<?php echo htmlspecialchars(isset($error) ? ($_POST['item_name'] ?? '') : ($purchase['item_name'] ?? '')); ?>">
+            <label for="new_item_name">Item Name *</label>
+            <input type="text" name="item_name" id="new_item_name" required minlength="2" maxlength="200" placeholder="e.g., A4 Paper Ream"
+                   value="<?php echo htmlspecialchars($new_err ? ($_POST['item_name'] ?? '') : ($show_new_item ? $purchase['item_name'] ?? '' : '')); ?>">
         </div>
         <div class="form-group">
             <label>Category *</label>
@@ -231,18 +224,18 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="form-group">
             <label>Description</label>
-            <textarea name="description" rows="2" maxlength="500" placeholder="Brief description (optional)"><?php echo isset($error) ? htmlspecialchars($_POST['description'] ?? '') : ''; ?></textarea>
+            <textarea name="description" rows="2" maxlength="500" placeholder="Brief description (optional)"><?php echo $new_err ? htmlspecialchars($_POST['description'] ?? '') : ''; ?></textarea>
         </div>
         <div class="form-row">
             <div class="form-group">
                 <label>Supplier *</label>
                 <input type="text" name="supplier" required minlength="2" maxlength="200" placeholder="Supplier name"
-                       value="<?php echo htmlspecialchars(isset($error) ? ($_POST['supplier'] ?? '') : ($purchase['supplier'] ?? '')); ?>">
+                       value="<?php echo htmlspecialchars($new_err ? ($_POST['supplier'] ?? '') : ($show_new_item ? $purchase['supplier'] ?? '' : '')); ?>">
             </div>
             <div class="form-group">
                 <label>Initial Quantity *</label>
                 <input type="number" name="quantity" min="1" max="1000000" step="1" required placeholder="0"
-                       value="<?php echo htmlspecialchars(isset($error) ? ($_POST['quantity'] ?? '') : ($purchase['quantity'] ?? '')); ?>">
+                       value="<?php echo htmlspecialchars($new_err ? ($_POST['quantity'] ?? '') : ($show_new_item ? $purchase['quantity'] ?? '' : '')); ?>">
             </div>
         </div>
         <div class="form-row">
@@ -258,89 +251,58 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-success">Add Item &amp; Receive</button>
-            <a href="receive_stock.php?category_id=<?php echo $selected_cat_id; ?>&branch_id=<?php echo $branch_id; ?>" class="btn">Cancel</a>
         </div>
     </form>
 </div>
 
-<?php else: ?>
-<!-- Select Existing Item -->
+
+<!-- Receive Existing Item -->
 <div class="form-container">
-    <div class="form-title">Select Item</div>
-    <form method="GET">
-        <input type="hidden" name="category_id" value="<?php echo $selected_cat_id; ?>">
-        <input type="hidden" name="branch_id" value="<?php echo $branch_id; ?>">
-        <div class="form-group">
-            <label>Choose Item</label>
-            <select name="item_id" onchange="this.form.submit()">
-                <option value="">— Select an item —</option>
-                <?php foreach ($items as $item): ?>
-                <option value="<?php echo $item['id']; ?>" <?php echo ($selected_item_id == $item['id']) ? 'selected' : ''; ?>>
-                    <?php echo htmlspecialchars($item['item_name']); ?> (Stock: <?php echo $item['current_quantity']; ?>)
-                </option>
-                <?php endforeach; ?>
-            </select>
-            <?php if (empty($items) && $selected_cat_id > 0): ?>
-            <small style="color:var(--muted)">No items in this category. Use "Add New Item" to get started.</small>
-            <?php endif; ?>
-        </div>
-    </form>
-</div>
-
-<?php if ($selected_item): ?>
-<div class="form-container">
-    <div class="form-title"><?php echo htmlspecialchars($selected_item['item_name']); ?></div>
-
-    <div class="stock-info-box">
-        <div class="stock-info-item">
-            <div class="label">Stock at <?php echo htmlspecialchars($branch['name'] ?? 'branch'); ?></div>
-            <div class="value"><?php echo number_format(branch_qty($pdo, (int)$selected_item['id'], $branch_id)); ?></div>
-        </div>
-        <div class="stock-info-item">
-            <div class="label">All branches</div>
-            <div class="value"><?php echo number_format($selected_item['current_quantity']); ?></div>
-        </div>
-        <div class="stock-info-item">
-            <div class="label">Category</div>
-            <div class="value" style="font-size:.88rem"><?php echo htmlspecialchars($selected_item['category']); ?></div>
-        </div>
-        <div class="stock-info-item">
-            <div class="label">Reorder Level</div>
-            <div class="value"><?php echo $selected_item['reorder_level']; ?></div>
-        </div>
-    </div>
-
-    <form method="POST"
+    <div class="form-title">Receive Existing Item</div>
+    <p class="form-hint">For more of something already in stock.</p>
+    <form method="POST" id="receiveExisting"
           data-confirm-title="Receive stock"
-          data-confirm="Record {quantity} &times; <?php echo htmlspecialchars($selected_item['item_name']); ?> received from {supplier}? This will be added to stock."
+          data-confirm="Record {quantity} &times; {item_id} received from {supplier}? This will be added to stock."
           data-confirm-ok="Receive stock">
         <input type="hidden" name="receive_existing" value="1">
-        <?php echo branch_field($branches, $branch_id); ?>
-        <?php if ($purchase): ?><input type="hidden" name="purchase_id" value="<?php echo $purchase['id']; ?>"><?php endif; ?>
-        <input type="hidden" name="item_id" value="<?php echo $selected_item['id']; ?>">
+        <?php echo branch_field($branches, $branch_id, 'ex_branch_id'); ?>
+        <?php if ($purchase && !$show_new_item): ?><input type="hidden" name="purchase_id" value="<?php echo $purchase['id']; ?>"><?php endif; ?>
         <div class="form-group">
-            <label>Supplier *</label>
-            <input type="text" name="supplier" required minlength="2" maxlength="200" placeholder="Supplier name"
-                   value="<?php echo htmlspecialchars($purchase['supplier'] ?? ''); ?>">
+            <label for="ex_item_id">Item *</label>
+            <select name="item_id" id="ex_item_id" required>
+                <option value="">— Select an item —</option>
+                <?php $grp = null; foreach ($items as $it):
+                    if ($it['category_name'] !== $grp): if ($grp !== null) echo '</optgroup>'; $grp = $it['category_name']; ?>
+                <optgroup label="<?php echo htmlspecialchars($grp ?? 'Uncategorised'); ?>">
+                <?php endif; ?>
+                    <option value="<?php echo $it['id']; ?>" <?php echo $ex_item === (int)$it['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($it['item_name']); ?></option>
+                <?php endforeach; if ($grp !== null) echo '</optgroup>'; ?>
+            </select>
+            <?php if (!$items): ?><small>No items yet. Add one with the form on the left.</small><?php endif; ?>
         </div>
         <div class="form-group">
-            <label>Quantity Received *</label>
-            <input type="number" name="quantity" id="qty" min="1" max="1000000" step="1" required placeholder="0" oninput="updateNewStock()"
-                   value="<?php echo htmlspecialchars($purchase['quantity'] ?? ''); ?>">
-            <small id="newStockMsg"></small>
+            <label for="ex_supplier">Supplier *</label>
+            <input type="text" id="ex_supplier" name="supplier" required minlength="2" maxlength="200" placeholder="Supplier name"
+                   value="<?php echo htmlspecialchars($ex_err ? ($_POST['supplier'] ?? '') : (!$show_new_item ? ($purchase['supplier'] ?? '') : '')); ?>">
         </div>
-        <div class="form-group">
-            <label>Date Received *</label>
-            <input type="date" name="date_received" value="<?php echo date('Y-m-d'); ?>" max="<?php echo date('Y-m-d'); ?>" required>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="qty">Quantity Received *</label>
+                <input type="number" name="quantity" id="qty" min="1" max="1000000" step="1" required placeholder="0"
+                       value="<?php echo htmlspecialchars($ex_err ? ($_POST['quantity'] ?? '') : (!$show_new_item ? ($purchase['quantity'] ?? '') : '')); ?>">
+            </div>
+            <div class="form-group">
+                <label for="ex_date">Date Received *</label>
+                <input type="date" id="ex_date" name="date_received" value="<?php echo date('Y-m-d'); ?>" max="<?php echo date('Y-m-d'); ?>" required>
+            </div>
         </div>
+        <p class="stock-hint" id="newStockMsg"></p>
         <div class="form-actions">
             <button type="submit" class="btn btn-success">Receive Stock</button>
-            <a href="receive_stock.php?category_id=<?php echo $selected_cat_id; ?>&branch_id=<?php echo $branch_id; ?>" class="btn">Cancel</a>
         </div>
     </form>
 </div>
-<?php endif; ?>
-<?php endif; ?>
+</div>
 
 <!-- Category Selector -->
 <div class="pill-tabs" id="recent">
@@ -383,17 +345,23 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
-function updateNewStock() {
-    var current = <?php echo $selected_item ? branch_qty($pdo, (int)$selected_item['id'], $branch_id) : 0; ?>;
-    var qty = parseInt(document.getElementById('qty').value) || 0;
+(function () {
+    var stock = <?php echo json_encode($stock_by_branch, JSON_FORCE_OBJECT); ?>;
+    var branches = <?php echo json_encode(array_column($branches, 'name', 'id'), JSON_FORCE_OBJECT); ?>;
+    var form = document.getElementById('receiveExisting');
+    if (!form) return;
+    var item = form.elements['item_id'], branch = form.elements['branch_id'], qty = form.elements['quantity'];
     var msg = document.getElementById('newStockMsg');
-    if (qty > 0) {
-        msg.innerHTML = 'After receiving, new stock: <strong>' + (current + qty) + '</strong>';
-        msg.style.color = 'var(--success)';
-    } else {
-        msg.innerHTML = '';
+    function update() {
+        if (!item.value) { msg.textContent = ''; return; }
+        var have = (stock[item.value] || {})[branch.value] || 0, add = parseInt(qty.value, 10) || 0;
+        var where = branches[branch.value] || 'this branch';
+        msg.innerHTML = 'In stock at ' + where + ': <strong>' + have + '</strong>' + (add > 0 ? ' &rarr; after receiving: <strong>' + (have + add) + '</strong>' : '');
     }
-}
+    [item, branch, qty].forEach(function (el) { el.addEventListener(el === qty ? 'input' : 'change', update); });
+    update();
+})();
 </script>
+
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
