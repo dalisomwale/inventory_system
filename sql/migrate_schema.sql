@@ -278,6 +278,11 @@ INSERT IGNORE INTO role_permissions (role_id, permission)
 -- Old submitted reports stay in category_monthly_reports.
 DELETE FROM role_permissions WHERE permission = 'reports.submit';
 
+-- The Executive Assistant (formerly Staff) can raise requisitions for any company, branch and department
+INSERT IGNORE INTO role_permissions (role_id, permission)
+    SELECT r.id, p.perm FROM roles r JOIN (SELECT 'requisitions.raise' AS perm UNION SELECT 'requisitions.raise_any') p
+    WHERE r.name IN ('Executive Assistant', 'Staff');
+
 SELECT 'Schema is up to date.' AS result;
 
 -- Accounts that can't sign in until an email is set:

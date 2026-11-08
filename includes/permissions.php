@@ -15,6 +15,7 @@ const ACCESS_AREAS = [
     // Requisitions: a role can play any number of parts in the workflow, so these are ticks, not levels
     'requisitions' => ['Requisitions', 'Who does what in the requisition workflow, for their own company', [
         ['Raise for their department', 'Raise requisitions for their own department, attach quotations when it isn\'t IT-related, resubmit after a rejection and cancel before approval. Sees their department\'s requisitions.', ['requisitions.raise']],
+        ['Raise for any company or department', 'Raise requisitions for any company, branch and department in the group, not just their own. Sees the requisitions they raised.', ['requisitions.raise', 'requisitions.raise_any']],
         ['IT quotations',              'Attach quotations to IT-related requisitions and send them to the Director.', ['requisitions.it_quotes']],
         ['Director approval',          'Approve a requisition and pick the quotation, or reject it back to the department with a reason.', ['requisitions.approve']],
         ['Accounts',                   'Prepare payment for approved requisitions, then attach the proof of payment once the CFO approves.', ['requisitions.accounts']],

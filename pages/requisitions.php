@@ -7,9 +7,10 @@ if (!req_can_open()) requirePermission('requisitions.raise');
 
 $categories  = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll();
 $departments = org_departments($pdo);
-$my_dept     = req_my_department($pdo);
-// People raise for departments in their own company (the System Admin for any)
-if (!isAdmin() && ($my_co = req_my_company($pdo))) $departments = array_values(array_filter($departments, fn($d) => (int)$d['company_id'] === $my_co));
+// Most people raise for their own department; "raise for any" (and the System Admin) can pick any company and department
+$raise_any   = can('requisitions.raise_any');
+$my_dept     = $raise_any ? 0 : req_my_department($pdo);
+if (!$raise_any && ($my_co = req_my_company($pdo))) $departments = array_values(array_filter($departments, fn($d) => (int)$d['company_id'] === $my_co));
 
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
 if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
@@ -31,22 +32,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
         // A department manager raises for their own department
         $want = $my_dept ?: (int)($_POST['department_id'] ?? 0);
         $want_co = (int)($_POST['company_id'] ?? 0);
+        // A company without departments (only possible with "raise for any") is raised for the company as a whole
+        $co_has_depts = $my_dept || !$want_co || (bool)array_filter($departments, fn($d) => (int)$d['company_id'] === $want_co);
         if (!$my_dept && !$want_co) $v->fail('Please choose the company.');
-        foreach ($departments as $d) if ((int)$d['id'] === $want) $dept = $d;
-        if (!$dept) $v->fail('Please choose the department that needs this.');
-        elseif (!$my_dept && $want_co && (int)$dept['company_id'] !== $want_co) { $v->fail("That department isn't in the company you chose."); $dept = null; }
+        elseif ($co_has_depts) {
+            foreach ($departments as $d) if ((int)$d['id'] === $want) $dept = $d;
+            if (!$dept) $v->fail('Please choose the department that needs this.');
+            elseif (!$my_dept && $want_co && (int)$dept['company_id'] !== $want_co) { $v->fail("That department isn't in the company you chose."); $dept = null; }
+        }
     }
     $req_branch  = $dept ? (int)$dept['branch_id'] : (user_branch_id() ?: null);
     // The company decides whose IT, Director and Accounts handle it
     $req_company = $dept ? (int)$dept['company_id'] : null;
     if (!$dept) {
         $want_co = (int)($_POST['company_id'] ?? 0);
-        if ($want_co && (isAdmin() || !req_my_company($pdo) || $want_co === req_my_company($pdo))) {
+        if ($want_co && ($raise_any || !req_my_company($pdo) || $want_co === req_my_company($pdo))) {
             $ok_co = $pdo->prepare("SELECT id FROM companies WHERE id = ? AND active = 1"); $ok_co->execute([$want_co]);
             $req_company = (int)$ok_co->fetchColumn() ?: null;
         }
         $req_company = $req_company ?: (req_my_company($pdo) ?: null);
         if (!$req_company) $v->fail('Please choose the company.');
+    }
+    // No department: use the raiser's branch if it is in that company, otherwise the company's only branch
+    if (!$dept && $req_company) {
+        $bb = $pdo->prepare("SELECT id FROM branches WHERE company_id = ? AND active = 1");
+        $bb->execute([$req_company]);
+        $co_branches = array_map('intval', $bb->fetchAll(PDO::FETCH_COLUMN));
+        if (!in_array((int)$req_branch, $co_branches, true)) $req_branch = count($co_branches) === 1 ? $co_branches[0] : null;
     }
     if (!$req_company && $req_branch) {
         $bc = $pdo->prepare("SELECT company_id FROM branches WHERE id = ?"); $bc->execute([$req_branch]); $req_company = (int)$bc->fetchColumn() ?: null;
@@ -146,9 +158,9 @@ foreach ($departments as $d) if ((int)$d['id'] === $my_dept) $my_dept_row = $d;
 // Companies that have departments to raise for
 $form_companies = [];
 foreach ($departments as $d) $form_companies[(int)$d['company_id']] = $d['company_name'];
-if (!$departments) foreach (org_companies($pdo) as $c) if (isAdmin() || !req_my_company($pdo) || (int)$c['id'] === req_my_company($pdo)) $form_companies[(int)$c['id']] = $c['name'];
+if (!$departments || $raise_any) foreach (org_companies($pdo) as $c) if ($raise_any || !req_my_company($pdo) || (int)$c['id'] === req_my_company($pdo)) $form_companies[(int)$c['id']] = $c['name'];
 asort($form_companies);
-$pre_co = isset($error) ? (int)($_POST['company_id'] ?? 0) : (count($form_companies) === 1 ? (int)array_key_first($form_companies) : req_my_company($pdo));
+$pre_co = isset($error) ? (int)($_POST['company_id'] ?? 0) : (count($form_companies) === 1 ? (int)array_key_first($form_companies) : ($raise_any ? 0 : req_my_company($pdo)));
 
 if (wants_xlsx()) {
     // Amount of the quotation the Director approved, where there is one
@@ -210,7 +222,7 @@ include __DIR__ . '/../includes/header.php';
                 <?php if ($my_dept_row): ?>
                 <input type="text" id="department_id" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars(dept_label($my_dept_row)); ?>">
                 <?php else: ?>
-                <select id="department_id" name="department_id" required>
+                <select id="department_id" name="department_id" required data-placeholder="— Select department —" data-none="— No departments in this company —">
                     <option value="">— Select department —</option>
                     <?php $sel = (int)($_POST['department_id'] ?? 0);
                     foreach ($departments as $d): ?>
@@ -320,13 +332,19 @@ include __DIR__ . '/../includes/header.php';
     var co = document.querySelector('select#company_id'), dept = document.querySelector('select#department_id');
     if (!co || !dept) return;
     function sync() {
+        var any = false;
         Array.prototype.forEach.call(dept.options, function (o) {
             if (!o.value) return;
             var show = co.value !== '' && o.dataset.company === co.value;
             o.hidden = !show; o.disabled = !show;
+            if (show) any = true;
             if (!show && o.selected) dept.value = '';
         });
-        dept.disabled = co.value === '';
+        // A company with no departments is raised for the company as a whole
+        var none = co.value !== '' && !any;
+        dept.options[0].textContent = none ? dept.dataset.none : dept.dataset.placeholder;
+        dept.disabled = co.value === '' || none;
+        dept.required = !none;
     }
     co.addEventListener('change', sync);
     sync();

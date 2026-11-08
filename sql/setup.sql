@@ -70,7 +70,7 @@ INSERT IGNORE INTO roles (id, name, description, is_system, is_default) VALUES
     (8, 'Chief Finance Officer', 'Gives final approval for payments', 0, 0);
 INSERT IGNORE INTO role_permissions (role_id, permission)
     SELECT 2, p FROM (SELECT 'stock.view' p UNION SELECT 'stock.receive' UNION SELECT 'stock.issue' UNION SELECT 'items.manage'
-                      UNION SELECT 'categories.manage' UNION SELECT 'requisitions.raise'
+                      UNION SELECT 'categories.manage' UNION SELECT 'requisitions.raise' UNION SELECT 'requisitions.raise_any'
                       UNION SELECT 'transactions.view' UNION SELECT 'reports.view') x;
 INSERT IGNORE INTO role_permissions (role_id, permission) VALUES
     (3, 'requisitions.raise'), (3, 'stock.view'), (3, 'scope.department'), (3, 'transactions.view'), (3, 'reports.view'),
