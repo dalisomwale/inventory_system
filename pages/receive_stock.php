@@ -314,19 +314,17 @@ include __DIR__ . '/../includes/header.php';
 </div>
 </div>
 
-<!-- Category Selector -->
-<div class="pill-tabs" id="recent">
-    <a href="receive_stock.php?branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>">All</a>
-    <?php foreach ($categories as $cat): ?>
-    <a href="?category_id=<?php echo $cat['id']; ?>&branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == $cat['id'] ? 'active' : ''; ?>">
-        <?php echo htmlspecialchars($cat['name']); ?>
-    </a>
-    <?php endforeach; ?>
-</div>
-
 <!-- Recent Transactions -->
-<div class="card">
+<div class="card" id="recent">
     <h3 style="margin-bottom:12px">Recent Receiving</h3>
+    <div class="pill-tabs pill-tabs-inline">
+        <a href="receive_stock.php?branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>">All</a>
+        <?php foreach ($categories as $cat): ?>
+        <a href="?category_id=<?php echo $cat['id']; ?>&branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == $cat['id'] ? 'active' : ''; ?>">
+            <?php echo htmlspecialchars($cat['name']); ?>
+        </a>
+        <?php endforeach; ?>
+    </div>
     <?php if (count($recent) > 0): ?>
     <div class="table-container">
         <table>

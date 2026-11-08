@@ -884,6 +884,7 @@ input.is-invalid { border-color: var(--danger); }
 .page-header h1 { margin-bottom: 0; }
 
 /* ── PILL TABS (category selector) ───────────────────── */
+.pill-tabs.pill-tabs-inline { padding: 0; margin-bottom: 14px; background: none; border: 0; box-shadow: none; }
 .pill-tabs {
     display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px;
     padding: 14px 16px;
