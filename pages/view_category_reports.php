@@ -35,12 +35,16 @@ if ($selected_category_id > 0) {
     }
 }
 
+// Same data as Monthly Reports, so use its export
+if (wants_xlsx()) { header('Location: reports.php?' . http_build_query(array_intersect_key($_GET, array_flip(['month', 'category_id', 'export'])))); exit(); }
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
     <h1>Category Reports</h1>
     <div style="display:flex; gap:8px;">
+        <?php echo xlsx_button(); ?>
         <a href="reports.php" class="btn btn-sm btn-info">Full Reports</a>
         <a href="dashboard.php" class="btn btn-sm">Dashboard</a>
     </div>
@@ -68,6 +72,7 @@ include __DIR__ . '/../includes/header.php';
             </div>
         </div>
         <div style="display:flex; gap:8px;">
+            <?php echo xlsx_button(); ?>
             <button onclick="window.print()" class="btn btn-sm btn-info">Print</button>
             <a href="reports.php?category_id=<?php echo $selected_category_id; ?>&start_date=<?php echo $selected_month.'-01'; ?>&end_date=<?php echo date('Y-m-t', strtotime($selected_month.'-01')); ?>" class="btn btn-sm btn-primary">Detailed Activity</a>
         </div>

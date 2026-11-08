@@ -44,12 +44,33 @@ $stmt = $pdo->prepare($q);
 $stmt->execute($p);
 $transactions = $stmt->fetchAll();
 
+if (wants_xlsx()) {
+    $dept_label = $scope_dept !== null ? (department_name($scope_dept) ?: 'Your department') : '';
+    $item_label = '';
+    foreach ($all_items as $it) if ((int)$it['id'] === $filter_item) $item_label = $it['item_name'];
+    xlsx_download('Transactions ' . $filter_date . ($dept_label ? " $dept_label" : ''), [[
+        'name'    => 'Transactions',
+        'title'   => 'Transaction History' . ($dept_label ? " - $dept_label" : ''),
+        'meta'    => array_filter(['Date: ' . date('d M Y', strtotime($filter_date)),
+                                   $scope_dept === null ? 'Type: ' . ucfirst($filter_type) : '',
+                                   $filter_cat ? "Category: $filter_cat" : '', $item_label ? "Item: $item_label" : '']),
+        'columns' => ['Type', 'Time', 'Item', 'Category', 'Branch', ['Qty', 'int'], 'User', 'Supplier / issued to', 'Purpose'],
+        'rows'    => array_map(fn($t) => [$t['type'], date('H:i', strtotime($t['created_at'])), $t['item_name'], $t['category'] ?? 'General', $t['branch_name'] ?? '',
+                                          $t['quantity'], $t['user_name'] ?? '', $t['type'] === 'Receiving' ? ($t['supplier'] ?? '') : ($t['issued_to'] ?? ''), $t['purpose'] ?? ''], $transactions),
+        // Receipts and issues don't add up together, so only total one type
+        'totals'  => $filter_type !== 'all' ? ['Total', '', '', '', '', array_sum(array_column($transactions, 'quantity'))] : null,
+    ]]);
+}
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
     <h1>Transaction History<?php if ($scope_dept !== null): ?> &mdash; <?php echo htmlspecialchars(department_name($scope_dept) ?: 'your department'); ?><?php endif; ?></h1>
-    <a href="dashboard.php" class="btn btn-sm">Back to Dashboard</a>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <?php echo xlsx_button(); ?>
+        <a href="dashboard.php" class="btn btn-sm">Back to Dashboard</a>
+    </div>
 </div>
 
 <!-- Filters -->

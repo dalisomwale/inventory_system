@@ -47,12 +47,34 @@ $cat_name  = '';
 foreach ($categories as $c) if ((int)$c['id'] === $cat_id) $cat_name = $c['name'];
 $report_url = fn(array $p) => 'reports.php?' . http_build_query(array_filter($p + ['month' => $month]));
 
+if (wants_xlsx()) {
+    $title = 'Monthly Report - ' . ($dept_name ?: 'Your department') . ' - ' . date('F Y', strtotime($from)) . ($cat_name ? " - $cat_name" : '');
+    $meta  = ['Everything issued to ' . ($dept_name ?: 'your department') . ' in ' . date('F Y', strtotime($from))];
+    xlsx_download('Department report ' . ($dept_name ?: '') . " $month" . ($cat_name ? " $cat_name" : ''), array_values(array_filter([
+        $cat_id ? null : ['name' => 'By category', 'title' => $title, 'meta' => $meta,
+            'columns' => ['Category', ['Items', 'int'], ['Units', 'int'], ['Value (K)', 'money']],
+            'rows'    => array_map(fn($c) => [$c['name'], $c['items'], $c['units'], $c['value']], $categories),
+            'totals'  => ['Total', '', $tot_units, $tot_value]],
+        ['name' => 'By item', 'title' => $title, 'meta' => $meta,
+            'columns' => ['Item', 'Category', ['Units', 'int'], ['Unit price (K)', 'money'], ['Value (K)', 'money'], ['Times issued', 'int']],
+            'rows'    => array_map(fn($i) => [$i['item_name'], $i['category_name'], $i['units'], $i['unit_price'], $i['value'], $i['times']], $items),
+            'totals'  => ['Total', '', $tot_units, '', $tot_value, count($issues)]],
+        ['name' => 'Every issue', 'title' => $title, 'meta' => $meta,
+            'columns' => ['Date', 'Item', ['Qty', 'int'], 'Recipient', 'Purpose', 'Issued by'],
+            'rows'    => array_map(fn($t) => [date('d M Y, H:i', strtotime($t['created_at'])), $t['item_name'], $t['quantity'], $t['recipient'] ?? '', $t['purpose'] ?? '', $t['by_name'] ?? ''], $issues),
+            'totals'  => ['Total', '', array_sum(array_column($issues, 'quantity'))]],
+    ])));
+}
+
 include __DIR__ . '/header.php';
 ?>
 
 <div class="page-header">
     <h1>Monthly Report &mdash; <?php echo htmlspecialchars($dept_name ?: 'your department'); ?></h1>
-    <button type="button" onclick="window.print()" class="btn">Print</button>
+    <div style="display:flex; gap:8px">
+        <?php if ($dept_id) echo xlsx_button(); ?>
+        <button type="button" onclick="window.print()" class="btn">Print</button>
+    </div>
 </div>
 
 <?php if (!$dept_id): ?>

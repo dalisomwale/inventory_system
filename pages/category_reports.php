@@ -112,12 +112,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_report']) && !
     }
 }
 
+if (wants_xlsx() && $category_data) {
+    $period = date('d M Y', strtotime($start_date)) . ' to ' . date('d M Y', strtotime($end_date));
+    $recv = (int)($receiving_data['total_quantity'] ?? 0); $iss = (int)($issuing_data['total_quantity'] ?? 0);
+    $stock_rows = array_map(function ($it) use ($opening_stock_data) {
+        $closing = (int)$it['current_quantity'];
+        return [$it['item_name'], $opening_stock_data[$it['item_name']] ?? 0, $closing, $it['reorder_level'],
+                $closing <= 0 ? 'Out of stock' : ($closing <= $it['reorder_level'] ? 'Low stock' : 'OK'), $it['unit_price'], $closing * $it['unit_price']];
+    }, $items_in_category);
+    xlsx_download("{$category_data['name']} activity $start_date to $end_date", [
+        ['name' => 'Summary', 'title' => "{$category_data['name']} - category activity", 'meta' => ["Activity: $period", 'Report month: ' . date('F Y', strtotime($selected_month . '-01'))],
+         'columns' => ['Measure', ['Value', 'int']],
+         'rows' => [['Items in category', count($items_in_category)], ['Units received', $recv], ['Units issued', $iss], ['Net movement', $recv - $iss],
+                    ['Deliveries', (int)($receiving_data['transaction_count'] ?? 0)], ['Issues', (int)($issuing_data['transaction_count'] ?? 0)]]],
+        ['name' => 'Stock', 'title' => "{$category_data['name']} - " . date('F Y', strtotime($selected_month . '-01')),
+         'columns' => ['Item', ['Opening stock', 'int'], ['Closing stock', 'int'], ['Reorder at', 'int'], 'Status', ['Unit price (K)', 'money'], ['Value (K)', 'money']],
+         'rows' => $stock_rows,
+         'totals' => ['Total', array_sum(array_column($stock_rows, 1)), array_sum(array_column($stock_rows, 2)), '', '', '', array_sum(array_column($stock_rows, 6))]],
+        ['name' => 'Activity', 'title' => "Activity - $period", 'meta' => count($transactions ?? []) === 100 ? ['Latest 100 movements'] : [],
+         'columns' => ['Date', 'Type', 'Item', ['Qty', 'int'], 'Supplier / issued to', 'User'],
+         'rows' => array_map(fn($t) => [date('d M Y, H:i', strtotime($t['created_at'])), $t['type'], $t['item_name'], $t['quantity'], $t['counterparty'] ?? '', $t['user_name']], $transactions ?? [])],
+    ]);
+}
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
     <h1>Category Reports</h1>
-    <a href="reports.php" class="btn btn-sm">Back to Monthly Reports</a>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <?php if ($category_data) echo xlsx_button(); ?>
+        <a href="reports.php" class="btn btn-sm">Back to Monthly Reports</a>
+    </div>
 </div>
 
 <div class="info-note">Enter the opening stock for each item (beginning of month). Closing stock is populated automatically from current quantities.</div>

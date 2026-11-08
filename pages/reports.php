@@ -42,6 +42,32 @@ if ($selected_category_id > 0) {
     }
 }
 
+if (wants_xlsx()) {
+    $month_label = date('F Y', strtotime(safe_month($selected_month) . '-01'));
+    if ($selected_category_id > 0 && $selected_report) {
+        xlsx_download("{$selected_report['category_name']} report " . safe_month($selected_month), [[
+            'name'    => $selected_report['category_name'],
+            'title'   => "{$selected_report['category_name']} - $month_label",
+            'meta'    => ['Submitted by ' . $selected_report['submitted_by_name'] . ' on ' . date('d M Y, H:i', strtotime($selected_report['submitted_at'])),
+                          $selected_report['notes'] ? 'Notes: ' . $selected_report['notes'] : ''],
+            'columns' => ['Item', ['Opening', 'int'], ['Closing', 'int'], ['Unit price (K)', 'money'], ['Total value (K)', 'money'], ['Reorder at', 'int'], 'Status'],
+            'rows'    => array_map(fn($i) => [$i['item_name'], $i['opening_stock'], $i['closing_stock'], $i['unit_price'], $i['total_value'], $i['reorder_level'], $i['status']], $items_data),
+            'totals'  => ['Total', array_sum(array_column($items_data, 'opening_stock')), array_sum(array_column($items_data, 'closing_stock')), '', $total_value, '', ''],
+        ]]);
+    }
+    $by_cat = array_column($all_reports, null, 'category_id');
+    xlsx_download('Monthly reports ' . safe_month($selected_month), [[
+        'name'    => 'Summary',
+        'title'   => "Monthly Reports - $month_label",
+        'meta'    => [count($all_reports) . ' of ' . count($categories) . ' categories submitted'],
+        'columns' => ['Category', 'Status', ['Items', 'int'], ['Units', 'int'], ['Value (K)', 'money'], ['Low stock', 'int'], 'Submitted by', 'Submitted on'],
+        'rows'    => array_map(fn($c) => ($r = $by_cat[$c['id']] ?? null)
+            ? [$c['name'], 'Submitted', $r['total_items'], $r['total_units'], $r['total_value'], $r['low_stock_count'], $r['submitted_by_name'], date('d M Y, H:i', strtotime($r['submitted_at']))]
+            : [$c['name'], 'Not yet submitted', '', '', '', '', '', ''], $categories),
+        'totals'  => ['Total', '', array_sum(array_column($all_reports, 'total_items')), array_sum(array_column($all_reports, 'total_units')), array_sum(array_column($all_reports, 'total_value')), array_sum(array_column($all_reports, 'low_stock_count')), '', ''],
+    ]]);
+}
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -50,6 +76,7 @@ include __DIR__ . '/../includes/header.php';
     <div style="display:flex; gap:8px; flex-wrap:wrap">
         <?php if (can('reports.submit')): ?><a href="submit_category_report.php" class="btn btn-primary">Submit a monthly report</a><?php endif; ?>
         <a href="category_reports.php" class="btn">Category activity</a>
+        <?php echo xlsx_button(); ?>
     </div>
 </div>
 
@@ -75,7 +102,10 @@ include __DIR__ . '/../includes/header.php';
                 on <?php echo date('d/m/Y H:i', strtotime($selected_report['submitted_at'])); ?>
             </div>
         </div>
-        <button onclick="window.print()" class="btn btn-sm btn-info">Print</button>
+        <div style="display:flex; gap:8px">
+            <?php echo xlsx_button(); ?>
+            <button onclick="window.print()" class="btn btn-sm btn-info">Print</button>
+        </div>
     </div>
 
     <div class="stat-row">

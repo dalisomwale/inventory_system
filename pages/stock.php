@@ -132,11 +132,35 @@ function stock_url(array $change = []): string {
     return 'stock.php' . ($params ? '?' . http_build_query($params) : '');
 }
 
+if (wants_xlsx()) {
+    $where = $scoped ? ($dept['name'] ?? 'Your department') : ($dept ? $dept['name'] . ' (stock at ' . $branch_name . ')' : ($branch_id ? $branch_name : ($company_id ? $company_name : 'All branches')));
+    $cat_name = '';
+    foreach ($categories as $c) if ((int)$c['id'] === $cat_id) $cat_name = $c['name'];
+    $status_names = ['ok' => 'In stock', 'soon' => 'Running out in 2 weeks', 'low' => 'Below reorder', 'out' => 'Out of stock'];
+    $state_names  = ['ok' => 'In stock', 'low' => 'Below reorder', 'out' => 'Out of stock'];
+    $meta = array_filter([($scoped ? 'Department: ' : 'Showing: ') . $where, $q !== '' ? "Search: $q" : '', $cat_name ? "Category: $cat_name" : '',
+                          $status ? 'Status: ' . $status_names[$status] : '', 'Exported: ' . date('d M Y, H:i')]);
+    $sheet = $scoped ? [
+        'columns' => ['Item', 'Category', ['Issued to department', 'int'], ['Unit price (K)', 'money'], ['Value (K)', 'money'], 'Last issued'],
+        'rows'    => array_map(fn($r) => [$r['item_name'], $r['category_name'], $r['issued_to_dept'], $r['unit_price'], $r['value'], $r['last_issued'] ? date('d M Y', strtotime($r['last_issued'])) : ''], $rows),
+        'totals'  => ['Total', '', array_sum(array_column($rows, 'issued_to_dept')), '', array_sum(array_column($rows, 'value')), ''],
+    ] : [
+        'columns' => array_merge(['Item', 'Description', 'Category', ['Initial stock', 'int'], ['In stock', 'int']], $dept ? [['Issued to ' . $dept['name'], 'int']] : [],
+                                 [['Reorder at', 'int'], 'Status', ['Unit price (K)', 'money'], ['Value (K)', 'money'], 'Date added']),
+        'rows'    => array_map(fn($r) => array_merge([$r['item_name'], $r['description'] ?? '', $r['category_name'], $r['initial'], $r['current_quantity']], $dept ? [$r['issued_to_dept']] : [],
+                                 [$r['reorder_level'], $state_names[$r['state']], $r['unit_price'], $r['value'], date('d M Y', strtotime($r['created_at']))]), $rows),
+        'totals'  => array_merge(['Total', '', '', '', array_sum(array_column($rows, 'current_quantity'))], $dept ? [array_sum(array_column($rows, 'issued_to_dept'))] : [],
+                                 ['', '', '', array_sum(array_column($rows, 'value')), '']),
+    ];
+    xlsx_download('Stock ' . $where . ' ' . date('Y-m-d'), [['name' => 'Stock', 'title' => $scoped ? 'Stock - ' . $where : 'Stock levels', 'meta' => $meta] + $sheet]);
+}
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
     <h1><?php echo $scoped ? 'Stock &mdash; ' . htmlspecialchars($dept['name'] ?? 'your department') : 'Manage Stock'; ?></h1>
+    <?php echo xlsx_button(); ?>
 </div>
 
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>

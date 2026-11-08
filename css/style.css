@@ -569,6 +569,11 @@ table.compact thead th { padding: 7px 10px; }
     box-shadow: 0 2px 8px rgba(0,0,0,.18);
 }
 
+/* Export to Excel button */
+.btn-excel { display: inline-flex; align-items: center; gap: 6px; background: #1d6f42; border-color: #1d6f42; color: #fff; }
+.btn-excel:hover { background: #155232; border-color: #155232; color: #fff; }
+@media print { .btn-excel { display: none; } }
+
 /* Action tiles (big dashboard buttons) */
 .action-tiles {
     display: grid;
