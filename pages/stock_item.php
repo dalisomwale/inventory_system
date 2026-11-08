@@ -50,8 +50,8 @@ if (wants_xlsx()) {
         'title'   => "Stock history - {$item['item_name']}",
         'meta'    => array_filter(['Category: ' . $item['category_name'], $scoped ? 'Department: ' . department_name($scope_dept) : '',
                                    count($history) === 100 ? 'Latest 100 movements' : '', 'Exported: ' . date('d M Y, H:i')]),
-        'columns' => ['Date', 'Type', ['Qty', 'int'], 'From', 'To', 'Purpose', 'By'],
-        'rows'    => array_map(fn($r) => [date('d M Y, H:i', strtotime($r['created_at'])), $r['type'], ($r['type'] === 'Issued' ? -1 : 1) * (int)$r['quantity'],
+        'columns' => ['Date', 'Item', 'Type', ['Qty', 'int'], 'From', 'To', 'Purpose', 'By'],
+        'rows'    => array_map(fn($r) => [date('d M Y, H:i', strtotime($r['created_at'])), $item['item_name'], $r['type'], ($r['type'] === 'Issued' ? -1 : 1) * (int)$r['quantity'],
                                           $r['type'] === 'Issued' ? ($r['branch_name'] ?? '') : ($r['party'] ?? ''),
                                           $r['type'] === 'Issued' ? ($r['party'] ?? '') : ($r['branch_name'] ?? ''),
                                           $r['purpose'] ?? '', $r['by_name'] ?? ''], $history),
@@ -131,11 +131,12 @@ include __DIR__ . '/../includes/header.php';
     <?php if ($history): ?>
     <div class="table-container">
         <table class="compact">
-            <thead><tr><th>Date</th><th>Type</th><th class="num">Qty</th><th>From</th><th>To</th><th>Purpose</th><th>By</th></tr></thead>
+            <thead><tr><th>Date</th><th>Item</th><th>Type</th><th class="num">Qty</th><th>From</th><th>To</th><th>Purpose</th><th>By</th></tr></thead>
             <tbody>
             <?php foreach ($history as $r): ?>
                 <tr>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y, H:i', strtotime($r['created_at'])); ?></td>
+                    <td style="font-weight:500"><?php echo htmlspecialchars($item['item_name']); ?></td>
                     <td><span class="status-<?php echo strtolower($r['type']); ?>"><?php echo $r['type']; ?></span></td>
                     <td class="num"><strong><?php echo ($r['type'] === 'Issued' ? '−' : '+') . number_format($r['quantity']); ?></strong></td>
                     <?php // Deliveries come from a supplier into a branch; issues go from a branch to a department
