@@ -107,7 +107,7 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <?php if (!$branches): ?>
-<div class="alert alert-danger">No branches are set up yet. Ask the System Admin to add one under Organisation.</div>
+<div class="alert alert-danger">No branches are set up yet. Ask the System Admin to add one under Admin › Branches.</div>
 <?php else: ?>
 
 <?php if (count($branches) > 1): ?>
@@ -205,7 +205,7 @@ include __DIR__ . '/../includes/header.php';
                 <label for="issued_to">Issued to *</label>
                 <input type="text" id="issued_to" name="issued_to" required minlength="2" maxlength="150" placeholder="Department or person"
                        value="<?php echo isset($error) ? htmlspecialchars($_POST['issued_to'] ?? '') : ''; ?>">
-                <small>Departments haven't been set up yet. The System Admin can add them under Organisation.</small>
+                <small>Departments haven't been set up yet. The System Admin can add them under Admin › Departments.</small>
                 <?php endif; ?>
             </div>
         </div>

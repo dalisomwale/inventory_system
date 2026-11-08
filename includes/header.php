@@ -56,9 +56,17 @@
 </a>
 <?php if (isAdmin()): ?>
 <div class="nav-section-label">Admin</div>
-<a href="organisation.php" class="nav-link <?php echo ($cur==='organisation.php')?'active':'';?>">
+<a href="companies.php" class="nav-link <?php echo ($cur==='companies.php')?'active':'';?>">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="1"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/></svg>
+    Companies
+</a>
+<a href="branches.php" class="nav-link <?php echo ($cur==='branches.php')?'active':'';?>">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+    Branches
+</a>
+<a href="departments.php" class="nav-link <?php echo ($cur==='departments.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-2a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v2"/></svg>
-    Organisation
+    Departments
 </a>
 <a href="users.php" class="nav-link <?php echo ($cur==='users.php')?'active':'';?>">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>

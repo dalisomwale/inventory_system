@@ -1,7 +1,7 @@
 <?php
 /**
  * Organisation helpers: companies > branches > departments, and stock held per branch.
- * The structure itself is managed by the System Admin on the Organisation page.
+ * The structure itself is managed by the System Admin on the Companies, Branches and Departments pages.
  */
 
 /** All branches with their company name. */

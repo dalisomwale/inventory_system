@@ -617,7 +617,9 @@ table.compact thead th { padding: 7px 10px; }
 .page-requisitions .btn,
 .page-categories .btn,
 .page-users .btn,
-.page-organisation .btn,
+.page-companies .btn,
+.page-branches .btn,
+.page-departments .btn,
 .page-stock_item .btn,
 .page-stock_edit .btn { padding: 9px 16px; font-size: .9rem; min-height: 38px; }
 .page-dashboard .btn-sm,
@@ -627,7 +629,9 @@ table.compact thead th { padding: 7px 10px; }
 .page-requisitions .btn-sm,
 .page-categories .btn-sm,
 .page-users .btn-sm,
-.page-organisation .btn-sm,
+.page-companies .btn-sm,
+.page-branches .btn-sm,
+.page-departments .btn-sm,
 .page-stock_item .btn-sm,
 .page-stock_edit .btn-sm { padding: 7px 14px; font-size: .86rem; min-height: 34px; }
 .page-dashboard td .btn-sm,
