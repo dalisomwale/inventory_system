@@ -62,11 +62,30 @@
     Transactions
 </a>
 <?php endif; ?>
-<?php if (can('reports.view')): ?>
-<a href="reports.php" class="nav-link <?php echo ($cur==='reports.php' || $cur==='category_reports.php')?'active':'';?>">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-    Monthly Reports
-</a>
+<?php if (can('reports.view')):
+    $on_reports = in_array($cur, ['reports.php', 'category_reports.php'], true);
+    $nav_cat    = $cur === 'reports.php' ? (int)($_GET['category_id'] ?? 0) : 0;
+    $nav_scoped = my_scope_department() !== null;
+    $nav_cats   = $nav_scoped ? [] : $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetchAll(); ?>
+<details class="nav-group" <?php echo $on_reports ? 'open' : ''; ?>>
+    <summary class="nav-link <?php echo $on_reports ? 'active' : ''; ?>">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Monthly Reports
+        <svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+    </summary>
+    <div class="nav-sub">
+        <?php if ($nav_scoped): ?>
+        <a href="reports.php" class="nav-sublink <?php echo $cur === 'reports.php' ? 'active' : ''; ?>">Department report</a>
+        <?php else: ?>
+        <a href="reports.php" class="nav-sublink <?php echo $cur === 'reports.php' && !$nav_cat ? 'active' : ''; ?>">All categories</a>
+        <a href="category_reports.php" class="nav-sublink <?php echo $cur === 'category_reports.php' ? 'active' : ''; ?>">Category activity</a>
+        <?php if ($nav_cats): ?><div class="nav-sub-label">By category</div><?php endif; ?>
+        <?php foreach ($nav_cats as $nc): ?>
+        <a href="reports.php?category_id=<?php echo (int)$nc['id']; ?>" class="nav-sublink <?php echo $nav_cat === (int)$nc['id'] ? 'active' : ''; ?>"><?php echo htmlspecialchars($nc['name']); ?></a>
+        <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
+</details>
 <?php endif; ?>
 <?php if (can_any('admin.org','admin.users','admin.roles')): ?>
 <div class="nav-section-label">Admin</div>
