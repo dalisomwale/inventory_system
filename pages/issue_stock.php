@@ -240,15 +240,15 @@ include __DIR__ . '/../includes/header.php';
     <?php if ($recent): ?>
     <div class="table-container">
         <table>
-            <thead><tr><th>Date</th><th>Issued by</th><th>Item</th><th>Branch</th><th class="num">Qty</th><th>Issued to</th><th>Purpose</th></tr></thead>
+            <thead><tr><th>Date</th><th>Issued by</th><th>Item</th><th class="num">Qty</th><th>Branch</th><th>Issued to</th><th>Purpose</th></tr></thead>
             <tbody>
             <?php foreach ($recent as $t): ?>
                 <tr>
                     <td style="white-space:nowrap; color:var(--muted); font-size:.76rem"><?php echo date('d/m/Y H:i', strtotime($t['created_at'])); ?></td>
                     <td><?php echo htmlspecialchars($t['issued_by_name'] ?? '—'); ?></td>
                     <td style="font-weight:500"><?php echo htmlspecialchars($t['item_name']); ?></td>
-                    <td class="muted"><?php echo htmlspecialchars($t['branch_name'] ?? '—'); ?></td>
                     <td class="num"><strong><?php echo number_format($t['quantity']); ?></strong></td>
+                    <td class="muted"><?php echo htmlspecialchars($t['branch_name'] ?? '—'); ?></td>
                     <td><?php echo htmlspecialchars($t['issued_to'] ?: '—'); ?><?php if (!empty($t['recipient'])): ?><div class="item-desc"><?php echo htmlspecialchars($t['recipient']); ?></div><?php endif; ?></td>
                     <td style="color:var(--muted); font-size:.76rem; max-width:160px; white-space:normal"><?php echo htmlspecialchars($t['purpose'] ?: '—'); ?></td>
                 </tr>
