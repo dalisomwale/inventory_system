@@ -236,7 +236,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="card">
     <div class="table-container">
         <table class="users-table">
-            <thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Branch</th><th>Department</th><th>Role</th><th>Status</th><th class="col-wide">Last sign-in</th><th class="col-wide">Date added</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Branch</th><th>Department</th><th>Role</th><th>Status</th><th class="col-wide">Last sign-in</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($users as $u): $self = (int)$u['id'] === $me; ?>
                 <tr class="<?php echo $u['active'] ? '' : 'row-disabled'; ?>">
@@ -248,7 +248,6 @@ include __DIR__ . '/../includes/header.php';
                     <td><?php echo $u['role_name'] ? ((int)$u['is_system'] ? role_link($u, 'status-ordered') : role_link($u, 'cat-pill')) : '<span class="status-issuing">No role</span>'; ?></td>
                     <td><?php echo $u['active'] ? '<span class="status-receiving">Active</span>' : '<span class="status-issuing">Disabled</span>'; ?></td>
                     <td class="col-wide muted" style="white-space:nowrap"><?php echo $u['last_login_at'] ? date('d M Y, H:i', strtotime($u['last_login_at'])) : 'Never'; ?></td>
-                    <td class="muted col-wide" style="white-space:nowrap"><?php echo date('d M Y', strtotime($u['created_at'])); ?></td>
                     <td><div class="row-actions">
                         <a href="users.php?edit=<?php echo $u['id']; ?>" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($u['full_name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
                         <a href="users.php?reset=<?php echo $u['id']; ?>" class="btn btn-icon" aria-label="Reset password for <?php echo htmlspecialchars($u['full_name']); ?>" data-tip="Reset password"><?php echo row_icon('key'); ?></a>
