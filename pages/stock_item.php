@@ -117,16 +117,27 @@ include __DIR__ . '/../includes/header.php';
     <?php if ($history): ?>
     <div class="table-container">
         <table class="compact">
-            <thead><tr><th>Date</th><th>Type</th><th>Branch</th><th class="num">Qty</th><?php if (!$scoped): ?><th class="num">Branch stock before &rarr; after</th><?php endif; ?><th>From / to</th><th>Purpose</th><th>By</th></tr></thead>
+            <?php $rs = $scoped ? '' : ' rowspan="2"'; ?>
+            <thead>
+                <tr><th<?php echo $rs; ?>>Date</th><th<?php echo $rs; ?>>Type</th><th class="num"<?php echo $rs; ?>>Qty</th><th<?php echo $rs; ?>>From</th><th<?php echo $rs; ?>>To</th>
+                    <?php if (!$scoped): ?><th colspan="2" class="th-group">Branch stock</th><?php endif; ?><th<?php echo $rs; ?>>Purpose</th><th<?php echo $rs; ?>>By</th></tr>
+                <?php if (!$scoped): ?><tr><th class="num">Before</th><th class="num">After</th></tr><?php endif; ?>
+            </thead>
             <tbody>
             <?php foreach ($history as $r): ?>
                 <tr>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y, H:i', strtotime($r['created_at'])); ?></td>
                     <td><span class="status-<?php echo strtolower($r['type']); ?>"><?php echo $r['type']; ?></span></td>
-                    <td class="muted"><?php echo htmlspecialchars($r['branch_name'] ?? '—'); ?></td>
                     <td class="num"><strong><?php echo ($r['type'] === 'Issued' ? '−' : '+') . number_format($r['quantity']); ?></strong></td>
-                    <?php if (!$scoped): ?><td class="num muted"><?php echo $r['old_stock'] !== null ? number_format($r['old_stock']) . ' &rarr; ' . number_format($r['new_stock']) : '—'; ?></td><?php endif; ?>
-                    <td><?php echo htmlspecialchars($r['party'] ?: '—'); ?></td>
+                    <?php // Deliveries come from a supplier into a branch; issues go from a branch to a department
+                    $branch_cell = htmlspecialchars($r['branch_name'] ?? '—');
+                    $party_cell  = htmlspecialchars($r['party'] ?: '—'); ?>
+                    <td><?php echo $r['type'] === 'Issued' ? $branch_cell : $party_cell; ?></td>
+                    <td><?php echo $r['type'] === 'Issued' ? $party_cell : $branch_cell; ?></td>
+                    <?php if (!$scoped): ?>
+                    <td class="num muted"><?php echo $r['old_stock'] !== null ? number_format($r['old_stock']) : '—'; ?></td>
+                    <td class="num"><?php echo $r['new_stock'] !== null ? number_format($r['new_stock']) : '—'; ?></td>
+                    <?php endif; ?>
                     <td class="muted"><?php echo htmlspecialchars($r['purpose'] ?: '—'); ?></td>
                     <td class="muted"><?php echo htmlspecialchars($r['by_name'] ?? '—'); ?></td>
                 </tr>
