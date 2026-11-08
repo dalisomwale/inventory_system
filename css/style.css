@@ -774,6 +774,15 @@ a.ss:hover { border-color: var(--navy); }
 .row-disabled td:first-child { text-decoration: line-through; text-decoration-color: #c5cad6; }
 .btn-danger-outline { color: var(--danger); border-color: #efc4c4; }
 .btn-danger-outline:hover { background: #fdecec; border-color: var(--danger); color: var(--danger); }
+/* Item page: Stock and Details in one card, split by a line */
+.item-summary { display: grid; grid-template-columns: 1fr 1fr; padding: 0; }
+.item-summary > section { padding: 18px 20px; min-width: 0; }
+.item-summary > section + section { border-left: 1px solid var(--border); }
+.item-summary-title { margin: 0 0 14px; font-size: .95rem; }
+@media (max-width: 760px) {
+    .item-summary { grid-template-columns: 1fr; }
+    .item-summary > section + section { border-left: 0; border-top: 1px solid var(--border); }
+}
 .detail-list { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
 .detail-list > div { min-width: 0; }
 .detail-list .wide { grid-column: 1 / -1; }

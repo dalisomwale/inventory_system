@@ -92,9 +92,9 @@ include __DIR__ . '/../includes/header.php';
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
 <!-- Details -->
-<div class="grid-2">
-    <div class="card">
-        <div class="card-head"><h3><?php echo $scoped ? 'Issued to ' . htmlspecialchars(department_name($scope_dept)) : 'Stock'; ?></h3></div>
+<div class="card item-summary">
+    <section>
+        <h3 class="item-summary-title"><?php echo $scoped ? 'Issued to ' . htmlspecialchars(department_name($scope_dept)) : 'Stock'; ?></h3>
         <?php if ($scoped): ?>
         <dl class="detail-list">
             <div><dt>Total issued</dt><dd class="big"><?php echo number_format($issued); ?></dd></div>
@@ -112,9 +112,9 @@ include __DIR__ . '/../includes/header.php';
             <div><dt>Total issued</dt><dd><?php echo number_format($issued); ?></dd></div>
         </dl>
         <?php endif; ?>
-    </div>
-    <div class="card">
-        <div class="card-head"><h3>Details</h3></div>
+    </section>
+    <section>
+        <h3 class="item-summary-title">Details</h3>
         <dl class="detail-list">
             <div><dt>Unit price</dt><dd><?php echo kwacha((float)$item['unit_price']); ?></dd></div>
             <?php if (!$scoped): ?><div><dt>Stock value</dt><dd><?php echo kwacha($item['current_quantity'] * $item['unit_price']); ?></dd></div><?php endif; ?>
@@ -122,7 +122,7 @@ include __DIR__ . '/../includes/header.php';
             <div><dt>Last updated</dt><dd><?php echo $item['updated_at'] ? date('d M Y, H:i', strtotime($item['updated_at'])) : '—'; ?></dd></div>
             <div class="wide"><dt>Description</dt><dd><?php echo $item['description'] ? nl2br(htmlspecialchars($item['description'])) : '—'; ?></dd></div>
         </dl>
-    </div>
+    </section>
 </div>
 
 <!-- History -->
