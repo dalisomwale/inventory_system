@@ -26,13 +26,13 @@ foreach (ins_item_forecast($pdo, 30) as $r) { if ((int)$r['id'] === (int)$item['
 $state = $item['current_quantity'] <= 0 ? 'out' : ($item['current_quantity'] <= $item['reorder_level'] ? 'low' : 'ok');
 
 $h = $pdo->prepare($scoped ? "
-    SELECT 'Issued' AS type, s.created_at, s.quantity, CONCAT(s.issued_to, IF(s.recipient IS NULL OR s.recipient = '', '', CONCAT(' (', s.recipient, ')'))) AS party, s.old_stock, s.new_stock, u.full_name AS by_name, s.purpose, b.name AS branch_name
+    SELECT 'Issued' AS type, s.created_at, s.quantity, s.issued_to AS party, s.old_stock, s.new_stock, u.full_name AS by_name, s.purpose, b.name AS branch_name
     FROM stock_issuing s LEFT JOIN users u ON u.id = s.issued_by LEFT JOIN branches b ON b.id = s.branch_id
     WHERE s.item_id = ? AND s.department_id = " . (int)$scope_dept . " ORDER BY s.created_at DESC LIMIT 100" : "
     (SELECT 'Received' AS type, r.created_at, r.quantity, r.supplier AS party, r.old_stock, r.new_stock, u.full_name AS by_name, NULL AS purpose, b.name AS branch_name
      FROM stock_receiving r LEFT JOIN users u ON u.id = r.received_by LEFT JOIN branches b ON b.id = r.branch_id WHERE r.item_id = ?)
     UNION ALL
-    (SELECT 'Issued', s.created_at, s.quantity, CONCAT(s.issued_to, IF(s.recipient IS NULL OR s.recipient = '', '', CONCAT(' (', s.recipient, ')'))), s.old_stock, s.new_stock, u.full_name, s.purpose, b.name
+    (SELECT 'Issued', s.created_at, s.quantity, s.issued_to, s.old_stock, s.new_stock, u.full_name, s.purpose, b.name
      FROM stock_issuing s LEFT JOIN users u ON u.id = s.issued_by LEFT JOIN branches b ON b.id = s.branch_id WHERE s.item_id = ?)
     ORDER BY created_at DESC LIMIT 100");
 $h->execute($scoped ? [$item['id']] : [$item['id'], $item['id']]);
