@@ -137,14 +137,16 @@ if (isset($_SESSION['user_id'])) {
         'suppliers.php'              => [['Suppliers', null]],
     ];
     $crumbs = $breadcrumbs ?? ($crumb_map[$cur] ?? []);
-    echo '<nav class="breadcrumb" aria-label="You are here">';
-    echo $crumbs ? '<a href="dashboard.php">Dashboard</a>' : '<span aria-current="page">Dashboard</span>';
-    foreach ($crumbs as $i => [$label, $url]) {
-        echo '<span class="crumb-sep" aria-hidden="true">&rsaquo;</span>';
-        echo ($url && $i < count($crumbs) - 1)
-            ? '<a href="' . htmlspecialchars($url) . '">' . htmlspecialchars($label) . '</a>'
-            : '<span aria-current="page">' . htmlspecialchars($label) . '</span>';
+    if ($crumbs) {
+        echo '<nav class="breadcrumb" aria-label="You are here">';
+        echo '<a href="dashboard.php">Dashboard</a>';
+        foreach ($crumbs as $i => [$label, $url]) {
+            echo '<span class="crumb-sep" aria-hidden="true">&rsaquo;</span>';
+            echo ($url && $i < count($crumbs) - 1)
+                ? '<a href="' . htmlspecialchars($url) . '">' . htmlspecialchars($label) . '</a>'
+                : '<span aria-current="page">' . htmlspecialchars($label) . '</span>';
+        }
+        echo '</nav>';
     }
-    echo '</nav>';
 }
 ?>

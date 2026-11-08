@@ -163,6 +163,7 @@ if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['f
 
 $quotes = req_quotes($pdo, (int)$p['id']);
 $pops   = req_quotes($pdo, (int)$p['id'], 'pop');
+$docs   = req_quotes($pdo, (int)$p['id'], 'doc');
 $log    = $pdo->prepare("SELECT l.*, u.full_name, r.name AS role_name FROM requisition_log l JOIN users u ON u.id = l.user_id LEFT JOIN roles r ON r.id = u.role_id
                          WHERE l.requisition_id = ? ORDER BY l.created_at, l.id");
 $log->execute([$p['id']]);
@@ -326,6 +327,16 @@ function action_form(string $act, string $label, array $o = []): string {
         </form>
         <?php endif; ?>
     </div>
+
+    <?php if ($docs): ?>
+    <div class="card">
+        <div class="card-head"><h3>Attachments</h3><span class="card-hint">Added when it was raised</span></div>
+        <?php foreach ($docs as $f): ?>
+        <p><a href="requisition_file.php?id=<?php echo $f['id']; ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($f['original_name']); ?></a>
+           <span class="muted-text">(<?php echo req_file_size((int)$f['size']); ?>) &middot; <?php echo htmlspecialchars($f['by_name']); ?>, <?php echo date('d M Y', strtotime($f['created_at'])); ?></span></p>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
 
     <?php if ($pops): ?>
     <div class="card">

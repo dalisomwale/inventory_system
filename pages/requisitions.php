@@ -57,8 +57,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
         $dup->execute([$item_name, $dept['id'] ?? null]);
         if ($dup->fetchColumn() > 0) $v->fail("There is already an open requisition for \"$item_name\"" . ($dept ? " for {$dept['name']}" : '') . '.');
     }
+    // Optional supporting documents (specs, photos, a quote already in hand)
+    $attached = [];
+    if ($v->ok()) {
+        $up = $_FILES['attachments'] ?? null;
+        $files = [];
+        if ($up && is_array($up['name'])) {
+            foreach ($up['name'] as $i => $n) {
+                if (($up['error'][$i] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) continue;
+                $files[] = ['name' => $n, 'type' => $up['type'][$i], 'tmp_name' => $up['tmp_name'][$i], 'error' => $up['error'][$i], 'size' => $up['size'][$i]];
+            }
+        }
+        if (!$files) $v->fail('Please attach at least one file.');
+        elseif (count($files) > REQ_ATTACH_MAX) $v->fail('You can attach up to ' . REQ_ATTACH_MAX . ' files.');
+        else foreach ($files as $f) {
+            $r = req_store_upload($f);
+            if (is_string($r)) { $v->fail($f['name'] . ': ' . $r); break; }
+            $attached[] = $r;
+        }
+        if (!$v->ok()) {
+            foreach ($attached as [$stored]) @unlink(req_storage_dir() . '/' . $stored);
+            $attached = [];
+        }
+    }
     if (!$v->ok()) {
-        $error = $v->message();
+        $error = $v->message() . (!empty($_FILES['attachments']['name'][0]) ? ' Please choose your attachments again.' : '');
     } else {
         $match = $pdo->prepare("SELECT id FROM items WHERE LOWER(item_name) = LOWER(?) AND category_id = ? LIMIT 1");
         $match->execute([$item_name, $category['id']]);
@@ -70,6 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
             ->execute([$item_name, $item_id, $quantity, $notes, $_SESSION['user_id'], $category['id'], $category['name'], $req_company, $req_branch, $dept['id'] ?? null, $is_it, $status]);
         $id = (int)$pdo->lastInsertId();
         req_log($pdo, $id, 'raised', null, $status, $is_it ? 'IT-related' : null);
+        $add_file = $pdo->prepare("INSERT INTO requisition_files (requisition_id, kind, original_name, stored_name, mime, size, uploaded_by) VALUES (?,?,?,?,?,?,?)");
+        foreach ($attached as [$stored, $orig, $mime, $size]) $add_file->execute([$id, 'doc', $orig, $stored, $mime, $size, $_SESSION['user_id']]);
+        if ($attached) req_log($pdo, $id, 'docs_added', null, null, implode(', ', array_column($attached, 1)));
         logAudit($pdo, $_SESSION['user_id'], 'REQUISITION_RAISED', $item_id ? (int)$item_id : null, $quantity, req_ref($id) . " raised: $item_name");
         $_SESSION['flash'] = req_ref($id) . ' raised. ' . ($is_it ? 'It is now with IT for quotations.' : 'Attach the quotations below, then send it to the Director.');
         header('Location: requisition.php?id=' . $id); exit();
@@ -137,7 +163,7 @@ include __DIR__ . '/../includes/header.php';
 <?php if (can('requisitions.raise')): ?>
 <div class="form-container wide">
     <div class="form-title">New requisition</div>
-    <form method="POST"
+    <form method="POST" enctype="multipart/form-data"
           data-confirm-title="Raise requisition"
           data-confirm="Raise a requisition for {quantity} &times; {item_name} ({category_id})<?php echo $departments && !$my_dept_row ? ' for {department_id}, {company_id}' : ''; ?>?"
           data-confirm-ok="Raise requisition">
@@ -156,7 +182,6 @@ include __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
                 <?php endif; ?>
-                <small>This company's IT, Director and Accounts will handle it.</small>
             </div>
             <?php if ($departments): ?>
             <div class="form-group">
@@ -198,6 +223,10 @@ include __DIR__ . '/../includes/header.php';
                 <label for="quantity">Quantity *</label>
                 <input type="number" id="quantity" name="quantity" min="1" max="100000" step="1" required
                        value="<?php echo isset($error) ? (int)($_POST['quantity'] ?? 1) : $pre_qty; ?>">
+            </div>
+            <div class="form-group">
+                <label for="attachments">Attachments *</label>
+                <input type="file" id="attachments" name="attachments[]" multiple required accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
             </div>
         </div>
         <div class="form-group">

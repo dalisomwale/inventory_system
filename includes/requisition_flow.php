@@ -186,6 +186,7 @@ function req_log(PDO $pdo, int $id, string $action, ?string $from, ?string $to, 
 /** Words for the history list. */
 const REQ_ACTIONS = [
     'raised'          => 'Raised the requisition',
+    'docs_added'      => 'Attached supporting documents',
     'quote_added'     => 'Attached a quotation',
     'quote_removed'   => 'Removed a quotation',
     'to_director'     => 'Sent to the Director',
@@ -214,6 +215,7 @@ const REQ_FILE_TYPES = [
     'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ];
 const REQ_FILE_MAX = 10 * 1024 * 1024;   // 10 MB
+const REQ_ATTACH_MAX = 5;                 // supporting documents on a new requisition
 
 function req_storage_dir(): string {
     $dir = dirname(__DIR__) . '/storage/requisitions';

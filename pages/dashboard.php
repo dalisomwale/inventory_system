@@ -78,7 +78,7 @@ include __DIR__ . '/../includes/header.php';
     <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive'), '', 'receive'); ?><?php endif; ?>
     <?php if (can('stock.issue')): ?><?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue'), '', 'issue'); ?><?php endif; ?>
     <?php if (can('stock.view')): ?><?php echo action_tile('stock.php', 'Manage stock', 'All items and levels', icon('stock'), '', 'stock'); ?><?php endif; ?>
-    <?php if (req_can_open()): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), $to_order ? $to_order . ' waiting for you' : '', 'request'); ?><?php endif; ?>
+    <?php if (req_can_open()): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), '', 'request'); ?><?php endif; ?>
     <?php if (can_any('reports.view','reports.submit')): ?><?php echo action_tile('reports.php', 'Monthly reports', $submitted_count . ' of ' . $total_cats . ' submitted', icon('chart'), '', 'reports'); ?><?php endif; ?>
 </div>
 
