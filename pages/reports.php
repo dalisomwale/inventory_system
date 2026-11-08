@@ -36,17 +36,17 @@ $rows   = [];   // item rows for the chosen group (or all items for the category
 if ($by === 'department') {
     // Departments don't hold stock: what was issued to each one in the month
     $st = $pdo->prepare("
-        SELECT d.id AS gid, d.name, CONCAT(b.name, ' · ', co.name) AS sub, i.id, i.item_name, COALESCE(c.name, i.category, 'Other') AS category_name,
+        SELECT d.id AS gid, d.name, b.name AS branch_name, co.name AS company_name, i.id, i.item_name, COALESCE(c.name, i.category, 'Other') AS category_name,
                i.unit_price, SUM(s.quantity) AS units, SUM(s.quantity * i.unit_price) AS value, COUNT(*) AS times
         FROM stock_issuing s JOIN departments d ON d.id = s.department_id JOIN branches b ON b.id = d.branch_id JOIN companies co ON co.id = b.company_id
         JOIN items i ON i.id = s.item_id LEFT JOIN categories c ON c.id = i.category_id
         WHERE DATE(s.created_at) BETWEEN :f AND :t
-        GROUP BY d.id, d.name, sub, i.id, i.item_name, category_name, i.unit_price
+        GROUP BY d.id, d.name, branch_name, company_name, i.id, i.item_name, category_name, i.unit_price
         ORDER BY d.name, units DESC");
     $st->execute(['f' => $from, 't' => $to]);
     foreach ($st->fetchAll() as $r) {
         $g = &$groups[(int)$r['gid']];
-        $g ??= ['name' => $r['name'], 'sub' => $r['sub'], 'items' => 0, 'units' => 0, 'value' => 0.0, 'times' => 0];
+        $g ??= ['name' => $r['name'], 'branch' => $r['branch_name'], 'company' => $r['company_name'], 'items' => 0, 'units' => 0, 'value' => 0.0, 'times' => 0];
         $g['items']++; $g['units'] += $r['units']; $g['value'] += $r['value']; $g['times'] += $r['times'];
         unset($g);
         if (!$sel || (int)$r['gid'] === $sel) $rows[] = $r;
@@ -115,7 +115,7 @@ if ($by === 'department') {
 uasort($groups, fn($a, $b) => strcasecmp($a['name'], $b['name']));
 if ($sel && !isset($groups[$sel])) $sel = 0;
 $sel_name = $sel ? $groups[$sel]['name'] : '';
-if ($sel && $by === 'department' && $groups[$sel]['sub']) $sel_name .= ' (' . $groups[$sel]['sub'] . ')';
+if ($sel && $by === 'department') $sel_name .= ' (' . $groups[$sel]['branch'] . ', ' . $groups[$sel]['company'] . ')';
 
 $is_issue = $by === 'department';
 $sum = fn(array $list, string $f) => array_sum(array_column($list, $f));
@@ -129,9 +129,9 @@ if (wants_xlsx()) {
               'Exported: ' . date('d M Y, H:i')];
     $glist = array_values($groups);
     if ($is_issue) {
-        $group_sheet = ['columns' => ['Department', 'Branch / company', ['Items', 'int'], ['Units issued', 'int'], ['Value issued (K)', 'money'], ['Times issued', 'int']],
-            'rows'   => array_map(fn($g) => [$g['name'], $g['sub'], $g['items'], $g['units'], $g['value'], $g['times']], $glist),
-            'totals' => ['Total', '', '', $sum($glist, 'units'), $sum($glist, 'value'), $sum($glist, 'times')]];
+        $group_sheet = ['columns' => ['Department', 'Branch', 'Company', ['Items', 'int'], ['Units issued', 'int'], ['Value issued (K)', 'money'], ['Times issued', 'int']],
+            'rows'   => array_map(fn($g) => [$g['name'], $g['branch'], $g['company'], $g['items'], $g['units'], $g['value'], $g['times']], $glist),
+            'totals' => ['Total', '', '', '', $sum($glist, 'units'), $sum($glist, 'value'), $sum($glist, 'times')]];
         $item_sheet = ['columns' => ['Item', 'Category', ['Units issued', 'int'], ['Unit price (K)', 'money'], ['Value issued (K)', 'money'], ['Times issued', 'int']],
             'rows'   => array_map(fn($r) => [$r['item_name'], $r['category_name'], $r['units'], $r['unit_price'], $r['value'], $r['times']], $rows),
             'totals' => ['Total', '', $sum($rows, 'units'), '', $sum($rows, 'value'), $sum($rows, 'times')]];
@@ -207,16 +207,17 @@ include __DIR__ . '/../includes/header.php';
     <div class="table-container">
         <table>
         <?php if ($is_issue): ?>
-            <thead><tr><th>Department</th><th>Branch</th><th class="num">Items</th><th class="num">Units issued</th><th class="num">Value issued</th><th class="num">Times</th></tr></thead>
+            <thead><tr><th>Department</th><th>Branch</th><th>Company</th><th class="num">Items</th><th class="num">Units issued</th><th class="num">Value issued</th><th class="num">Times</th></tr></thead>
             <tbody>
             <?php foreach ($groups as $gid => $g): ?>
                 <tr><td><a href="<?php echo htmlspecialchars($report_url(['id' => $gid])); ?>" style="font-weight:600"><?php echo htmlspecialchars($g['name']); ?></a></td>
-                    <td class="muted"><?php echo htmlspecialchars($g['sub']); ?></td>
+                    <td class="muted"><?php echo htmlspecialchars($g['branch']); ?></td>
+                    <td class="muted"><?php echo htmlspecialchars($g['company']); ?></td>
                     <td class="num"><?php echo number_format($g['items']); ?></td><td class="num"><strong><?php echo number_format($g['units']); ?></strong></td>
                     <td class="num"><?php echo kwacha($g['value']); ?></td><td class="num muted"><?php echo number_format($g['times']); ?></td></tr>
             <?php endforeach; ?>
             </tbody>
-            <tfoot><tr><td colspan="3">Total</td><td class="num"><?php echo number_format($sum($groups, 'units')); ?></td><td class="num"><?php echo kwacha($sum($groups, 'value')); ?></td><td class="num"><?php echo number_format($sum($groups, 'times')); ?></td></tr></tfoot>
+            <tfoot><tr><td colspan="4">Total</td><td class="num"><?php echo number_format($sum($groups, 'units')); ?></td><td class="num"><?php echo kwacha($sum($groups, 'value')); ?></td><td class="num"><?php echo number_format($sum($groups, 'times')); ?></td></tr></tfoot>
         <?php else: ?>
             <thead><tr><th><?php echo $view; ?></th><?php if ($by === 'branch'): ?><th>Company</th><?php endif; ?><th class="num">Items</th><th class="num">Opening</th><th class="num">Received</th><th class="num">Issued</th><th class="num">Closing</th><th class="num">Closing value</th><?php if ($by === 'category'): ?><th class="num">Low or out</th><?php endif; ?></tr></thead>
             <tbody>
