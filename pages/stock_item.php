@@ -91,14 +91,14 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Actions -->
 <div class="action-tiles">
-    <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php?category_id=' . (int)$item['category_id'] . '&item_id=' . $item['id'], 'Receive', 'Add stock that arrived', icon('receive')); ?><?php endif; ?>
+    <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php?category_id=' . (int)$item['category_id'] . '&item_id=' . $item['id'], 'Receive', 'Add stock that arrived', icon('receive'), '', 'receive'); ?><?php endif; ?>
     <?php if ($item['current_quantity'] > 0 && can('stock.issue')): ?>
-        <?php echo action_tile('issue_stock.php?category_id=' . (int)$item['category_id'] . '&item_id=' . $item['id'], 'Issue', 'Give out to a department', icon('issue')); ?>
+        <?php echo action_tile('issue_stock.php?category_id=' . (int)$item['category_id'] . '&item_id=' . $item['id'], 'Issue', 'Give out to a department', icon('issue'), '', 'issue'); ?>
     <?php endif; ?>
     <?php if ($open_req): ?>
-        <?php echo action_tile('requisition.php?id=' . $open_req['id'], req_ref((int)$open_req['id']) . ' open', $open_req['quantity'] . ' · ' . req_status_label($open_req['status']), icon('request')); ?>
+        <?php echo action_tile('requisition.php?id=' . $open_req['id'], req_ref((int)$open_req['id']) . ' open', $open_req['quantity'] . ' · ' . req_status_label($open_req['status']), icon('request'), '', 'request'); ?>
     <?php elseif (can('requisitions.raise')): ?>
-        <?php echo action_tile('requisitions.php?item_name=' . urlencode($item['item_name']) . '&qty=' . max(1, (int)($f['suggest'] ?? 1)) . '&category_id=' . (int)$item['category_id'], 'Raise requisition', 'Order more of this item', icon('request')); ?>
+        <?php echo action_tile('requisitions.php?item_name=' . urlencode($item['item_name']) . '&qty=' . max(1, (int)($f['suggest'] ?? 1)) . '&category_id=' . (int)$item['category_id'], 'Raise requisition', 'Order more of this item', icon('request'), '', 'request'); ?>
     <?php endif; ?>
 </div>
 

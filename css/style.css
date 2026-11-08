@@ -658,14 +658,14 @@ table.compact thead th { padding: 7px 10px; }
 .action-tiles.stacked .at-title { font-size: .9rem; }
 .action-tiles.stacked .at-desc { font-size: .76rem; }
 .action-tiles.stacked .at-badge { position: absolute; top: 8px; right: 8px; margin: 0; }
-/* Solid colour tiles */
-.action-tiles.stacked .action-tile[class*="tone-"] { background: var(--tone); border-color: var(--tone); color: #fff; }
-.action-tiles.stacked .action-tile[class*="tone-"]:hover { background: var(--tone); border-color: var(--tone); filter: brightness(1.1); }
-.action-tiles.stacked .action-tile[class*="tone-"] .at-icon { background: rgba(255,255,255,.18); color: #fff; }
-.action-tiles.stacked .action-tile[class*="tone-"] .at-title { color: #fff; }
-.action-tiles.stacked .action-tile[class*="tone-"] .at-desc { color: rgba(255,255,255,.88); }
-.action-tiles.stacked .action-tile[class*="tone-"] .at-badge { color: var(--tone); background: #fff; border-color: #fff; }
-.action-tiles.stacked .action-tile[class*="tone-"]:focus-visible { outline-color: rgba(0,0,0,.35); }
+/* Solid colour tiles (dashboard and item page) */
+.action-tile[class*="tone-"] { background: var(--tone); border-color: var(--tone); color: #fff; }
+.action-tile[class*="tone-"]:hover { background: var(--tone); border-color: var(--tone); filter: brightness(1.1); }
+.action-tile[class*="tone-"] .at-icon { background: rgba(255,255,255,.18); color: #fff; }
+.action-tile[class*="tone-"] .at-title { color: #fff; }
+.action-tile[class*="tone-"] .at-desc { color: rgba(255,255,255,.88); }
+.action-tile[class*="tone-"] .at-badge { color: var(--tone); background: #fff; border-color: #fff; }
+.action-tile[class*="tone-"]:focus-visible { outline-color: rgba(0,0,0,.35); }
 
 /* Bigger buttons on the dashboards */
 .page-dashboard .btn,
