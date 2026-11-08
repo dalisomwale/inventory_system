@@ -724,10 +724,10 @@ a.ss:hover { border-color: var(--navy); }
 .detail-list dd.big { font-family: var(--head); font-size: 1.6rem; color: var(--navy); }
 .detail-list dd.big.qty-low { color: var(--warning); }
 .detail-list dd.big.qty-out { color: var(--danger); }
-@media (max-width: 1400px) { .stock-table .col-level { display: none; } }
+
 @media (max-width: 1500px) { .users-table .col-wide { display: none; } }
 .users-table td:nth-child(6) > * { white-space: nowrap; }
-@media (max-width: 1300px) { .stock-table .col-level { display: none; } .item-desc { max-width: 180px; } }
+@media (max-width: 1300px) { .item-desc { max-width: 180px; } }
 
 /* Donut */
 .donut-wrap { display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap; }

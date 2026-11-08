@@ -10,7 +10,7 @@ $categories = $pdo->query("SELECT id, name FROM categories ORDER BY name")->fetc
 $q       = is_string($_GET['q'] ?? null) ? trim(mb_substr($_GET['q'], 0, 100)) : '';
 $cat_id  = (int)($_GET['category_id'] ?? 0);
 $status  = in_array($_GET['status'] ?? '', ['ok', 'low', 'out', 'soon'], true) ? $_GET['status'] : '';
-$sorts   = ['name' => 'Name', 'stock' => 'Stock (lowest first)', 'days' => 'Days left', 'value' => 'Value (highest first)', 'added' => 'Date added (newest first)'];
+$sorts   = ['name' => 'Name', 'stock' => 'Stock (lowest first)', 'value' => 'Value (highest first)', 'added' => 'Date added (newest first)'];
 $sort    = array_key_exists($_GET['sort'] ?? '', $sorts) ? $_GET['sort'] : 'name';
 $branches = org_branches($pdo);
 $branch_id = (int)($_GET['branch_id'] ?? 0);
@@ -31,9 +31,16 @@ $st = $pdo->query("
     FROM items i LEFT JOIN categories c ON c.id = i.category_id");
 $all = $st->fetchAll();
 
+// Initial stock = the item's first delivery (at the chosen branch, if one is picked)
+$first = $pdo->prepare("SELECT r.item_id, r.quantity FROM stock_receiving r
+    JOIN (SELECT item_id, MIN(id) AS id FROM stock_receiving WHERE (? = 0 OR branch_id = ?) GROUP BY item_id) f ON f.id = r.id");
+$first->execute([$branch_id, $branch_id]);
+$initial = array_column($first->fetchAll(), 'quantity', 'item_id');
+
 $rows = [];
 foreach ($all as $r) {
     $f = $forecast[$r['id']] ?? ['days_left' => null, 'per_day' => 0, 'suggest' => 0];
+    $r['initial']   = isset($initial[$r['id']]) ? (int)$initial[$r['id']] : null;
     $r['days_left'] = $f['days_left'];
     $r['per_day']   = $f['per_day'];
     $r['suggest']   = $f['suggest'];
@@ -63,7 +70,6 @@ $rows = array_values(array_filter($rows, function ($r) use ($q, $cat_id, $status
 usort($rows, function ($a, $b) use ($sort) {
     switch ($sort) {
         case 'stock':  return $a['current_quantity'] <=> $b['current_quantity'] ?: strcasecmp($a['item_name'], $b['item_name']);
-        case 'days':   return ($a['current_quantity'] <= 0 ? -1 : ($a['days_left'] ?? PHP_INT_MAX)) <=> ($b['current_quantity'] <= 0 ? -1 : ($b['days_left'] ?? PHP_INT_MAX));
         case 'value':  return $b['value'] <=> $a['value'];
         case 'added':  return strcmp($b['created_at'], $a['created_at']);
         default:       return strcasecmp($a['item_name'], $b['item_name']);
@@ -90,16 +96,8 @@ include __DIR__ . '/../includes/header.php';
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
-<!-- Big actions -->
-<div class="action-tiles">
-    <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive')); ?><?php endif; ?>
-    <?php if (can('stock.issue')): ?><?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue')); ?><?php endif; ?>
-    <?php if (can('requisitions.view')): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request')); ?><?php endif; ?>
-    <?php if (can('categories.manage')): ?><?php echo action_tile('categories.php?add=1#add', 'Add Categories', 'Create a new category', icon('box')); ?><?php endif; ?>
-</div>
-
 <!-- Search and filters -->
-<form method="GET" class="card stock-filters">
+<form method="GET" class="card stock-filters" id="stockFilters">
     <div class="form-group grow">
         <label for="q">Search</label>
         <input type="search" id="q" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="Item name or description" maxlength="100">
@@ -143,7 +141,7 @@ include __DIR__ . '/../includes/header.php';
         </select>
     </div>
     <div class="form-group filter-buttons">
-        <button type="submit" class="btn btn-primary">Apply</button>
+        <noscript><button type="submit" class="btn btn-primary">Apply</button></noscript>
         <?php if ($q !== '' || $cat_id || $status || $sort !== 'name' || $branch_id): ?><a href="stock.php" class="btn">Clear</a><?php endif; ?>
     </div>
 </form>
@@ -154,7 +152,6 @@ include __DIR__ . '/../includes/header.php';
         <h3>
             <?php echo count($rows) === $tot_items ? 'All items' : 'Showing ' . count($rows) . ' of ' . $tot_items . ' items'; ?><?php echo $branch_id ? ' at ' . htmlspecialchars($branch_name) : ''; ?>
         </h3>
-        <span class="card-hint">Value <?php echo kwacha_whole(array_sum(array_column($rows, 'value'))); ?> &middot; <?php echo number_format(array_sum(array_column($rows, 'current_quantity'))); ?> units</span>
     </div>
 
     <?php if ($rows): ?>
@@ -162,42 +159,21 @@ include __DIR__ . '/../includes/header.php';
         <table class="stock-table">
             <thead>
                 <tr>
-                    <th>Item</th><th>Category</th><th class="num">In stock</th><th class="col-level">Level</th><th class="num">Reorder at</th>
-                    <th>Days left</th><th class="num">Value</th><th>Date added</th><th></th>
+                    <th>Item</th><th>Category</th><th class="num">Initial stock</th><th class="num">Currently in stock</th><th class="num">Reorder at</th>
+                    <th class="num">Value</th><th>Date added</th><th></th>
                 </tr>
             </thead>
             <tbody>
-            <?php foreach ($rows as $r):
-                $cap  = max($r['reorder_level'] * 2, $r['current_quantity'], 1);
-                $fill = min(100, round($r['current_quantity'] / $cap * 100));
-                $mark = min(100, round($r['reorder_level'] / $cap * 100));
-                $urgent = $r['state'] === 'out' || ($r['days_left'] !== null && $r['days_left'] < 7);
-            ?>
+            <?php foreach ($rows as $r): ?>
                 <tr class="row-<?php echo $r['state']; ?>">
                     <td>
                         <a class="item-link" href="stock_item.php?id=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['item_name']); ?></a>
                         <?php if ($r['description']): ?><div class="item-desc"><?php echo htmlspecialchars($r['description']); ?></div><?php endif; ?>
                     </td>
                     <td><span class="cat-pill"><?php echo htmlspecialchars($r['category_name']); ?></span></td>
+                    <td class="num muted"><?php echo $r['initial'] === null ? '—' : number_format($r['initial']); ?></td>
                     <td class="num"><strong class="qty-<?php echo $r['state']; ?>"><?php echo number_format($r['current_quantity']); ?></strong></td>
-                    <td class="col-level">
-                        <div class="level" data-tip="<?php echo number_format($r['current_quantity']) . ' in stock · reorder at ' . number_format($r['reorder_level']); ?>">
-                            <div class="level-fill <?php echo $r['state']; ?>" style="width:<?php echo $fill; ?>%"></div>
-                            <div class="level-mark" style="left:<?php echo $mark; ?>%"></div>
-                        </div>
-                    </td>
                     <td class="num muted"><?php echo number_format($r['reorder_level']); ?></td>
-                    <td>
-                        <?php if ($r['state'] === 'out'): ?>
-                            <span class="status-issuing">&#9888; Out of stock</span>
-                        <?php elseif ($r['days_left'] === null): ?>
-                            <span class="muted-text">Not used lately</span>
-                        <?php else: ?>
-                            <span class="<?php echo $urgent ? 'status-issuing' : ($r['days_left'] <= 14 || $r['state'] === 'low' ? 'status-pending' : 'muted-text'); ?>">
-                                <?php echo $urgent ? '&#9888; ' : ''; ?><?php echo days_left_label($r['days_left'], (int)$r['current_quantity']); ?>
-                            </span>
-                        <?php endif; ?>
-                    </td>
                     <td class="num"><?php echo kwacha_whole($r['value']); ?></td>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($r['created_at'])); ?></td>
                     <td><div class="row-actions">
@@ -232,5 +208,35 @@ include __DIR__ . '/../includes/header.php';
     <div class="empty-state"><p>No items match these filters.</p><a href="stock.php" class="btn">Clear filters</a></div>
     <?php endif; ?>
 </div>
+
+<script>
+// Filters apply as soon as they change; the search waits until typing pauses
+(function () {
+    var form = document.getElementById('stockFilters');
+    if (!form) return;
+    function go() {
+        // Leave empty filters out of the address
+        form.querySelectorAll('input, select').forEach(function (el) { if (el.value === '' || (el.name === 'sort' && el.value === 'name')) el.disabled = true; });
+        form.submit();
+    }
+    form.querySelectorAll('select').forEach(function (s) { s.addEventListener('change', go); });
+    var q = document.getElementById('q'), timer;
+    q.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+            try { sessionStorage.setItem('stockSearchFocus', '1'); } catch (e) {}
+            go();
+        }, 500);
+    });
+    q.addEventListener('search', function () { if (q.value === '') { clearTimeout(timer); go(); } });
+    // Put the cursor back in the search box after the page reloads
+    try {
+        if (sessionStorage.getItem('stockSearchFocus')) {
+            sessionStorage.removeItem('stockSearchFocus');
+            q.focus(); var n = q.value.length; q.setSelectionRange(n, n);
+        }
+    } catch (e) {}
+})();
+</script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
