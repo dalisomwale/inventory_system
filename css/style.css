@@ -1097,6 +1097,8 @@ input.is-invalid { border-color: var(--danger); }
 .req-waiting p { margin: 0; color: var(--muted); }
 .req-upload { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
 .form-row.three { grid-template-columns: 1fr 160px 1fr; }
+.form-row.cols-3 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 800px) { .form-row.cols-3 { grid-template-columns: 1fr; } }
 @media (max-width: 800px) { .form-row.three { grid-template-columns: 1fr; } }
 .row-approved td { background: #f3f9ee; }
 .req-cancel { margin: 4px 0 16px; }

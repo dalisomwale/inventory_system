@@ -88,16 +88,19 @@ if ($selected_item_id) {
     $selected_item = $st->fetch() ?: null;
 }
 
+// Recent issuing, optionally filtered by category
+$recent_cat = (int)($_GET['rcat'] ?? 0);
+if (!in_array($recent_cat, array_map(fn($c) => (int)$c['id'], $categories), true)) $recent_cat = 0;
 $recent = $pdo->query("
     SELECT s.*, it.item_name, c.name AS category_name, u.full_name AS issued_by_name, b.name AS branch_name
     FROM stock_issuing s
     JOIN items it ON s.item_id = it.id
     LEFT JOIN categories c ON it.category_id = c.id
     LEFT JOIN users u ON s.issued_by = u.id
-    LEFT JOIN branches b ON b.id = s.branch_id
+    LEFT JOIN branches b ON b.id = s.branch_id" . ($recent_cat ? " WHERE it.category_id = $recent_cat" : "") . "
     ORDER BY s.created_at DESC LIMIT 20")->fetchAll();
 
-$qs = fn(array $over = []) => '?' . http_build_query(array_filter(array_merge(['branch_id' => $branch_id, 'category_id' => $selected_cat_id], $over)));
+$qs = fn(array $over = []) => '?' . http_build_query(array_filter(array_merge(['branch_id' => $branch_id, 'category_id' => $selected_cat_id, 'item_id' => $selected_item_id, 'rcat' => $recent_cat], $over)));
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -110,37 +113,44 @@ include __DIR__ . '/../includes/header.php';
 <div class="alert alert-danger">No branches are set up yet. Ask the System Admin to add one under Admin › Branches.</div>
 <?php else: ?>
 
-<?php if (count($branches) > 1): ?>
-<form method="GET" class="card branch-bar">
-    <label for="branch_pick">Issuing from branch</label>
-    <select id="branch_pick" name="branch_id" onchange="this.form.submit()">
-        <?php foreach ($branches as $b): ?>
-        <option value="<?php echo $b['id']; ?>" <?php echo (int)$b['id'] === $branch_id ? 'selected' : ''; ?>><?php echo htmlspecialchars($b['company_name'] . ' › ' . $b['name']); ?></option>
-        <?php endforeach; ?>
-    </select>
-    <?php if ($selected_cat_id): ?><input type="hidden" name="category_id" value="<?php echo $selected_cat_id; ?>"><?php endif; ?>
-</form>
-<?php endif; ?>
-
-<!-- Category Selector -->
-<div class="pill-tabs">
-    <a href="<?php echo htmlspecialchars($qs(['category_id' => 0])); ?>" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>">All</a>
-    <?php foreach ($categories as $cat): ?>
-    <a href="<?php echo htmlspecialchars($qs(['category_id' => $cat['id']])); ?>" class="pill-tab <?php echo $selected_cat_id == $cat['id'] ? 'active' : ''; ?>">
-        <?php echo htmlspecialchars($cat['name']); ?>
-    </a>
-    <?php endforeach; ?>
-</div>
-
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
 
 <!-- Item Selection -->
-<div class="form-container">
+<div class="form-container wide">
     <div class="form-title">Select item</div>
-    <form method="GET">
-        <input type="hidden" name="branch_id" value="<?php echo $branch_id; ?>">
-        <input type="hidden" name="category_id" value="<?php echo $selected_cat_id; ?>">
+    <form method="GET" id="pickForm">
+        <?php if ($recent_cat): ?><input type="hidden" name="rcat" value="<?php echo $recent_cat; ?>"><?php endif; ?>
+        <div class="form-row cols-3">
+        <div class="form-group">
+            <label for="branch_pick">Issuing from branch</label>
+            <?php if (count($branches) > 1): ?>
+            <select id="branch_pick" name="branch_id" data-resets-item>
+                <?php $by_co = [];
+                foreach ($branches as $b) $by_co[$b['company_name']][] = $b;
+                foreach ($by_co as $co => $bs): ?>
+                <optgroup label="<?php echo htmlspecialchars($co); ?>">
+                    <?php foreach ($bs as $b): ?>
+                    <option value="<?php echo $b['id']; ?>" <?php echo (int)$b['id'] === $branch_id ? 'selected' : ''; ?>><?php echo htmlspecialchars($b['name']); ?></option>
+                    <?php endforeach; ?>
+                </optgroup>
+                <?php endforeach; ?>
+            </select>
+            <?php else: ?>
+            <input type="text" id="branch_pick" class="readonly-field" readonly tabindex="-1" value="<?php echo htmlspecialchars($branch['name']); ?>">
+            <input type="hidden" name="branch_id" value="<?php echo $branch_id; ?>">
+            <?php endif; ?>
+            <small class="muted-text"><?php echo htmlspecialchars($branch['company_name']); ?></small>
+        </div>
+        <div class="form-group">
+            <label for="cat_pick">Category</label>
+            <select id="cat_pick" name="category_id" data-resets-item>
+                <option value="">All categories</option>
+                <?php foreach ($categories as $cat): ?>
+                <option value="<?php echo $cat['id']; ?>" <?php echo $selected_cat_id === (int)$cat['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($cat['name']); ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
         <div class="form-group">
             <label for="item_pick">Item in stock at <?php echo htmlspecialchars($branch['name']); ?></label>
             <select id="item_pick" name="item_id" onchange="this.form.submit()">
@@ -153,6 +163,8 @@ include __DIR__ . '/../includes/header.php';
             </select>
             <?php if (!$items): ?><small style="color:var(--muted)">Nothing in stock at this branch<?php echo $selected_cat_id ? ' in this category' : ''; ?>.</small><?php endif; ?>
         </div>
+        </div>
+        <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
     </form>
 </div>
 
@@ -235,8 +247,14 @@ include __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <!-- Recent -->
-<div class="card">
-    <h3 style="margin-bottom:12px">Recent issuing</h3>
+<div class="card" id="recent">
+    <div class="card-head"><h3>Recent issuing</h3><span class="card-hint">Latest 20<?php echo $recent_cat ? ' in this category' : ''; ?></span></div>
+    <div class="pill-tabs pill-tabs-inline">
+        <a href="<?php echo htmlspecialchars($qs(['rcat' => 0])); ?>#recent" class="pill-tab <?php echo $recent_cat ? '' : 'active'; ?>">All</a>
+        <?php foreach ($categories as $cat): ?>
+        <a href="<?php echo htmlspecialchars($qs(['rcat' => $cat['id']])); ?>#recent" class="pill-tab <?php echo $recent_cat === (int)$cat['id'] ? 'active' : ''; ?>"><?php echo htmlspecialchars($cat['name']); ?></a>
+        <?php endforeach; ?>
+    </div>
     <?php if ($recent): ?>
     <div class="table-container">
         <table>
@@ -257,11 +275,15 @@ include __DIR__ . '/../includes/header.php';
         </table>
     </div>
     <?php else: ?>
-    <div class="empty-state"><p>No issuing transactions yet.</p></div>
+    <div class="empty-state"><p><?php echo $recent_cat ? 'Nothing issued in this category yet.' : 'No issuing transactions yet.'; ?></p></div>
     <?php endif; ?>
 </div>
 
 <script>
+// Changing the branch or category starts the item choice again
+document.querySelectorAll('#pickForm [data-resets-item]').forEach(function (s) {
+    s.addEventListener('change', function () { document.getElementById('item_pick').value = ''; s.form.submit(); });
+});
 function updateNewStock() {
     var current = <?php echo (int)($selected_item['available'] ?? 0); ?>;
     var qty = parseInt(document.getElementById('qty').value) || 0;
