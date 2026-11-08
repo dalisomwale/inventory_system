@@ -50,10 +50,6 @@ $by_branch = $pdo->prepare("
 $by_branch->execute([$item['id']]);
 $by_branch = $by_branch->fetchAll();
 
-require_once __DIR__ . '/../includes/requisition_flow.php';
-$open_req = $pdo->prepare("SELECT * FROM procurement p WHERE (p.item_id = ? OR LOWER(p.item_name) = LOWER(?)) AND p.status NOT IN ('received','cancelled') AND " . req_visible_sql($pdo) . " ORDER BY p.created_at DESC LIMIT 1");
-$open_req->execute([$item['id'], $item['item_name']]);
-$open_req = $open_req->fetch();
 
 $breadcrumbs = [[$scoped ? 'Stock' : 'Manage Stock', 'stock.php'], [$item['item_name'], null]];
 include __DIR__ . '/../includes/header.php';
@@ -88,19 +84,6 @@ include __DIR__ . '/../includes/header.php';
 
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
-
-<!-- Actions -->
-<div class="action-tiles">
-    <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php?category_id=' . (int)$item['category_id'] . '&item_id=' . $item['id'], 'Receive', 'Add stock that arrived', icon('receive'), '', 'receive'); ?><?php endif; ?>
-    <?php if ($item['current_quantity'] > 0 && can('stock.issue')): ?>
-        <?php echo action_tile('issue_stock.php?category_id=' . (int)$item['category_id'] . '&item_id=' . $item['id'], 'Issue', 'Give out to a department', icon('issue'), '', 'issue'); ?>
-    <?php endif; ?>
-    <?php if ($open_req): ?>
-        <?php echo action_tile('requisition.php?id=' . $open_req['id'], req_ref((int)$open_req['id']) . ' open', $open_req['quantity'] . ' · ' . req_status_label($open_req['status']), icon('request'), '', 'request'); ?>
-    <?php elseif (can('requisitions.raise')): ?>
-        <?php echo action_tile('requisitions.php?item_name=' . urlencode($item['item_name']) . '&qty=' . max(1, (int)($f['suggest'] ?? 1)) . '&category_id=' . (int)$item['category_id'], 'Raise requisition', 'Order more of this item', icon('request'), '', 'request'); ?>
-    <?php endif; ?>
-</div>
 
 <!-- Details -->
 <div class="grid-2">
