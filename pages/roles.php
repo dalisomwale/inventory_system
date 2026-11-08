@@ -193,9 +193,9 @@ document.querySelectorAll('[data-level-all]').forEach(function (b) {
                 <tr>
                     <td style="font-weight:600"><?php echo htmlspecialchars($r['name']); ?><?php echo $sys ? ' <span class="status-ordered">Locked</span>' : ''; ?></td>
                     <td class="muted"><?php echo htmlspecialchars($r['description'] ?: '—'); ?></td>
-                    <td><?php if ($sys): ?><span class="level-chip full">Full access everywhere</span>
+                    <td><?php if ($sys): ?>Full access everywhere
                         <?php elseif (!$r['summary']): ?><span class="muted-text">No access</span>
-                        <?php else: foreach ($r['summary'] as [$al, $ln, $top]): ?><span class="level-chip<?php echo $top ? ' full' : ''; ?>"><?php echo htmlspecialchars($al); ?>: <b><?php echo htmlspecialchars($ln); ?></b></span><?php endforeach; endif; ?></td>
+                        <?php else: ?><ul class="level-list"><?php foreach ($r['summary'] as [$al, $ln]): ?><li><span><?php echo htmlspecialchars($al); ?>:</span> <?php echo htmlspecialchars($ln); ?></li><?php endforeach; ?></ul><?php endif; ?></td>
                     <td class="num"><a href="users.php?role_id=<?php echo $r['id']; ?>"><?php echo (int)$r['users']; ?></a></td>
                     <td><?php if ((int)$r['is_default']): ?><span class="status-receiving">Default</span>
                         <?php elseif (!$sys): ?>
