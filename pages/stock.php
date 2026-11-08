@@ -160,7 +160,6 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="page-header">
     <h1><?php echo $scoped ? 'Stock &mdash; ' . htmlspecialchars($dept['name'] ?? 'your department') : 'Manage Stock'; ?></h1>
-    <?php echo xlsx_button(); ?>
 </div>
 
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
@@ -248,6 +247,7 @@ include __DIR__ . '/../includes/header.php';
         <h3>
             <?php echo count($rows) === $tot_items ? 'All items' : 'Showing ' . count($rows) . ' of ' . $tot_items . ' items'; ?><?php echo $scoped ? ' issued to ' . htmlspecialchars($dept['name'] ?? 'your department') : ($dept ? ' issued to ' . htmlspecialchars($dept['name']) . ' (stock at ' . htmlspecialchars($branch_name) . ')' : ($branch_id ? ' at ' . htmlspecialchars($branch_name) : ($company_id ? ' at ' . htmlspecialchars($company_name) : ''))); ?>
         </h3>
+        <?php if ($rows) echo xlsx_button(); ?>
     </div>
 
     <?php if ($rows): ?>
