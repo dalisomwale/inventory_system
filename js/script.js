@@ -250,20 +250,27 @@
             var company = wrap.querySelector('[data-org="company"]');
             var branch  = wrap.querySelector('[data-org="branch"]');
             var dept    = wrap.querySelector('[data-org="department"]');
-            function narrow(select, attr, parentValue) {
+            // Each list only shows the chosen parent's options (so "Sales" or "Lusaka HQ" appear once);
+            // until the parent is chosen the list is greyed out with a hint
+            function narrow(select, attr, parentValue, hint) {
                 if (!select) return;
-                var keep = false;
+                var first = select.options[0];
+                if (first && !first.value && !first.dataset.text) first.dataset.text = first.textContent;
+                var keep = false, any = false;
                 Array.prototype.forEach.call(select.options, function (o) {
                     if (!o.value) return;
-                    var show = !parentValue || o.getAttribute(attr) === parentValue;
+                    var show = !!parentValue && o.getAttribute(attr) === parentValue;
                     o.hidden = !show; o.disabled = !show;
+                    if (show) any = true;
                     if (show && o.selected) keep = true;
                 });
                 if (!keep) select.value = '';
+                select.disabled = !parentValue || !any;
+                if (first && !first.value) first.textContent = !parentValue ? hint : (any ? first.dataset.text : '— None here —');
             }
             function update() {
-                narrow(branch, 'data-company', company ? company.value : '');
-                narrow(dept, 'data-branch', branch ? branch.value : '');
+                if (company) narrow(branch, 'data-company', company.value, '— Choose a company first —');
+                narrow(dept, 'data-branch', branch ? branch.value : '', '— Choose a branch first —');
             }
             if (company) company.addEventListener('change', update);
             if (branch) branch.addEventListener('change', function () {
