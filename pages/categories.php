@@ -91,19 +91,30 @@ $cats = $pdo->query("
     GROUP BY c.id, c.name, c.description, c.created_at
     ORDER BY c.name")->fetchAll();
 
+// Period (optional, "All time" by default): units received and issued per category; categories with no movement are hidden
+$pr = period_from_request(null);
+if ($pr) {
+    $between = "DATE(m.created_at) BETWEEN " . $pdo->quote($pr['from']) . " AND " . $pdo->quote($pr['to']);
+    $recv = array_column($pdo->query("SELECT i.category_id, SUM(m.quantity) AS q FROM stock_receiving m JOIN items i ON i.id = m.item_id WHERE $between GROUP BY i.category_id")->fetchAll(), 'q', 'category_id');
+    $iss  = array_column($pdo->query("SELECT i.category_id, SUM(m.quantity) AS q FROM stock_issuing m JOIN items i ON i.id = m.item_id WHERE $between GROUP BY i.category_id")->fetchAll(), 'q', 'category_id');
+    foreach ($cats as &$c) { $c['p_recv'] = (int)($recv[$c['id']] ?? 0); $c['p_iss'] = (int)($iss[$c['id']] ?? 0); }
+    unset($c);
+}
+$shown = $pr ? array_values(array_filter($cats, fn($c) => $c['p_recv'] || $c['p_iss'])) : $cats;
+
 $editing = null;
 if (!empty($_GET['edit'])) {
     foreach ($cats as $c) if ((int)$c['id'] === (int)$_GET['edit']) $editing = $c;
 }
 
 if (wants_xlsx()) {
-    xlsx_download('Categories ' . date('Y-m-d'), [[
+    xlsx_download('Categories ' . ($pr ? "{$pr['from']} to {$pr['to']}" : date('Y-m-d')), [[
         'name'    => 'Categories',
         'title'   => 'All categories',
-        'meta'    => ['Exported: ' . date('d M Y, H:i')],
-        'columns' => ['Category', 'Description', ['Items', 'int'], ['Units in stock', 'int'], ['Value (K)', 'money'], 'Date added'],
-        'rows'    => array_map(fn($c) => [$c['name'], $c['description'] ?? '', $c['items'], $c['units'], $c['value'], date('d M Y', strtotime($c['created_at']))], $cats),
-        'totals'  => ['Total', '', array_sum(array_column($cats, 'items')), array_sum(array_column($cats, 'units')), array_sum(array_column($cats, 'value')), ''],
+        'meta'    => array_filter([$pr ? 'Period: ' . $pr['label'] . ' (' . $pr['range'] . '), categories with stock movement' : '', 'Exported: ' . date('d M Y, H:i')]),
+        'columns' => array_merge(['Category', 'Description', ['Items', 'int'], ['Units in stock', 'int']], $pr ? [['Received in period', 'int'], ['Issued in period', 'int']] : [], [['Value (K)', 'money'], 'Date added']),
+        'rows'    => array_map(fn($c) => array_merge([$c['name'], $c['description'] ?? '', $c['items'], $c['units']], $pr ? [$c['p_recv'], $c['p_iss']] : [], [$c['value'], date('d M Y', strtotime($c['created_at']))]), $shown),
+        'totals'  => array_merge(['Total', '', array_sum(array_column($shown, 'items')), array_sum(array_column($shown, 'units'))], $pr ? [array_sum(array_column($shown, 'p_recv')), array_sum(array_column($shown, 'p_iss'))] : [], [array_sum(array_column($shown, 'value')), '']),
     ]]);
 }
 
@@ -173,18 +184,19 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- List -->
 <div class="card">
-    <div class="card-head"><h3>All categories (<?php echo count($cats); ?>)</h3><?php if ($cats) echo xlsx_button(['edit' => null]); ?></div>
-    <?php if ($cats): ?>
+    <div class="card-head"><h3>All categories (<?php echo count($shown); ?>)</h3><div style="display:flex; align-items:center; gap:8px"><?php echo period_tabs($pr['key'] ?? null, '', ['edit'], true); ?><?php if ($shown) echo xlsx_button(['edit' => null]); ?></div></div>
+    <?php if ($shown): ?>
     <div class="table-container">
         <table>
-            <thead><tr><th>Category</th><th>Description</th><th class="num">Items</th><th class="num">Units in stock</th><th class="num">Value</th><th>Date added</th><th></th></tr></thead>
+            <thead><tr><th>Category</th><th>Description</th><th class="num">Items</th><th class="num">Units in stock</th><?php if ($pr): ?><th class="num">Received</th><th class="num">Issued</th><?php endif; ?><th class="num">Value</th><th>Date added</th><th></th></tr></thead>
             <tbody>
-            <?php foreach ($cats as $c): ?>
+            <?php foreach ($shown as $c): ?>
                 <tr>
                     <td style="font-weight:600"><?php echo htmlspecialchars($c['name']); ?></td>
                     <td class="muted"><?php echo htmlspecialchars($c['description'] ?: '—'); ?></td>
                     <td class="num"><?php echo number_format($c['items']); ?></td>
                     <td class="num"><?php echo number_format($c['units']); ?></td>
+                    <?php if ($pr): ?><td class="num"><?php echo $c['p_recv'] ? '+' . number_format($c['p_recv']) : '0'; ?></td><td class="num"><?php echo $c['p_iss'] ? '−' . number_format($c['p_iss']) : '0'; ?></td><?php endif; ?>
                     <td class="num"><?php echo 'K' . number_format($c['value']); ?></td>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($c['created_at'])); ?></td>
                     <td><div class="row-actions">
@@ -208,7 +220,7 @@ include __DIR__ . '/../includes/header.php';
         </table>
     </div>
     <?php else: ?>
-    <div class="empty-state"><p>No categories yet. Add your first one above.</p></div>
+    <div class="empty-state"><p><?php echo $pr ? 'No stock was received or issued in any category in this period.' : 'No categories yet. Add your first one above.'; ?></p></div>
     <?php endif; ?>
 </div>
 

@@ -45,15 +45,19 @@ function period_from_request(?string $default = 'month'): ?array {
 
 /**
  * Filter-icon button showing the current period; clicking it opens a menu of the periods.
- * Keeps the page's other filters; $drop lists address parts to clear when a period is picked.
+ * Keeps the page's other filters; $drop lists address parts to clear when a period is picked;
+ * $all_time adds an "All time" choice (no period) for tables that show everything by default.
  */
-function period_tabs(?string $current, string $anchor = '', array $drop = []): string {
+function period_tabs(?string $current, string $anchor = '', array $drop = [], bool $all_time = false): string {
     $keep = array_diff_key($_GET, array_flip(array_merge(['period', 'export'], $drop)));
     $base = strtok($_SERVER['REQUEST_URI'] ?? '', '?');
-    $now  = $current !== null ? PERIODS[$current][0] : 'Period';
+    $now  = $current !== null ? PERIODS[$current][0] : ($all_time ? 'All time' : 'Period');
     $h  = '<details class="period-filter"><summary class="period-btn" title="Filter by time period" aria-label="Filter by time period: ' . $now . '">'
         . '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>'
         . '<span>' . $now . '</span></summary><div class="period-menu" role="menu">';
+    // "All time" (no period) for tables that normally show everything
+    if ($all_time) $h .= '<a role="menuitem" href="' . htmlspecialchars($base . ($keep ? '?' . http_build_query($keep) : '') . $anchor) . '"'
+                      . ($current === null ? ' class="active" aria-current="true"' : '') . '>All time</a>';
     foreach (PERIODS as $key => [$short, $long]) {
         $href = $base . '?' . http_build_query($keep + ['period' => $key]) . $anchor;
         $h .= '<a role="menuitem" href="' . htmlspecialchars($href) . '"' . ($current === $key ? ' class="active" aria-current="true"' : '') . '>' . $long . '</a>';

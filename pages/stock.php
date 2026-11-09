@@ -76,6 +76,17 @@ if ($dept_id || $scoped) {
     $dept_last   = array_column($di, 'last', 'item_id');
 }
 
+// Period (optional, "All time" by default): what each item received and issued in it; items with no movement are hidden
+$pr = period_from_request(null);
+$p_recv = $p_iss = [];
+if ($pr) {
+    $between = "DATE(created_at) BETWEEN " . $pdo->quote($pr['from']) . " AND " . $pdo->quote($pr['to']);
+    $where_b = $scope_sql ? " AND branch_id IN ($scope_sql)" : "";
+    $p_recv  = array_column($pdo->query("SELECT item_id, SUM(quantity) AS q FROM stock_receiving WHERE $between$where_b GROUP BY item_id")->fetchAll(), 'q', 'item_id');
+    $p_iss   = array_column($pdo->query("SELECT item_id, SUM(quantity) AS q FROM stock_issuing WHERE $between"
+                 . (($dept_id || $scoped) ? " AND department_id = " . (int)$dept_id : $where_b) . " GROUP BY item_id")->fetchAll(), 'q', 'item_id');
+}
+
 $rows = [];
 foreach ($all as $r) {
     if ($scoped && empty($dept_issued[$r['id']])) continue;
@@ -89,6 +100,8 @@ foreach ($all as $r) {
     $r['issued_to_dept'] = $dept_issued !== null ? (int)($dept_issued[$r['id']] ?? 0) : null;
     $r['value']     = $scoped ? $r['issued_to_dept'] * $r['unit_price'] : $r['current_quantity'] * $r['unit_price'];
     $r['last_issued'] = $dept_last[$r['id']] ?? null;
+    $r['p_recv']    = (int)($p_recv[$r['id']] ?? 0);
+    $r['p_iss']     = (int)($p_iss[$r['id']] ?? 0);
     $r['state']     = $r['current_quantity'] <= 0 ? 'out' : ($r['current_quantity'] <= $r['reorder_level'] ? 'low' : 'ok');
     $r['last_move'] = $r['last_move'] === '1970-01-01 00:00:00' || $r['last_move'] === '1970-01-01' ? null : $r['last_move'];
     $rows[] = $r;
@@ -102,8 +115,9 @@ $tot_low   = count(array_filter($rows, fn($r) => $r['state'] === 'low'));
 $tot_out   = count(array_filter($rows, fn($r) => $r['state'] === 'out'));
 
 // Apply filters
-$rows = array_values(array_filter($rows, function ($r) use ($q, $cat_id, $status, $dept_issued) {
+$rows = array_values(array_filter($rows, function ($r) use ($q, $cat_id, $status, $dept_issued, $pr, $scoped) {
     if ($dept_issued !== null && empty($dept_issued[$r['id']])) return false;
+    if ($pr && !$r['p_iss'] && ($scoped || !$r['p_recv'])) return false;
     if ($q !== '' && mb_stripos($r['item_name'] . ' ' . $r['description'], $q) === false) return false;
     if ($cat_id && (int)$r['category_id'] !== $cat_id) return false;
     if ($status === 'soon') return $r['state'] === 'ok' && $r['days_left'] !== null && $r['days_left'] <= 14;
@@ -127,7 +141,7 @@ if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['f
 
 // Keep current filters on links
 function stock_url(array $change = []): string {
-    $keep = array_intersect_key($_GET, array_flip(['q', 'category_id', 'status', 'sort', 'company_id', 'branch_id', 'department_id']));
+    $keep = array_intersect_key($_GET, array_flip(['q', 'category_id', 'status', 'sort', 'company_id', 'branch_id', 'department_id', 'period']));
     $params = array_filter(array_merge($keep, $change), fn($v) => $v !== '' && $v !== null && $v !== 0 && $v !== '0');
     return 'stock' . ($params ? '?' . http_build_query($params) : '');
 }
@@ -139,20 +153,20 @@ if (wants_xlsx()) {
     $status_names = ['ok' => 'In stock', 'soon' => 'Running out in 2 weeks', 'low' => 'Below reorder', 'out' => 'Out of stock'];
     $state_names  = ['ok' => 'In stock', 'low' => 'Below reorder', 'out' => 'Out of stock'];
     $meta = array_filter([($scoped ? 'Department: ' : 'Showing: ') . $where, $q !== '' ? "Search: $q" : '', $cat_name ? "Category: $cat_name" : '',
-                          $status ? 'Status: ' . $status_names[$status] : '', 'Exported: ' . date('d M Y, H:i')]);
+                          $status ? 'Status: ' . $status_names[$status] : '', $pr ? 'Period: ' . $pr['label'] . ' (' . $pr['range'] . '), items that moved' : '', 'Exported: ' . date('d M Y, H:i')]);
     $sheet = $scoped ? [
-        'columns' => ['Item', 'Category', ['Issued to department', 'int'], ['Unit price (K)', 'money'], ['Value (K)', 'money'], 'Last issued'],
-        'rows'    => array_map(fn($r) => [$r['item_name'], $r['category_name'], $r['issued_to_dept'], $r['unit_price'], $r['value'], $r['last_issued'] ? date('d M Y', strtotime($r['last_issued'])) : ''], $rows),
-        'totals'  => ['Total', '', array_sum(array_column($rows, 'issued_to_dept')), '', array_sum(array_column($rows, 'value')), ''],
+        'columns' => array_merge(['Item', 'Category', ['Issued to department', 'int']], $pr ? [['Issued in period', 'int']] : [], [['Unit price (K)', 'money'], ['Value (K)', 'money'], 'Last issued']),
+        'rows'    => array_map(fn($r) => array_merge([$r['item_name'], $r['category_name'], $r['issued_to_dept']], $pr ? [$r['p_iss']] : [], [$r['unit_price'], $r['value'], $r['last_issued'] ? date('d M Y', strtotime($r['last_issued'])) : '']), $rows),
+        'totals'  => array_merge(['Total', '', array_sum(array_column($rows, 'issued_to_dept'))], $pr ? [array_sum(array_column($rows, 'p_iss'))] : [], ['', array_sum(array_column($rows, 'value')), '']),
     ] : [
-        'columns' => array_merge(['Item', 'Description', 'Category', ['Initial stock', 'int'], ['In stock', 'int']], $dept ? [['Issued to ' . $dept['name'], 'int']] : [],
+        'columns' => array_merge(['Item', 'Description', 'Category', ['Initial stock', 'int'], ['In stock', 'int']], $pr ? [['Received in period', 'int'], ['Issued in period', 'int']] : [], $dept ? [['Issued to ' . $dept['name'], 'int']] : [],
                                  [['Reorder at', 'int'], 'Status', ['Unit price (K)', 'money'], ['Value (K)', 'money'], 'Date added']),
-        'rows'    => array_map(fn($r) => array_merge([$r['item_name'], $r['description'] ?? '', $r['category_name'], $r['initial'], $r['current_quantity']], $dept ? [$r['issued_to_dept']] : [],
+        'rows'    => array_map(fn($r) => array_merge([$r['item_name'], $r['description'] ?? '', $r['category_name'], $r['initial'], $r['current_quantity']], $pr ? [$r['p_recv'], $r['p_iss']] : [], $dept ? [$r['issued_to_dept']] : [],
                                  [$r['reorder_level'], $state_names[$r['state']], $r['unit_price'], $r['value'], date('d M Y', strtotime($r['created_at']))]), $rows),
-        'totals'  => array_merge(['Total', '', '', '', array_sum(array_column($rows, 'current_quantity'))], $dept ? [array_sum(array_column($rows, 'issued_to_dept'))] : [],
+        'totals'  => array_merge(['Total', '', '', '', array_sum(array_column($rows, 'current_quantity'))], $pr ? [array_sum(array_column($rows, 'p_recv')), array_sum(array_column($rows, 'p_iss'))] : [], $dept ? [array_sum(array_column($rows, 'issued_to_dept'))] : [],
                                  ['', '', '', array_sum(array_column($rows, 'value')), '']),
     ];
-    xlsx_download('Stock ' . $where . ' ' . date('Y-m-d'), [['name' => 'Stock', 'title' => $scoped ? 'Stock - ' . $where : 'Stock levels', 'meta' => $meta] + $sheet]);
+    xlsx_download('Stock ' . $where . ' ' . ($pr ? "{$pr['from']} to {$pr['to']}" : date('Y-m-d')), [['name' => 'Stock', 'title' => $scoped ? 'Stock - ' . $where : 'Stock levels', 'meta' => $meta] + $sheet]);
 }
 
 include __DIR__ . '/../includes/header.php';
@@ -167,6 +181,7 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Search and filters -->
 <form method="GET" class="card stock-filters" id="stockFilters">
+    <?php if ($pr): ?><input type="hidden" name="period" value="<?php echo $pr['key']; ?>"><?php endif; ?>
     <div class="form-group grow">
         <label for="q">Search</label>
         <input type="search" id="q" name="q" value="<?php echo htmlspecialchars($q); ?>" placeholder="Item name or description" maxlength="100">
@@ -247,7 +262,7 @@ include __DIR__ . '/../includes/header.php';
         <h3>
             <?php echo count($rows) === $tot_items ? 'All items' : 'Showing ' . count($rows) . ' of ' . $tot_items . ' items'; ?><?php echo $scoped ? ' issued to ' . htmlspecialchars($dept['name'] ?? 'your department') : ($dept ? ' issued to ' . htmlspecialchars($dept['name']) . ' (stock at ' . htmlspecialchars($branch_name) . ')' : ($branch_id ? ' at ' . htmlspecialchars($branch_name) : ($company_id ? ' at ' . htmlspecialchars($company_name) : ''))); ?>
         </h3>
-        <?php if ($rows) echo xlsx_button(); ?>
+        <div style="display:flex; align-items:center; gap:8px"><?php echo period_tabs($pr['key'] ?? null, '', [], true); ?><?php if ($rows) echo xlsx_button(); ?></div>
     </div>
 
     <?php if ($rows): ?>
@@ -255,10 +270,10 @@ include __DIR__ . '/../includes/header.php';
         <table class="stock-table">
             <thead>
                 <?php if ($scoped): ?>
-                <tr><th>Item</th><th>Category</th><th class="num">Issued to <?php echo htmlspecialchars($dept['name'] ?? 'department'); ?></th><th class="num">Unit price</th><th class="num">Value</th><th>Last issued</th><th></th></tr>
+                <tr><th>Item</th><th>Category</th><th class="num">Issued to <?php echo htmlspecialchars($dept['name'] ?? 'department'); ?></th><?php if ($pr): ?><th class="num">Issued in period</th><?php endif; ?><th class="num">Unit price</th><th class="num">Value</th><th>Last issued</th><th></th></tr>
                 <?php else: ?>
                 <tr>
-                    <th>Item</th><th>Category</th><th class="num">Initial stock</th><th class="num">Currently in stock</th><?php if ($dept): ?><th class="num">Issued to <?php echo htmlspecialchars($dept['name']); ?></th><?php endif; ?><th class="num">Reorder at</th>
+                    <th>Item</th><th>Category</th><th class="num">Initial stock</th><th class="num">Currently in stock</th><?php if ($pr): ?><th class="num">Received</th><th class="num">Issued</th><?php endif; ?><?php if ($dept): ?><th class="num">Issued to <?php echo htmlspecialchars($dept['name']); ?></th><?php endif; ?><th class="num">Reorder at</th>
                     <th class="num">Value</th><th>Date added</th><th></th>
                 </tr>
                 <?php endif; ?>
@@ -273,12 +288,14 @@ include __DIR__ . '/../includes/header.php';
                     <td><span class="cat-pill"><?php echo htmlspecialchars($r['category_name']); ?></span></td>
                     <?php if ($scoped): ?>
                     <td class="num"><strong><?php echo number_format($r['issued_to_dept']); ?></strong></td>
+                    <?php if ($pr): ?><td class="num"><?php echo number_format($r['p_iss']); ?></td><?php endif; ?>
                     <td class="num muted"><?php echo kwacha((float)$r['unit_price']); ?></td>
                     <td class="num"><?php echo kwacha_whole($r['value']); ?></td>
                     <td class="muted" style="white-space:nowrap"><?php echo $r['last_issued'] ? date('d M Y', strtotime($r['last_issued'])) : '—'; ?></td>
                     <?php else: ?>
                     <td class="num muted"><?php echo $r['initial'] === null ? '—' : number_format($r['initial']); ?></td>
                     <td class="num"><strong class="qty-<?php echo $r['state']; ?>"><?php echo number_format($r['current_quantity']); ?></strong></td>
+                    <?php if ($pr): ?><td class="num"><?php echo $r['p_recv'] ? '+' . number_format($r['p_recv']) : '0'; ?></td><td class="num"><?php echo $r['p_iss'] ? '−' . number_format($r['p_iss']) : '0'; ?></td><?php endif; ?>
                     <?php if ($dept): ?><td class="num"><?php echo number_format($r['issued_to_dept']); ?></td><?php endif; ?>
                     <td class="num muted"><?php echo number_format($r['reorder_level']); ?></td>
                     <td class="num"><?php echo kwacha_whole($r['value']); ?></td>
