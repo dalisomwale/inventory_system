@@ -156,8 +156,8 @@ function ins_oldest_pending_days(PDO $pdo): ?int {
 // ── Formatting ───────────────────────────────────────────────
 
 function kwacha(float $n, bool $short = false): string {
-    if ($short && $n >= 1000000) return 'K' . rtrim(rtrim(number_format($n / 1000000, 1), '0'), '.') . 'M';
-    if ($short && $n >= 10000)   return 'K' . rtrim(rtrim(number_format($n / 1000, 1), '0'), '.') . 'k';
+    // Short form (big number cards): whole kwacha, e.g. K40,100
+    if ($short) return 'K' . number_format(round($n));
     return 'K' . number_format($n, 2);
 }
 
