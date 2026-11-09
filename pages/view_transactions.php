@@ -122,9 +122,8 @@ include __DIR__ . '/../includes/header.php';
 <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
         <h3 style="margin:0"><?php echo htmlspecialchars($period_text); ?></h3>
-        <?php echo xlsx_button(); ?>
+        <div style="display:flex; align-items:center; gap:8px"><?php echo period_tabs($pr['key'] ?? null, '', ['date']); ?><?php echo xlsx_button(); ?></div>
     </div>
-    <?php echo period_tabs($pr['key'] ?? null, '', ['date']); ?>
     <div class="table-container">
         <table>
             <thead>

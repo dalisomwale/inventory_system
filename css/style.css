@@ -585,14 +585,25 @@ table.compact thead th { padding: 7px 10px; }
 }
 
 /* Export to Excel button */
-/* Time-period buttons (Today, 7 days, 30 days, …) */
-.period-tabs { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0; margin: 0 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
-.period-label { padding: 5px 10px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: #f6f7f9; border-right: 1px solid var(--border); }
-.period-tab { padding: 5px 12px; font-size: .8rem; color: var(--text2); text-decoration: none; border-right: 1px solid var(--border); }
-.period-tab:last-child { border-right: 0; }
-.period-tab:hover { background: var(--accent-lt); color: var(--navy); }
-.period-tab.active { background: var(--navy); color: #fff; font-weight: 600; }
-@media print { .period-tabs { display: none; } }
+/* Time-period filter: funnel button with a menu (Today, 7 days, 30 days, …) */
+.period-filter { position: relative; display: inline-block; }
+.period-btn {
+    display: inline-flex; align-items: center; gap: 5px; list-style: none; cursor: pointer;
+    padding: 3px 9px; font-size: .74rem; line-height: 1.4; color: var(--text2);
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); user-select: none;
+}
+.period-btn::-webkit-details-marker { display: none; }
+.period-btn:hover, .period-filter[open] .period-btn { border-color: var(--navy); color: var(--navy); }
+.period-btn:focus-visible { outline: 3px solid rgba(37,57,141,.3); outline-offset: 1px; }
+.period-menu {
+    position: absolute; right: 0; top: calc(100% + 4px); z-index: 50; min-width: 170px; padding: 4px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgba(16,24,40,.12);
+}
+.period-menu a { display: block; padding: 7px 10px; border-radius: 4px; font-size: .84rem; color: var(--text); text-decoration: none; white-space: nowrap; }
+.period-menu a:hover { background: var(--accent-lt); color: var(--navy); }
+.period-menu a.active { font-weight: 600; color: var(--navy); }
+.period-menu a.active::after { content: ' \2713'; }
+@media print { .period-filter { display: none; } }
 
 /* Small and plain everywhere (beats the bigger page buttons) */
 .btn-excel, .main-content .btn.btn-excel { display: inline-flex; align-items: center; background: #6b7280; border-color: #6b7280; color: #fff; padding: 3px 9px; font-size: .74rem; line-height: 1.4; min-height: 0; }

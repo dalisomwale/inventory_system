@@ -86,8 +86,6 @@ include __DIR__ . '/header.php';
     <input type="month" id="month" name="month" value="<?php echo $pr ? '' : $month; ?>" max="<?php echo date('Y-m'); ?>" onchange="this.form.submit()"
            style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:.84rem; background:var(--surface);">
     <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
-    <span class="muted-text">or</span>
-    <?php echo str_replace('class="period-tabs"', 'class="period-tabs" style="margin:0"', period_tabs($pr['key'] ?? null, '', ['month'])); ?>
     <span class="muted-text" style="flex-basis:100%">Everything issued to <?php echo htmlspecialchars($dept_name); ?> &mdash; <?php echo htmlspecialchars($span); ?></span>
 </form>
 
@@ -132,7 +130,7 @@ include __DIR__ . '/header.php';
 <?php endif; ?>
 
 <div class="card">
-    <div class="card-head"><h3>By item<?php echo $cat_name ? ' &mdash; ' . htmlspecialchars($cat_name) : ''; ?></h3><?php echo xlsx_button(); ?></div>
+    <div class="card-head"><h3>By item<?php echo $cat_name ? ' &mdash; ' . htmlspecialchars($cat_name) : ''; ?></h3><div style="display:flex; align-items:center; gap:8px"><?php echo period_tabs($pr['key'] ?? null, '', ['month']); ?><?php echo xlsx_button(); ?></div></div>
     <div class="table-container">
         <table>
             <thead><tr><th>Item</th><th>Category</th><th class="num">Units</th><th class="num">Unit price</th><th class="num">Value</th><th class="num">Times</th></tr></thead>

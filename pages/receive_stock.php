@@ -355,8 +355,7 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Recent Transactions -->
 <div class="card" id="recent">
-    <div class="card-head"><h3>Recent Receiving</h3><div style="display:flex; align-items:center; gap:12px"><span class="card-hint"><?php echo htmlspecialchars($pr['range']); ?></span><?php if ($recent) echo xlsx_button(); ?></div></div>
-    <?php echo period_tabs($pr['key'], '#recent'); ?>
+    <div class="card-head"><h3>Recent Receiving</h3><div style="display:flex; align-items:center; gap:12px"><span class="card-hint"><?php echo htmlspecialchars($pr['range']); ?></span><?php echo period_tabs($pr['key'], '#recent'); ?><?php if ($recent) echo xlsx_button(); ?></div></div>
     <div class="pill-tabs pill-tabs-inline">
         <a href="receive_stock?branch_id=<?php echo $branch_id; ?>&period=<?php echo $pr['key']; ?>#recent" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>">All</a>
         <?php foreach ($categories as $cat): ?>

@@ -198,8 +198,6 @@ include __DIR__ . '/../includes/header.php';
     <input type="month" id="month" name="month" value="<?php echo $pr ? '' : $month; ?>" max="<?php echo date('Y-m'); ?>" onchange="this.form.submit()"
            style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:.84rem; background:var(--surface);">
     <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
-    <span class="muted-text">or</span>
-    <?php echo str_replace('class="period-tabs"', 'class="period-tabs" style="margin:0"', period_tabs($pr['key'] ?? null, '', ['month'])); ?>
     <span class="muted-text" style="flex-basis:100%"><?php echo $is_issue
         ? "Stock issued to each department, $month_label."
         : "Opening and closing stock for $month_label, worked out from deliveries and issues" . ($to >= date('Y-m-d') ? ' (closing = stock today)' : '') . '.'; ?></span>
@@ -235,7 +233,7 @@ include __DIR__ . '/../includes/header.php';
 <?php if (!$sel): ?>
 <!-- One row per <?php echo $by; ?> -->
 <div class="card">
-    <div class="card-head"><h3>By <?php echo strtolower($view); ?> &mdash; <?php echo $month_label; ?></h3><?php echo xlsx_button(); ?></div>
+    <div class="card-head"><h3>By <?php echo strtolower($view); ?> &mdash; <?php echo $month_label; ?></h3><div style="display:flex; align-items:center; gap:8px"><?php echo period_tabs($pr['key'] ?? null, '', ['month']); ?><?php echo xlsx_button(); ?></div></div>
     <div class="table-container">
         <table>
         <?php if ($is_issue): ?>
@@ -276,7 +274,7 @@ include __DIR__ . '/../includes/header.php';
 <?php if ($sel || $by === 'category'): ?>
 <!-- Item by item -->
 <div class="card">
-    <div class="card-head"><h3>By item<?php echo $sel_name ? ' &mdash; ' . htmlspecialchars($sel_name) : ''; ?></h3><?php echo $sel ? xlsx_button() : xlsx_button(['part' => 'items']); ?></div>
+    <div class="card-head"><h3>By item<?php echo $sel_name ? ' &mdash; ' . htmlspecialchars($sel_name) : ''; ?></h3><div style="display:flex; align-items:center; gap:8px"><?php echo period_tabs($pr['key'] ?? null, '', ['month']); ?><?php echo $sel ? xlsx_button() : xlsx_button(['part' => 'items']); ?></div></div>
     <div class="table-container">
         <table>
         <?php if ($is_issue): ?>

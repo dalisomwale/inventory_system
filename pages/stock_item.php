@@ -138,8 +138,7 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- History -->
 <div class="card" id="history">
-    <div class="card-head"><h3>Stock history &mdash; <?php echo htmlspecialchars($item['item_name']); ?></h3><div style="display:flex; align-items:center; gap:12px"><span class="card-hint"><?php echo htmlspecialchars($pr['range']); ?></span><?php if ($history) echo xlsx_button(); ?></div></div>
-    <?php echo period_tabs($pr['key'], '#history'); ?>
+    <div class="card-head"><h3>Stock history &mdash; <?php echo htmlspecialchars($item['item_name']); ?></h3><div style="display:flex; align-items:center; gap:12px"><span class="card-hint"><?php echo htmlspecialchars($pr['range']); ?></span><?php echo period_tabs($pr['key'], '#history'); ?><?php if ($history) echo xlsx_button(); ?></div></div>
     <?php if ($history): ?>
     <div class="table-container">
         <table class="compact">

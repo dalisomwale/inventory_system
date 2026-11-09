@@ -4,7 +4,7 @@
  * Today, 7 days, 30 days, 3 months, 6 months, 1 year (each ending today), chosen with ?period=.
  *
  *   $pr = period_from_request('month');          // ['key' => 'month', 'from' => 'Y-m-d', 'to' => 'Y-m-d', 'label' => 'Last 30 days', 'range' => '…']
- *   echo period_tabs($pr['key'], '#recent');      // the row of buttons, keeping the page's other filters
+ *   echo period_tabs($pr['key'], '#recent');      // filter icon with a menu of periods, keeping the page's other filters
  */
 
 const PERIODS = [
@@ -43,15 +43,20 @@ function period_from_request(?string $default = 'month'): ?array {
             'range' => $from === $to ? date('d M Y', strtotime($to)) : date('d M Y', strtotime($from)) . ' to ' . date('d M Y', strtotime($to))];
 }
 
-/** Row of period buttons. Keeps the page's other filters; $drop lists address parts to clear when a period is picked. */
+/**
+ * Filter-icon button showing the current period; clicking it opens a menu of the periods.
+ * Keeps the page's other filters; $drop lists address parts to clear when a period is picked.
+ */
 function period_tabs(?string $current, string $anchor = '', array $drop = []): string {
     $keep = array_diff_key($_GET, array_flip(array_merge(['period', 'export'], $drop)));
     $base = strtok($_SERVER['REQUEST_URI'] ?? '', '?');
-    $h = '<div class="period-tabs" role="group" aria-label="Time period"><span class="period-label">Period</span>';
-    foreach (PERIODS as $key => [$short]) {
+    $now  = $current !== null ? PERIODS[$current][0] : 'Period';
+    $h  = '<details class="period-filter"><summary class="period-btn" title="Filter by time period" aria-label="Filter by time period: ' . $now . '">'
+        . '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>'
+        . '<span>' . $now . '</span></summary><div class="period-menu" role="menu">';
+    foreach (PERIODS as $key => [$short, $long]) {
         $href = $base . '?' . http_build_query($keep + ['period' => $key]) . $anchor;
-        $h .= '<a href="' . htmlspecialchars($href) . '" class="period-tab' . ($current === $key ? ' active' : '') . '"'
-            . ($current === $key ? ' aria-current="true"' : '') . '>' . $short . '</a>';
+        $h .= '<a role="menuitem" href="' . htmlspecialchars($href) . '"' . ($current === $key ? ' class="active" aria-current="true"' : '') . '>' . $long . '</a>';
     }
-    return $h . '</div>';
+    return $h . '</div></details>';
 }
