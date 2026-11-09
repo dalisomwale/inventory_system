@@ -585,6 +585,15 @@ table.compact thead th { padding: 7px 10px; }
 }
 
 /* Export to Excel button */
+/* Time-period buttons (Today, 7 days, 30 days, …) */
+.period-tabs { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0; margin: 0 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; background: var(--surface); }
+.period-label { padding: 5px 10px; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: #f6f7f9; border-right: 1px solid var(--border); }
+.period-tab { padding: 5px 12px; font-size: .8rem; color: var(--text2); text-decoration: none; border-right: 1px solid var(--border); }
+.period-tab:last-child { border-right: 0; }
+.period-tab:hover { background: var(--accent-lt); color: var(--navy); }
+.period-tab.active { background: var(--navy); color: #fff; font-weight: 600; }
+@media print { .period-tabs { display: none; } }
+
 /* Small and plain everywhere (beats the bigger page buttons) */
 .btn-excel, .main-content .btn.btn-excel { display: inline-flex; align-items: center; background: #6b7280; border-color: #6b7280; color: #fff; padding: 3px 9px; font-size: .74rem; line-height: 1.4; min-height: 0; }
 .btn-excel:hover { background: #4b5563; border-color: #4b5563; color: #fff; }

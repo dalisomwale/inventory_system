@@ -10,8 +10,11 @@ $dept_name = $dept_id ? department_name($dept_id) : '';
 $month     = safe_month($_GET['month'] ?? null);
 if ($month > date('Y-m')) $month = date('Y-m');
 $cat_id    = (int)($_GET['category_id'] ?? 0);
-$from      = $month . '-01';
-$to        = date('Y-m-t', strtotime($from));
+// A month (default: this month), or a period ending today which takes its place
+$pr        = period_from_request(null);
+$from      = $pr ? $pr['from'] : $month . '-01';
+$to        = $pr ? $pr['to'] : date('Y-m-t', strtotime($from));
+$span      = $pr ? $pr['label'] . ' (' . $pr['range'] . ')' : date('F Y', strtotime($from));
 
 $categories = $pdo->prepare("
     SELECT COALESCE(c.id, 0) AS id, COALESCE(c.name, i.category, 'Other') AS name,
@@ -45,12 +48,12 @@ $tot_units = array_sum(array_column($items, 'units'));
 $tot_value = array_sum(array_column($items, 'value'));
 $cat_name  = '';
 foreach ($categories as $c) if ((int)$c['id'] === $cat_id) $cat_name = $c['name'];
-$report_url = fn(array $p) => 'reports?' . http_build_query(array_filter($p + ['month' => $month]));
+$report_url = fn(array $p) => 'reports?' . http_build_query(array_filter($p + ($pr ? ['period' => $pr['key']] : ['month' => $month])));
 
 if (wants_xlsx()) {
-    $title = 'Monthly Report - ' . ($dept_name ?: 'Your department') . ' - ' . date('F Y', strtotime($from)) . ($cat_name ? " - $cat_name" : '');
-    $meta  = ['Everything issued to ' . ($dept_name ?: 'your department') . ' in ' . date('F Y', strtotime($from))];
-    xlsx_download('Department report ' . ($dept_name ?: '') . " $month" . ($cat_name ? " $cat_name" : ''), array_values(array_filter([
+    $title = 'Monthly Report - ' . ($dept_name ?: 'Your department') . ' - ' . $span . ($cat_name ? " - $cat_name" : '');
+    $meta  = ['Everything issued to ' . ($dept_name ?: 'your department') . ', ' . $span];
+    xlsx_download('Department report ' . ($dept_name ?: '') . ' ' . ($pr ? "{$pr['from']} to {$pr['to']}" : $month) . ($cat_name ? " $cat_name" : ''), array_values(array_filter([
         $cat_id ? null : ['name' => 'By category', 'title' => $title, 'meta' => $meta,
             'columns' => ['Category', ['Items', 'int'], ['Units', 'int'], ['Value (K)', 'money']],
             'rows'    => array_map(fn($c) => [$c['name'], $c['items'], $c['units'], $c['value']], $categories),
@@ -79,10 +82,13 @@ include __DIR__ . '/header.php';
 
 <form method="GET" class="card" style="margin-bottom:14px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
     <label for="month" style="font-size:.78rem; font-weight:500; color:var(--text2)">Month</label>
-    <input type="month" id="month" name="month" value="<?php echo $month; ?>" max="<?php echo date('Y-m'); ?>" onchange="this.form.submit()"
+    <?php if ($cat_id): ?><input type="hidden" name="category_id" value="<?php echo $cat_id; ?>"><?php endif; ?>
+    <input type="month" id="month" name="month" value="<?php echo $pr ? '' : $month; ?>" max="<?php echo date('Y-m'); ?>" onchange="this.form.submit()"
            style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:.84rem; background:var(--surface);">
     <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
-    <span class="muted-text">Everything issued to <?php echo htmlspecialchars($dept_name); ?> in <?php echo date('F Y', strtotime($from)); ?></span>
+    <span class="muted-text">or</span>
+    <?php echo str_replace('class="period-tabs"', 'class="period-tabs" style="margin:0"', period_tabs($pr['key'] ?? null, '', ['month'])); ?>
+    <span class="muted-text" style="flex-basis:100%">Everything issued to <?php echo htmlspecialchars($dept_name); ?> &mdash; <?php echo htmlspecialchars($span); ?></span>
 </form>
 
 <div class="kpi-row">
@@ -93,7 +99,7 @@ include __DIR__ . '/header.php';
 </div>
 
 <?php if (!$categories): ?>
-<div class="empty-state card"><p>Nothing was issued to <?php echo htmlspecialchars($dept_name); ?> in <?php echo date('F Y', strtotime($from)); ?>.</p></div>
+<div class="empty-state card"><p>Nothing was issued to <?php echo htmlspecialchars($dept_name); ?> &mdash; <?php echo htmlspecialchars($span); ?>.</p></div>
 <?php else: ?>
 
 <div class="pill-tabs pill-tabs-inline">
@@ -148,7 +154,7 @@ include __DIR__ . '/header.php';
 </div>
 
 <div class="card">
-    <div class="card-head"><h3>Every issue</h3><span class="card-hint"><?php echo count($issues); ?> this month</span></div>
+    <div class="card-head"><h3>Every issue</h3><span class="card-hint"><?php echo count($issues); ?> in this period</span></div>
     <div class="table-container">
         <table class="compact">
             <thead><tr><th>Date</th><th>Item</th><th class="num">Qty</th><th>Recipient</th><th>Purpose</th><th>Issued by</th></tr></thead>

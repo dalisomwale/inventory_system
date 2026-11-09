@@ -119,7 +119,8 @@ if ($selected_item_id) {
     $selected_item = $st->fetch() ?: null;
 }
 
-// Recent issuing, optionally filtered by category
+// Recent issuing over the chosen period (30 days by default), optionally filtered by category
+$pr = period_from_request('month');
 $recent_cat = (int)($_GET['rcat'] ?? 0);
 if (!in_array($recent_cat, array_map(fn($c) => (int)$c['id'], $categories), true)) $recent_cat = 0;
 $recent = $pdo->query("
@@ -128,10 +129,11 @@ $recent = $pdo->query("
     JOIN items it ON s.item_id = it.id
     LEFT JOIN categories c ON it.category_id = c.id
     LEFT JOIN users u ON s.issued_by = u.id
-    LEFT JOIN branches b ON b.id = s.branch_id" . ($recent_cat ? " WHERE it.category_id = $recent_cat" : "") . "
-    ORDER BY s.created_at DESC LIMIT 20")->fetchAll();
+    LEFT JOIN branches b ON b.id = s.branch_id
+    WHERE DATE(s.created_at) BETWEEN " . $pdo->quote($pr['from']) . " AND " . $pdo->quote($pr['to']) . ($recent_cat ? " AND it.category_id = $recent_cat" : "") . "
+    ORDER BY s.created_at DESC LIMIT 1000")->fetchAll();
 
-$qs = fn(array $over = []) => '?' . http_build_query(array_filter(array_merge(['branch_id' => $branch_id, 'category_id' => $selected_cat_id, 'item_id' => $selected_item_id, 'rcat' => $recent_cat], $over)));
+$qs = fn(array $over = []) => '?' . http_build_query(array_filter(array_merge(['branch_id' => $branch_id, 'category_id' => $selected_cat_id, 'item_id' => $selected_item_id, 'rcat' => $recent_cat, 'period' => $_GET['period'] ?? null], $over)));
 
 if (wants_xlsx()) {
     $cat_label = '';
@@ -139,7 +141,7 @@ if (wants_xlsx()) {
     xlsx_download('Recent issuing ' . date('Y-m-d') . ($cat_label ? " $cat_label" : ''), [[
         'name'    => 'Recent issuing',
         'title'   => 'Recent issuing' . ($cat_label ? " - $cat_label" : ''),
-        'meta'    => ['Latest ' . count($recent) . ' issues', 'Exported: ' . date('d M Y, H:i')],
+        'meta'    => ['Period: ' . $pr['label'] . ' (' . $pr['range'] . ')', count($recent) . ' issues', 'Exported: ' . date('d M Y, H:i')],
         'columns' => ['Date', 'Issued by', 'Item', 'Category', ['Qty', 'int'], 'Branch', 'Issued to', 'Received by', 'Purpose'],
         'rows'    => array_map(fn($t) => [date('d M Y, H:i', strtotime($t['created_at'])), $t['issued_by_name'] ?? '', $t['item_name'], $t['category_name'] ?? '',
                                           $t['quantity'], $t['branch_name'] ?? '', $t['issued_to'] ?? '', $t['recipient'] ?? '', $t['purpose'] ?? ''], $recent),
@@ -166,6 +168,7 @@ include __DIR__ . '/../includes/header.php';
     <div class="form-title">Select item</div>
     <form method="GET" id="pickForm">
         <?php if ($recent_cat): ?><input type="hidden" name="rcat" value="<?php echo $recent_cat; ?>"><?php endif; ?>
+        <input type="hidden" name="period" value="<?php echo $pr['key']; ?>">
         <div class="form-row cols-3">
         <div class="form-group">
             <label for="company_pick">Issuing from company</label>
@@ -286,7 +289,8 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Recent -->
 <div class="card" id="recent">
-    <div class="card-head"><h3>Recent issuing</h3><div style="display:flex; align-items:center; gap:12px"><span class="card-hint">Latest 20<?php echo $recent_cat ? ' in this category' : ''; ?></span><?php if ($recent) echo xlsx_button(); ?></div></div>
+    <div class="card-head"><h3>Recent issuing</h3><div style="display:flex; align-items:center; gap:12px"><span class="card-hint"><?php echo htmlspecialchars($pr['range']); ?></span><?php if ($recent) echo xlsx_button(); ?></div></div>
+    <?php echo period_tabs($pr['key'], '#recent'); ?>
     <div class="pill-tabs pill-tabs-inline">
         <a href="<?php echo htmlspecialchars($qs(['rcat' => 0])); ?>#recent" class="pill-tab <?php echo $recent_cat ? '' : 'active'; ?>">All</a>
         <?php foreach ($categories as $cat): ?>
@@ -313,7 +317,7 @@ include __DIR__ . '/../includes/header.php';
         </table>
     </div>
     <?php else: ?>
-    <div class="empty-state"><p><?php echo $recent_cat ? 'Nothing issued in this category yet.' : 'No issuing transactions yet.'; ?></p></div>
+    <div class="empty-state"><p><?php echo $recent_cat ? 'Nothing issued in this category in this period.' : 'Nothing issued in this period.'; ?></p></div>
     <?php endif; ?>
 </div>
 

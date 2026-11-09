@@ -181,16 +181,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['receive_existing'])) 
     }
 }
 
+$pr = period_from_request('month');   // Recent Receiving covers the chosen period (30 days by default)
 $recent = $pdo->prepare("
     SELECT r.*, i.item_name, c.name as category_name, u.full_name as received_by_name
     FROM stock_receiving r
     JOIN items i ON r.item_id = i.id
     LEFT JOIN categories c ON i.category_id = c.id
     JOIN users u ON r.received_by = u.id
-    WHERE (? = 0 OR i.category_id = ?)
-    ORDER BY r.created_at DESC LIMIT 20
+    WHERE (? = 0 OR i.category_id = ?) AND DATE(r.created_at) BETWEEN ? AND ?
+    ORDER BY r.created_at DESC LIMIT 1000
 ");
-$recent->execute([$selected_cat_id, $selected_cat_id]);
+$recent->execute([$selected_cat_id, $selected_cat_id, $pr['from'], $pr['to']]);
 $recent = $recent->fetchAll();
 
 if (wants_xlsx()) {
@@ -199,7 +200,7 @@ if (wants_xlsx()) {
     xlsx_download('Recent receiving ' . date('Y-m-d') . ($cat_label ? " $cat_label" : ''), [[
         'name'    => 'Recent receiving',
         'title'   => 'Recent receiving' . ($cat_label ? " - $cat_label" : ''),
-        'meta'    => ['Latest ' . count($recent) . ' deliveries', 'Exported: ' . date('d M Y, H:i')],
+        'meta'    => ['Period: ' . $pr['label'] . ' (' . $pr['range'] . ')', count($recent) . ' deliveries', 'Exported: ' . date('d M Y, H:i')],
         'columns' => ['Date', 'Item', 'Category', ['Qty', 'int'], ['Previous stock', 'int'], ['New stock', 'int'], 'Supplier', 'Received by'],
         'rows'    => array_map(fn($t) => [date('d M Y, H:i', strtotime($t['created_at'])), $t['item_name'], $t['category_name'] ?? 'Other', $t['quantity'],
                                           $t['old_stock'], $t['new_stock'], $t['supplier'] ?? '', $t['received_by_name'] ?? ''], $recent),
@@ -354,11 +355,12 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Recent Transactions -->
 <div class="card" id="recent">
-    <div class="card-head"><h3>Recent Receiving</h3><?php if ($recent) echo xlsx_button(); ?></div>
+    <div class="card-head"><h3>Recent Receiving</h3><div style="display:flex; align-items:center; gap:12px"><span class="card-hint"><?php echo htmlspecialchars($pr['range']); ?></span><?php if ($recent) echo xlsx_button(); ?></div></div>
+    <?php echo period_tabs($pr['key'], '#recent'); ?>
     <div class="pill-tabs pill-tabs-inline">
-        <a href="receive_stock?branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>">All</a>
+        <a href="receive_stock?branch_id=<?php echo $branch_id; ?>&period=<?php echo $pr['key']; ?>#recent" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>">All</a>
         <?php foreach ($categories as $cat): ?>
-        <a href="?category_id=<?php echo $cat['id']; ?>&branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == $cat['id'] ? 'active' : ''; ?>">
+        <a href="?category_id=<?php echo $cat['id']; ?>&branch_id=<?php echo $branch_id; ?>&period=<?php echo $pr['key']; ?>#recent" class="pill-tab <?php echo $selected_cat_id == $cat['id'] ? 'active' : ''; ?>">
             <?php echo htmlspecialchars($cat['name']); ?>
         </a>
         <?php endforeach; ?>
@@ -386,7 +388,7 @@ include __DIR__ . '/../includes/header.php';
         </table>
     </div>
     <?php else: ?>
-    <div class="empty-state"><p><?php echo $selected_cat_id ? 'Nothing received in this category yet.' : 'No receiving transactions yet.'; ?></p></div>
+    <div class="empty-state"><p><?php echo $selected_cat_id ? 'Nothing received in this category in this period.' : 'Nothing received in this period.'; ?></p></div>
     <?php endif; ?>
 </div>
 

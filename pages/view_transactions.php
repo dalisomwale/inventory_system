@@ -3,7 +3,11 @@ require_once __DIR__ . '/../includes/auth.php';
 requirePermission('transactions.view');
 
 $filter_type = $_GET['type']    ?? 'all';
-$filter_date = $_GET['date']    ?? date('Y-m-d');
+// Time period (Today by default); an old link with ?date= shows that one day
+$old_date    = isset($_GET['date']) && !isset($_GET['period']) ? safe_date($_GET['date'], date('Y-m-d')) : null;
+$pr          = period_from_request($old_date ? null : 'day');
+[$from, $to] = $pr ? [$pr['from'], $pr['to']] : [$old_date, $old_date];
+$period_text = $pr ? $pr['label'] . ($pr['key'] === 'day' ? '' : ' (' . $pr['range'] . ')') : date('d M Y', strtotime($old_date));
 $filter_item = (int)($_GET['item_id'] ?? 0);
 $filter_cat  = $_GET['cat']     ?? '';
 // Department-limited users only see what was issued to their department
@@ -18,26 +22,26 @@ $all_cats  = getCategories($pdo);
 
 $base_r = "SELECT 'Receiving' as type, r.id, r.item_id, r.quantity, r.supplier, NULL as issued_to, NULL as purpose, r.created_at, i.item_name, i.category, u.full_name as user_name, b.name as branch_name
            FROM stock_receiving r JOIN items i ON r.item_id=i.id LEFT JOIN users u ON r.received_by=u.id LEFT JOIN branches b ON b.id=r.branch_id
-           WHERE DATE(r.created_at) = ?";
+           WHERE DATE(r.created_at) BETWEEN ? AND ?";
 $base_i = "SELECT 'Issuing' as type, si.id, si.item_id, si.quantity, NULL as supplier, si.issued_to, si.purpose, si.created_at, i.item_name, i.category, u.full_name as user_name, b.name as branch_name
            FROM stock_issuing si JOIN items i ON si.item_id=i.id LEFT JOIN users u ON si.issued_by=u.id LEFT JOIN branches b ON b.id=si.branch_id
-           WHERE DATE(si.created_at) = ?" . $cond_dept;
+           WHERE DATE(si.created_at) BETWEEN ? AND ?" . $cond_dept;
 $cond_item = $filter_item ? " AND {tbl}.item_id = ?" : "";
 $cond_cat  = $filter_cat  ? " AND i.category = ?"   : "";
 
 if ($filter_type === 'receiving') {
     $q = $base_r . str_replace('{tbl}','r',$cond_item) . $cond_cat . " ORDER BY r.created_at DESC";
-    $p = array_merge([$filter_date], $filter_item ? [$filter_item] : [], $filter_cat ? [$filter_cat] : []);
+    $p = array_merge([$from, $to], $filter_item ? [$filter_item] : [], $filter_cat ? [$filter_cat] : []);
 } elseif ($filter_type === 'issuing') {
     $q = $base_i . str_replace('{tbl}','si',$cond_item) . $cond_cat . " ORDER BY si.created_at DESC";
-    $p = array_merge([$filter_date], $filter_item ? [$filter_item] : [], $filter_cat ? [$filter_cat] : []);
+    $p = array_merge([$from, $to], $filter_item ? [$filter_item] : [], $filter_cat ? [$filter_cat] : []);
 } else {
     $q  = "(" . $base_r . str_replace('{tbl}','r',$cond_item) . $cond_cat . ")";
     $q .= " UNION ALL ";
     $q .= "(" . $base_i . str_replace('{tbl}','si',$cond_item) . $cond_cat . ")";
     $q .= " ORDER BY created_at DESC";
     $extra = array_merge($filter_item ? [$filter_item] : [], $filter_cat ? [$filter_cat] : []);
-    $p     = array_merge([$filter_date], $extra, [$filter_date], $extra);
+    $p     = array_merge([$from, $to], $extra, [$from, $to], $extra);
 }
 
 $stmt = $pdo->prepare($q);
@@ -48,14 +52,14 @@ if (wants_xlsx()) {
     $dept_label = $scope_dept !== null ? (department_name($scope_dept) ?: 'Your department') : '';
     $item_label = '';
     foreach ($all_items as $it) if ((int)$it['id'] === $filter_item) $item_label = $it['item_name'];
-    xlsx_download('Transactions ' . $filter_date . ($dept_label ? " $dept_label" : ''), [[
+    xlsx_download('Transactions ' . ($from === $to ? $from : "$from to $to") . ($dept_label ? " $dept_label" : ''), [[
         'name'    => 'Transactions',
         'title'   => 'Transaction History' . ($dept_label ? " - $dept_label" : ''),
-        'meta'    => array_filter(['Date: ' . date('d M Y', strtotime($filter_date)),
+        'meta'    => array_filter(['Period: ' . $period_text . ($pr && $pr['key'] === 'day' ? ', ' . $pr['range'] : ''),
                                    $scope_dept === null ? 'Type: ' . ucfirst($filter_type) : '',
                                    $filter_cat ? "Category: $filter_cat" : '', $item_label ? "Item: $item_label" : '']),
-        'columns' => ['Type', 'Time', 'Item', 'Category', 'Branch', ['Qty', 'int'], 'User', 'Supplier / issued to', 'Purpose'],
-        'rows'    => array_map(fn($t) => [$t['type'], date('H:i', strtotime($t['created_at'])), $t['item_name'], $t['category'] ?? 'General', $t['branch_name'] ?? '',
+        'columns' => ['Type', 'Date', 'Item', 'Category', 'Branch', ['Qty', 'int'], 'User', 'Supplier / issued to', 'Purpose'],
+        'rows'    => array_map(fn($t) => [$t['type'], date('d M Y, H:i', strtotime($t['created_at'])), $t['item_name'], $t['category'] ?? 'General', $t['branch_name'] ?? '',
                                           $t['quantity'], $t['user_name'] ?? '', $t['type'] === 'Receiving' ? ($t['supplier'] ?? '') : ($t['issued_to'] ?? ''), $t['purpose'] ?? ''], $transactions),
         // Receipts and issues don't add up together, so only total one type
         'totals'  => $filter_type !== 'all' ? ['Total', '', '', '', '', array_sum(array_column($transactions, 'quantity'))] : null,
@@ -85,10 +89,7 @@ include __DIR__ . '/../includes/header.php';
             </select>
         </div>
         <?php endif; ?>
-        <div class="form-group">
-            <label>Date</label>
-            <input type="date" name="date" value="<?php echo htmlspecialchars($filter_date); ?>" required>
-        </div>
+        <?php if ($pr): ?><input type="hidden" name="period" value="<?php echo $pr['key']; ?>"><?php endif; ?>
         <div class="form-group">
             <label>Category</label>
             <select name="cat">
@@ -120,13 +121,14 @@ include __DIR__ . '/../includes/header.php';
 <!-- Results -->
 <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-        <h3 style="margin:0"><?php echo date('d/m/Y', strtotime($filter_date)); ?></h3>
+        <h3 style="margin:0"><?php echo htmlspecialchars($period_text); ?></h3>
         <?php echo xlsx_button(); ?>
     </div>
+    <?php echo period_tabs($pr['key'] ?? null, '', ['date']); ?>
     <div class="table-container">
         <table>
             <thead>
-                <tr><th>Type</th><th>Item</th><th>Category</th><th>Branch</th><th>Qty</th><th>User</th><th>Time</th><th>Details</th></tr>
+                <tr><th>Type</th><th>Item</th><th>Category</th><th>Branch</th><th>Qty</th><th>User</th><th>Date</th><th>Details</th></tr>
             </thead>
             <tbody>
                 <?php foreach ($transactions as $t): ?>
@@ -137,7 +139,7 @@ include __DIR__ . '/../includes/header.php';
                     <td style="color:var(--muted)"><?php echo htmlspecialchars($t['branch_name'] ?? '—'); ?></td>
                     <td><?php echo $t['quantity']; ?></td>
                     <td style="color:var(--muted)"><?php echo htmlspecialchars($t['user_name'] ?? '—'); ?></td>
-                    <td style="white-space:nowrap; color:var(--muted); font-size:.76rem"><?php echo date('H:i', strtotime($t['created_at'])); ?></td>
+                    <td style="white-space:nowrap; color:var(--muted); font-size:.76rem"><?php echo date('d M Y, H:i', strtotime($t['created_at'])); ?></td>
                     <td style="font-size:.76rem; color:var(--muted)">
                         <?php if ($t['type']==='Receiving'): ?>Supplier: <?php echo htmlspecialchars($t['supplier']??''); ?>
                         <?php else: ?>To: <?php echo htmlspecialchars($t['issued_to']??''); ?><?php endif; ?>
@@ -145,7 +147,7 @@ include __DIR__ . '/../includes/header.php';
                 </tr>
                 <?php endforeach; ?>
                 <?php if (empty($transactions)): ?>
-                <tr> <td colspan="8" style="text-align:center; color:var(--muted); padding:32px">No transactions found for this date.</td></tr>
+                <tr> <td colspan="8" style="text-align:center; color:var(--muted); padding:32px">No transactions in this period.</td></tr>
                 <?php endif; ?>
             </tbody>
         </table>

@@ -4,6 +4,7 @@ require_once __DIR__ . '/validation.php';
 require_once __DIR__ . '/org.php';
 require_once __DIR__ . '/permissions.php';
 require_once __DIR__ . '/xlsx.php';
+require_once __DIR__ . '/period.php';
 
 // Access comes from the user's role (Admin › Roles). See includes/permissions.php.
 function isLoggedIn(): bool { return isset($_SESSION['user_id']); }

@@ -12,11 +12,19 @@ $by = array_key_exists($_GET['by'] ?? '', REPORT_VIEWS) ? $_GET['by'] : 'categor
 // Older links used category_id
 $sel = (int)($_GET['id'] ?? ($by === 'category' ? ($_GET['category_id'] ?? 0) : 0));
 
+// A month (default: this month), or a period ending today (Today, 7 days, … 1 year) which takes its place
 $month = safe_month($_GET['month'] ?? null);
 if ($month > date('Y-m')) $month = date('Y-m');
-$from = $month . '-01';
-$to   = date('Y-m-t', strtotime($from));
-$month_label = date('F Y', strtotime($from));
+$pr = period_from_request(null);
+if ($pr) {
+    [$from, $to] = [$pr['from'], $pr['to']];
+    $month_label = $pr['label'] . ' (' . $pr['range'] . ')';
+} else {
+    $from = $month . '-01';
+    $to   = date('Y-m-t', strtotime($from));
+    $month_label = date('F Y', strtotime($from));
+}
+$file_span = $pr ? "{$pr['from']} to {$pr['to']}" : $month;
 
 /** Work out opening/closing from today's quantity and the movements in and after the month. */
 function rpt_finish(array $r): array {
@@ -171,10 +179,10 @@ if (wants_xlsx()) {
     $items_only = ($_GET['part'] ?? '') === 'items';
     if (!$sel && !$items_only) $sheets[] = ['name' => "By $by", 'title' => $title, 'meta' => $meta] + $group_sheet;
     if ($sel || $by === 'category') $sheets[] = ['name' => 'By item', 'title' => $title, 'meta' => $meta] + $item_sheet;
-    xlsx_download("Monthly report by $by $month" . ($sel_name ? " $sel_name" : ''), $sheets);
+    xlsx_download("Monthly report by $by $file_span" . ($sel_name ? " $sel_name" : ''), $sheets);
 }
 
-$report_url = fn(array $p = []) => 'reports?' . http_build_query(array_filter($p + ['by' => $by, 'month' => $month]));
+$report_url = fn(array $p = []) => 'reports?' . http_build_query(array_filter($p + ['by' => $by] + ($pr ? ['period' => $pr['key']] : ['month' => $month])));
 $kpi_rows = $sel ? $rows : array_values($groups);
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -187,12 +195,14 @@ include __DIR__ . '/../includes/header.php';
     <input type="hidden" name="by" value="<?php echo $by; ?>">
     <?php if ($sel): ?><input type="hidden" name="id" value="<?php echo $sel; ?>"><?php endif; ?>
     <label for="month" style="font-size:.78rem; font-weight:500; color:var(--text2)">Month</label>
-    <input type="month" id="month" name="month" value="<?php echo $month; ?>" max="<?php echo date('Y-m'); ?>" onchange="this.form.submit()"
+    <input type="month" id="month" name="month" value="<?php echo $pr ? '' : $month; ?>" max="<?php echo date('Y-m'); ?>" onchange="this.form.submit()"
            style="padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:.84rem; background:var(--surface);">
     <noscript><button type="submit" class="btn btn-sm">Show</button></noscript>
-    <span class="muted-text"><?php echo $is_issue
-        ? "Stock issued to each department in $month_label."
-        : "Opening and closing stock for $month_label, worked out from deliveries and issues" . ($month === date('Y-m') ? ' (closing = stock today)' : '') . '.'; ?></span>
+    <span class="muted-text">or</span>
+    <?php echo str_replace('class="period-tabs"', 'class="period-tabs" style="margin:0"', period_tabs($pr['key'] ?? null, '', ['month'])); ?>
+    <span class="muted-text" style="flex-basis:100%"><?php echo $is_issue
+        ? "Stock issued to each department, $month_label."
+        : "Opening and closing stock for $month_label, worked out from deliveries and issues" . ($to >= date('Y-m-d') ? ' (closing = stock today)' : '') . '.'; ?></span>
 </form>
 
 <div class="kpi-row">

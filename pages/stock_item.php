@@ -25,21 +25,32 @@ $f = null;
 foreach (ins_item_forecast($pdo, 30) as $r) { if ((int)$r['id'] === (int)$item['id']) { $f = $r; break; } }
 $state = $item['current_quantity'] <= 0 ? 'out' : ($item['current_quantity'] <= $item['reorder_level'] ? 'low' : 'ok');
 
+// History covers the chosen period (12 months by default)
+$pr = period_from_request('year');
+$in_period = fn(string $col) => "DATE($col) BETWEEN " . $pdo->quote($pr['from']) . " AND " . $pdo->quote($pr['to']);
 $h = $pdo->prepare($scoped ? "
     SELECT 'Issued' AS type, s.created_at, s.quantity, s.issued_to AS party, s.old_stock, s.new_stock, u.full_name AS by_name, s.purpose, b.name AS branch_name
     FROM stock_issuing s LEFT JOIN users u ON u.id = s.issued_by LEFT JOIN branches b ON b.id = s.branch_id
-    WHERE s.item_id = ? AND s.department_id = " . (int)$scope_dept . " ORDER BY s.created_at DESC LIMIT 100" : "
+    WHERE s.item_id = ? AND s.department_id = " . (int)$scope_dept . " AND " . $in_period('s.created_at') . " ORDER BY s.created_at DESC LIMIT 1000" : "
     (SELECT 'Received' AS type, r.created_at, r.quantity, r.supplier AS party, r.old_stock, r.new_stock, u.full_name AS by_name, NULL AS purpose, b.name AS branch_name
-     FROM stock_receiving r LEFT JOIN users u ON u.id = r.received_by LEFT JOIN branches b ON b.id = r.branch_id WHERE r.item_id = ?)
+     FROM stock_receiving r LEFT JOIN users u ON u.id = r.received_by LEFT JOIN branches b ON b.id = r.branch_id WHERE r.item_id = ? AND " . $in_period('r.created_at') . ")
     UNION ALL
     (SELECT 'Issued', s.created_at, s.quantity, s.issued_to, s.old_stock, s.new_stock, u.full_name, s.purpose, b.name
-     FROM stock_issuing s LEFT JOIN users u ON u.id = s.issued_by LEFT JOIN branches b ON b.id = s.branch_id WHERE s.item_id = ?)
-    ORDER BY created_at DESC LIMIT 100");
+     FROM stock_issuing s LEFT JOIN users u ON u.id = s.issued_by LEFT JOIN branches b ON b.id = s.branch_id WHERE s.item_id = ? AND " . $in_period('s.created_at') . ")
+    ORDER BY created_at DESC LIMIT 1000");
 $h->execute($scoped ? [$item['id']] : [$item['id'], $item['id']]);
 $history     = $h->fetchAll();
-$has_history = count($history) > 0;
-$received    = array_sum(array_map(fn($r) => $r['type'] === 'Received' ? $r['quantity'] : 0, $history));
-$issued      = array_sum(array_map(fn($r) => $r['type'] === 'Issued'   ? $r['quantity'] : 0, $history));
+
+// Lifetime figures for the Stock card, whatever period the history shows
+$life = $pdo->prepare("SELECT (SELECT COALESCE(SUM(quantity), 0) FROM stock_receiving WHERE item_id = ?) AS received,
+                              (SELECT COUNT(*) FROM stock_receiving WHERE item_id = ?) AS deliveries,
+                              COALESCE(SUM(quantity), 0) AS issued, COUNT(*) AS times, MAX(created_at) AS last_issued
+                       FROM stock_issuing WHERE item_id = ?" . ($scoped ? " AND department_id = " . (int)$scope_dept : ""));
+$life->execute([$item['id'], $item['id'], $item['id']]);
+$life        = $life->fetch();
+$received    = (int)$life['received'];
+$issued      = (int)$life['issued'];
+$has_history = $life['deliveries'] + $life['times'] > 0;
 
 
 
@@ -49,7 +60,7 @@ if (wants_xlsx()) {
         'name'    => 'Stock history',
         'title'   => "Stock history - {$item['item_name']}",
         'meta'    => array_filter(['Category: ' . $item['category_name'], $scoped ? 'Department: ' . department_name($scope_dept) : '',
-                                   count($history) === 100 ? 'Latest 100 movements' : '', 'Exported: ' . date('d M Y, H:i')]),
+                                   'Period: ' . $pr['label'] . ' (' . $pr['range'] . ')', count($history) === 1000 ? 'Latest 1,000 movements' : '', 'Exported: ' . date('d M Y, H:i')]),
         'columns' => ['Date', 'Item', 'Type', ['Qty', 'int'], 'From', 'To', 'Purpose', 'By'],
         'rows'    => array_map(fn($r) => [date('d M Y, H:i', strtotime($r['created_at'])), $item['item_name'], $r['type'], ($r['type'] === 'Issued' ? -1 : 1) * (int)$r['quantity'],
                                           $r['type'] === 'Issued' ? ($r['branch_name'] ?? '') : ($r['party'] ?? ''),
@@ -98,8 +109,8 @@ include __DIR__ . '/../includes/header.php';
         <?php if ($scoped): ?>
         <dl class="detail-list">
             <div><dt>Total issued</dt><dd class="big"><?php echo number_format($issued); ?></dd></div>
-            <div><dt>Times issued</dt><dd><?php echo number_format(count($history)); ?></dd></div>
-            <div><dt>Last issued</dt><dd><?php echo $history ? date('d M Y', strtotime($history[0]['created_at'])) : '—'; ?></dd></div>
+            <div><dt>Times issued</dt><dd><?php echo number_format($life['times']); ?></dd></div>
+            <div><dt>Last issued</dt><dd><?php echo $life['last_issued'] ? date('d M Y', strtotime($life['last_issued'])) : '—'; ?></dd></div>
             <div><dt>Value issued</dt><dd><?php echo kwacha($issued * (float)$item['unit_price']); ?></dd></div>
         </dl>
         <?php else: ?>
@@ -126,8 +137,9 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- History -->
-<div class="card">
-    <div class="card-head"><h3>Stock history &mdash; <?php echo htmlspecialchars($item['item_name']); ?></h3><div style="display:flex; align-items:center; gap:12px"><?php if (count($history) === 100): ?><span class="card-hint">Latest 100 movements</span><?php endif; ?><?php if ($history) echo xlsx_button(); ?></div></div>
+<div class="card" id="history">
+    <div class="card-head"><h3>Stock history &mdash; <?php echo htmlspecialchars($item['item_name']); ?></h3><div style="display:flex; align-items:center; gap:12px"><span class="card-hint"><?php echo htmlspecialchars($pr['range']); ?></span><?php if ($history) echo xlsx_button(); ?></div></div>
+    <?php echo period_tabs($pr['key'], '#history'); ?>
     <?php if ($history): ?>
     <div class="table-container">
         <table class="compact">
@@ -152,7 +164,7 @@ include __DIR__ . '/../includes/header.php';
         </table>
     </div>
     <?php else: ?>
-    <div class="empty-state"><p>No stock has been received or issued for this item yet.</p></div>
+    <div class="empty-state"><p>No stock was received or issued for this item in this period.</p></div>
     <?php endif; ?>
 </div>
 
