@@ -193,6 +193,20 @@ $recent = $pdo->prepare("
 $recent->execute([$selected_cat_id, $selected_cat_id]);
 $recent = $recent->fetchAll();
 
+if (wants_xlsx()) {
+    $cat_label = '';
+    foreach ($categories as $c) if ((int)$c['id'] === (int)$selected_cat_id) $cat_label = $c['name'];
+    xlsx_download('Recent receiving ' . date('Y-m-d') . ($cat_label ? " $cat_label" : ''), [[
+        'name'    => 'Recent receiving',
+        'title'   => 'Recent receiving' . ($cat_label ? " - $cat_label" : ''),
+        'meta'    => ['Latest ' . count($recent) . ' deliveries', 'Exported: ' . date('d M Y, H:i')],
+        'columns' => ['Date', 'Item', 'Category', ['Qty', 'int'], ['Previous stock', 'int'], ['New stock', 'int'], 'Supplier', 'Received by'],
+        'rows'    => array_map(fn($t) => [date('d M Y, H:i', strtotime($t['created_at'])), $t['item_name'], $t['category_name'] ?? 'Other', $t['quantity'],
+                                          $t['old_stock'], $t['new_stock'], $t['supplier'] ?? '', $t['received_by_name'] ?? ''], $recent),
+        'totals'  => ['Total', '', '', array_sum(array_column($recent, 'quantity'))],
+    ]]);
+}
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -340,7 +354,7 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Recent Transactions -->
 <div class="card" id="recent">
-    <h3 style="margin-bottom:12px">Recent Receiving</h3>
+    <div class="card-head"><h3>Recent Receiving</h3><?php if ($recent) echo xlsx_button(); ?></div>
     <div class="pill-tabs pill-tabs-inline">
         <a href="receive_stock?branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>">All</a>
         <?php foreach ($categories as $cat): ?>

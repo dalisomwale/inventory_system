@@ -133,6 +133,20 @@ $recent = $pdo->query("
 
 $qs = fn(array $over = []) => '?' . http_build_query(array_filter(array_merge(['branch_id' => $branch_id, 'category_id' => $selected_cat_id, 'item_id' => $selected_item_id, 'rcat' => $recent_cat], $over)));
 
+if (wants_xlsx()) {
+    $cat_label = '';
+    foreach ($categories as $c) if ((int)$c['id'] === $recent_cat) $cat_label = $c['name'];
+    xlsx_download('Recent issuing ' . date('Y-m-d') . ($cat_label ? " $cat_label" : ''), [[
+        'name'    => 'Recent issuing',
+        'title'   => 'Recent issuing' . ($cat_label ? " - $cat_label" : ''),
+        'meta'    => ['Latest ' . count($recent) . ' issues', 'Exported: ' . date('d M Y, H:i')],
+        'columns' => ['Date', 'Issued by', 'Item', 'Category', ['Qty', 'int'], 'Branch', 'Issued to', 'Received by', 'Purpose'],
+        'rows'    => array_map(fn($t) => [date('d M Y, H:i', strtotime($t['created_at'])), $t['issued_by_name'] ?? '', $t['item_name'], $t['category_name'] ?? '',
+                                          $t['quantity'], $t['branch_name'] ?? '', $t['issued_to'] ?? '', $t['recipient'] ?? '', $t['purpose'] ?? ''], $recent),
+        'totals'  => ['Total', '', '', '', array_sum(array_column($recent, 'quantity'))],
+    ]]);
+}
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -272,7 +286,7 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Recent -->
 <div class="card" id="recent">
-    <div class="card-head"><h3>Recent issuing</h3><span class="card-hint">Latest 20<?php echo $recent_cat ? ' in this category' : ''; ?></span></div>
+    <div class="card-head"><h3>Recent issuing</h3><div style="display:flex; align-items:center; gap:12px"><span class="card-hint">Latest 20<?php echo $recent_cat ? ' in this category' : ''; ?></span><?php if ($recent) echo xlsx_button(); ?></div></div>
     <div class="pill-tabs pill-tabs-inline">
         <a href="<?php echo htmlspecialchars($qs(['rcat' => 0])); ?>#recent" class="pill-tab <?php echo $recent_cat ? '' : 'active'; ?>">All</a>
         <?php foreach ($categories as $cat): ?>

@@ -96,6 +96,17 @@ if (!empty($_GET['edit'])) {
     foreach ($cats as $c) if ((int)$c['id'] === (int)$_GET['edit']) $editing = $c;
 }
 
+if (wants_xlsx()) {
+    xlsx_download('Categories ' . date('Y-m-d'), [[
+        'name'    => 'Categories',
+        'title'   => 'All categories',
+        'meta'    => ['Exported: ' . date('d M Y, H:i')],
+        'columns' => ['Category', 'Description', ['Items', 'int'], ['Units in stock', 'int'], ['Value (K)', 'money'], 'Date added'],
+        'rows'    => array_map(fn($c) => [$c['name'], $c['description'] ?? '', $c['items'], $c['units'], $c['value'], date('d M Y', strtotime($c['created_at']))], $cats),
+        'totals'  => ['Total', '', array_sum(array_column($cats, 'items')), array_sum(array_column($cats, 'units')), array_sum(array_column($cats, 'value')), ''],
+    ]]);
+}
+
 $breadcrumbs = $editing ? [['Categories', 'categories'], ['Edit ' . $editing['name'], null]] : [['Categories', null]];
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -162,7 +173,7 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- List -->
 <div class="card">
-    <div class="card-head"><h3>All categories (<?php echo count($cats); ?>)</h3></div>
+    <div class="card-head"><h3>All categories (<?php echo count($cats); ?>)</h3><?php if ($cats) echo xlsx_button(['edit' => null]); ?></div>
     <?php if ($cats): ?>
     <div class="table-container">
         <table>
