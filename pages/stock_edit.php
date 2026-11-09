@@ -32,8 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_item'])) {
     } else {
         $_SESSION['flash_error'] = implode(' ', $v->errors());
     }
-    $back = $_POST['return'] ?? 'stock.php';
-    if (parse_url($back, PHP_URL_PATH) !== 'stock.php') $back = 'stock.php';
+    $back = $_POST['return'] ?? 'stock';
+    if (parse_url($back, PHP_URL_PATH) !== 'stock') $back = 'stock';
     header('Location: ' . $back);
     exit();
 }
@@ -45,7 +45,7 @@ if ($id) {
     $st = $pdo->prepare("SELECT * FROM items WHERE id = ?");
     $st->execute([$id]);
     $item = $st->fetch();
-    if (!$item) { $_SESSION['flash_error'] = 'That item no longer exists.'; header('Location: stock.php'); exit(); }
+    if (!$item) { $_SESSION['flash_error'] = 'That item no longer exists.'; header('Location: stock'); exit(); }
 }
 $is_new = !$item;
 // Once an item has stock history its price is set by deliveries (Receive Existing Item), not edited here
@@ -89,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_item'])) {
             logAudit($pdo, $_SESSION['user_id'], 'ADD_ITEM', $new_id, $opening, "Added item: $item_name in {$cat['name']}");
             $pdo->commit();
             $_SESSION['flash'] = "\"$item_name\" added.";
-            header('Location: stock_item.php?id=' . $new_id);
+            header('Location: stock_item?id=' . $new_id);
             exit();
         } catch (Exception $e) {
             $pdo->rollBack();
@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_item'])) {
             ->execute([$item_name, $cat['id'], $cat['name'], $description, $unit_price, $reorder_level, $item['id']]);
         logAudit($pdo, $_SESSION['user_id'], 'EDIT_ITEM', (int)$item['id'], null, "Updated item: $item_name");
         $_SESSION['flash'] = "\"$item_name\" saved.";
-        header('Location: stock_item.php?id=' . $item['id']);
+        header('Location: stock_item?id=' . $item['id']);
         exit();
     }
 }
@@ -113,8 +113,8 @@ $val = function (string $key, $default = '') use ($item) {
 };
 
 $breadcrumbs = $is_new
-    ? [['Manage Stock', 'stock.php'], ['Add item', null]]
-    : [['Manage Stock', 'stock.php'], [$item['item_name'], 'stock_item.php?id=' . $item['id']], ['Edit', null]];
+    ? [['Manage Stock', 'stock'], ['Add item', null]]
+    : [['Manage Stock', 'stock'], [$item['item_name'], 'stock_item?id=' . $item['id']], ['Edit', null]];
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -147,7 +147,7 @@ include __DIR__ . '/../includes/header.php';
                     <option value="<?php echo $c['id']; ?>" <?php echo (int)$val('category_id', (int)($_GET['category_id'] ?? 0)) === (int)$c['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($c['name']); ?></option>
                     <?php endforeach; ?>
                 </select>
-                <small><a href="categories.php">Manage categories</a></small>
+                <small><a href="categories">Manage categories</a></small>
             </div>
         </div>
 
@@ -204,7 +204,7 @@ include __DIR__ . '/../includes/header.php';
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary"><?php echo $is_new ? 'Add item' : 'Save changes'; ?></button>
-            <a href="<?php echo $is_new ? 'stock.php' : 'stock_item.php?id=' . $item['id']; ?>" class="btn">Cancel</a>
+            <a href="<?php echo $is_new ? 'stock' : 'stock_item?id=' . $item['id']; ?>" class="btn">Cancel</a>
         </div>
     </form>
 </div>

@@ -11,7 +11,7 @@ function isAdmin(): bool    { return !empty($_SESSION['is_system_admin']); }
 
 function redirectIfNotLoggedIn(): void {
     global $pdo;
-    if (!isLoggedIn()) { header('Location: login.php'); exit(); }
+    if (!isLoggedIn()) { header('Location: login'); exit(); }
     // Re-read the account on every page so role changes and disabled accounts take effect at once
     $st = $pdo->prepare("SELECT u.id, u.full_name, u.email, u.role, u.active, u.role_id, r.name AS role_name, r.is_system
                          FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = ?");
@@ -22,7 +22,7 @@ function redirectIfNotLoggedIn(): void {
         session_destroy();
         session_start();
         $_SESSION['login_notice'] = 'Your account has been disabled. Contact the IT department.';
-        header('Location: login.php');
+        header('Location: login');
         exit();
     }
     $_SESSION['role']      = $u['role'];

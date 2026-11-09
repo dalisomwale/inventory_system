@@ -68,7 +68,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="page-header">
     <h1>Transaction History<?php if ($scope_dept !== null): ?> &mdash; <?php echo htmlspecialchars(department_name($scope_dept) ?: 'your department'); ?><?php endif; ?></h1>
     <div style="display:flex; gap:8px; flex-wrap:wrap">
-        <a href="dashboard.php" class="btn btn-sm">Back to Dashboard</a>
+        <a href="dashboard" class="btn btn-sm">Back to Dashboard</a>
     </div>
 </div>
 

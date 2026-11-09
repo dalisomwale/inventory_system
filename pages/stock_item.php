@@ -8,14 +8,14 @@ $st = $pdo->prepare("SELECT i.*, COALESCE(c.name, i.category, 'Other') AS catego
                      FROM items i LEFT JOIN categories c ON c.id = i.category_id WHERE i.id = ?");
 $st->execute([(int)($_GET['id'] ?? 0)]);
 $item = $st->fetch();
-if (!$item) { $_SESSION['flash_error'] = 'That item no longer exists.'; header('Location: stock.php'); exit(); }
+if (!$item) { $_SESSION['flash_error'] = 'That item no longer exists.'; header('Location: stock'); exit(); }
 // Department-limited users only see items issued to their department, and only those issues
 $scope_dept = my_scope_department();
 $scoped     = $scope_dept !== null;
 if ($scoped) {
     $chk = $pdo->prepare("SELECT COUNT(*) FROM stock_issuing WHERE item_id = ? AND department_id = ?");
     $chk->execute([$item['id'], $scope_dept]);
-    if (!$chk->fetchColumn()) { $_SESSION['flash_error'] = "That item hasn't been issued to your department."; header('Location: stock.php'); exit(); }
+    if (!$chk->fetchColumn()) { $_SESSION['flash_error'] = "That item hasn't been issued to your department."; header('Location: stock'); exit(); }
 }
 
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
@@ -43,7 +43,7 @@ $issued      = array_sum(array_map(fn($r) => $r['type'] === 'Issued'   ? $r['qua
 
 
 
-$breadcrumbs = [[$scoped ? 'Stock' : 'Manage Stock', 'stock.php'], [$item['item_name'], null]];
+$breadcrumbs = [[$scoped ? 'Stock' : 'Manage Stock', 'stock'], [$item['item_name'], null]];
 if (wants_xlsx()) {
     xlsx_download("Stock history {$item['item_name']} " . date('Y-m-d'), [[
         'name'    => 'Stock history',
@@ -72,9 +72,9 @@ include __DIR__ . '/../includes/header.php';
     </div>
     <?php if (can('items.manage')): ?>
     <div style="display:flex; gap:8px; flex-wrap:wrap">
-        <a href="stock_edit.php?id=<?php echo $item['id']; ?>" class="btn">Edit</a>
+        <a href="stock_edit?id=<?php echo $item['id']; ?>" class="btn">Edit</a>
         <?php if (!$has_history): ?>
-        <form method="POST" action="stock_edit.php" class="inline-form"
+        <form method="POST" action="stock_edit" class="inline-form"
               data-confirm-title="Delete item"
               data-confirm="Delete <?php echo htmlspecialchars($item['item_name']); ?>? This cannot be undone."
               data-confirm-ok="Delete" data-confirm-danger="1">

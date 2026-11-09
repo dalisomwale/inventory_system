@@ -1,4 +1,4 @@
 <?php
 // Old address kept so bookmarks still work.
-header('Location: dashboard.php');
+header('Location: dashboard');
 exit();

@@ -26,7 +26,7 @@ include __DIR__ . '/../includes/header.php';
                     <?php foreach ($suppliers as $supplier): ?>
                     <tr>
                         <td><?php echo htmlspecialchars($supplier); ?></td>
-                        <td><a href="receive_stock.php?supplier=<?php echo urlencode($supplier); ?>" class="btn btn-sm">View Transactions</a></td>
+                        <td><a href="receive_stock?supplier=<?php echo urlencode($supplier); ?>" class="btn btn-sm">View Transactions</a></td>
                     </tr>
                     <?php endforeach; ?>
                 <?php else: ?>

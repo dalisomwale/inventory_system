@@ -45,7 +45,7 @@ $tot_units = array_sum(array_column($items, 'units'));
 $tot_value = array_sum(array_column($items, 'value'));
 $cat_name  = '';
 foreach ($categories as $c) if ((int)$c['id'] === $cat_id) $cat_name = $c['name'];
-$report_url = fn(array $p) => 'reports.php?' . http_build_query(array_filter($p + ['month' => $month]));
+$report_url = fn(array $p) => 'reports?' . http_build_query(array_filter($p + ['month' => $month]));
 
 if (wants_xlsx()) {
     $title = 'Monthly Report - ' . ($dept_name ?: 'Your department') . ' - ' . date('F Y', strtotime($from)) . ($cat_name ? " - $cat_name" : '');
@@ -133,7 +133,7 @@ include __DIR__ . '/header.php';
             <tbody>
             <?php foreach ($items as $it): ?>
                 <tr>
-                    <td><a class="item-link" href="stock_item.php?id=<?php echo $it['id']; ?>"><?php echo htmlspecialchars($it['item_name']); ?></a></td>
+                    <td><a class="item-link" href="stock_item?id=<?php echo $it['id']; ?>"><?php echo htmlspecialchars($it['item_name']); ?></a></td>
                     <td><span class="cat-pill"><?php echo htmlspecialchars($it['category_name']); ?></span></td>
                     <td class="num"><strong><?php echo number_format($it['units']); ?></strong></td>
                     <td class="num muted"><?php echo kwacha((float)$it['unit_price']); ?></td>

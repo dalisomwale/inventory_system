@@ -12,7 +12,7 @@ $path = $f ? req_storage_dir() . '/' . basename($f['stored_name']) : '';
 if (!$f || !req_can_open() || !is_file($path)) {
     http_response_code(404);
     $_SESSION['flash_error'] = "That file doesn't exist, or you don't have access to it.";
-    header('Location: requisitions.php'); exit();
+    header('Location: requisitions'); exit();
 }
 // PDFs and images open in the browser; everything else downloads
 $inline = in_array($f['mime'], ['application/pdf', 'image/jpeg', 'image/png'], true);

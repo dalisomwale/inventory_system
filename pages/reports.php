@@ -174,7 +174,7 @@ if (wants_xlsx()) {
     xlsx_download("Monthly report by $by $month" . ($sel_name ? " $sel_name" : ''), $sheets);
 }
 
-$report_url = fn(array $p = []) => 'reports.php?' . http_build_query(array_filter($p + ['by' => $by, 'month' => $month]));
+$report_url = fn(array $p = []) => 'reports?' . http_build_query(array_filter($p + ['by' => $by, 'month' => $month]));
 $kpi_rows = $sel ? $rows : array_values($groups);
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -273,7 +273,7 @@ include __DIR__ . '/../includes/header.php';
             <thead><tr><th>Item</th><th>Category</th><th class="num">Units issued</th><th class="num">Unit price</th><th class="num">Value issued</th><th class="num">Times</th></tr></thead>
             <tbody>
             <?php foreach ($rows as $r): ?>
-                <tr><td><a class="item-link" href="stock_item.php?id=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['item_name']); ?></a></td>
+                <tr><td><a class="item-link" href="stock_item?id=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['item_name']); ?></a></td>
                     <td><span class="cat-pill"><?php echo htmlspecialchars($r['category_name']); ?></span></td>
                     <td class="num"><strong><?php echo number_format($r['units']); ?></strong></td><td class="num muted"><?php echo kwacha((float)$r['unit_price']); ?></td>
                     <td class="num"><?php echo kwacha((float)$r['value']); ?></td><td class="num muted"><?php echo number_format($r['times']); ?></td></tr>
@@ -284,7 +284,7 @@ include __DIR__ . '/../includes/header.php';
             <thead><tr><th>Item</th><th>Category</th><th class="num">Opening</th><th class="num">Received</th><th class="num">Issued</th><th class="num">Closing</th><?php if ($cat_cols): ?><th class="num">Reorder at</th><th>Status</th><?php endif; ?><th class="num">Unit price</th><th class="num">Closing value</th></tr></thead>
             <tbody>
             <?php foreach ($rows as $r): ?>
-                <tr><td><a class="item-link" href="stock_item.php?id=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['item_name']); ?></a></td>
+                <tr><td><a class="item-link" href="stock_item?id=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['item_name']); ?></a></td>
                     <td><span class="cat-pill"><?php echo htmlspecialchars($r['category_name']); ?></span></td>
                     <td class="num muted"><?php echo number_format($r['opening']); ?></td>
                     <td class="num"><?php echo number_format($r['received']); ?></td>

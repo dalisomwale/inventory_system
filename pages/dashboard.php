@@ -100,11 +100,11 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Quick actions -->
 <div class="action-tiles stacked">
-    <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock.php', 'Receive stock', 'Record a delivery', icon('receive'), '', 'receive'); ?><?php endif; ?>
-    <?php if (can('stock.issue')): ?><?php echo action_tile('issue_stock.php', 'Issue stock', 'Give items to a department', icon('issue'), '', 'issue'); ?><?php endif; ?>
-    <?php if (can('stock.view')): ?><?php echo action_tile('stock.php', $scoped ? 'Stock' : 'Manage stock', $scoped ? 'Your department\'s items' : 'All items and levels', icon('stock'), '', 'stock'); ?><?php endif; ?>
-    <?php if (req_can_open()): ?><?php echo action_tile('requisitions.php', 'Requisitions', 'What needs buying', icon('request'), '', 'request'); ?><?php endif; ?>
-    <?php if (can('reports.view')): ?><?php echo action_tile('reports.php', 'Monthly reports', $scoped ? 'Your department, by month' : 'View and export to Excel', icon('chart'), '', 'reports'); ?><?php endif; ?>
+    <?php if (can('stock.receive')): ?><?php echo action_tile('receive_stock', 'Receive stock', 'Record a delivery', icon('receive'), '', 'receive'); ?><?php endif; ?>
+    <?php if (can('stock.issue')): ?><?php echo action_tile('issue_stock', 'Issue stock', 'Give items to a department', icon('issue'), '', 'issue'); ?><?php endif; ?>
+    <?php if (can('stock.view')): ?><?php echo action_tile('stock', $scoped ? 'Stock' : 'Manage stock', $scoped ? 'Your department\'s items' : 'All items and levels', icon('stock'), '', 'stock'); ?><?php endif; ?>
+    <?php if (req_can_open()): ?><?php echo action_tile('requisitions', 'Requisitions', 'What needs buying', icon('request'), '', 'request'); ?><?php endif; ?>
+    <?php if (can('reports.view')): ?><?php echo action_tile('reports', 'Monthly reports', $scoped ? 'Your department, by month' : 'View and export to Excel', icon('chart'), '', 'reports'); ?><?php endif; ?>
 </div>
 
 <?php if ($scoped): ?>
@@ -116,7 +116,7 @@ include __DIR__ . '/../includes/header.php';
             : '<div class="empty-state"><p>Nothing issued to your department in the last 30 days.</p></div>'; ?>
     </div>
     <div class="card">
-        <div class="card-head"><h3>Most issued &mdash; last 30 days</h3><?php if (can('transactions.view')): ?><a href="view_transactions.php" class="btn btn-sm">Transactions</a><?php endif; ?></div>
+        <div class="card-head"><h3>Most issued &mdash; last 30 days</h3><?php if (can('transactions.view')): ?><a href="view_transactions" class="btn btn-sm">Transactions</a><?php endif; ?></div>
         <?php echo $top_issued ? chart_hbars($top_issued, fn($v) => number_format($v) . ' units') : '<div class="empty-state"><p>Nothing issued to your department in the last 30 days.</p></div>'; ?>
     </div>
 </div>
@@ -185,8 +185,8 @@ include __DIR__ . '/../includes/header.php';
                     <td><span class="<?php echo $urgent ? 'status-issuing' : 'status-pending'; ?>"><?php echo $urgent ? '&#9888; ' : ''; ?><?php echo days_left_label($r['days_left'], (int)$r['current_quantity']); ?></span></td>
                     <td class="num"><strong><?php echo number_format($r['suggest']); ?></strong></td>
                     <td><div class="row-actions">
-                        <?php if (can('requisitions.raise')): ?><a href="requisitions.php?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm">Raise requisition</a><?php endif; ?>
-                        <?php if (can('stock.receive')): ?><a href="receive_stock.php?category_id=<?php echo (int)$r['category_id']; ?>&item_id=<?php echo $r['id']; ?>" class="btn btn-sm">Receive</a><?php endif; ?>
+                        <?php if (can('requisitions.raise')): ?><a href="requisitions?item_name=<?php echo urlencode($r['item_name']); ?>&qty=<?php echo max(1, $r['suggest']); ?>&category_id=<?php echo (int)$r['category_id']; ?>" class="btn btn-sm">Raise requisition</a><?php endif; ?>
+                        <?php if (can('stock.receive')): ?><a href="receive_stock?category_id=<?php echo (int)$r['category_id']; ?>&item_id=<?php echo $r['id']; ?>" class="btn btn-sm">Receive</a><?php endif; ?>
                     </div></td>
                 </tr>
             <?php endforeach; ?>
@@ -202,7 +202,7 @@ include __DIR__ . '/../includes/header.php';
 <!-- Usage -->
 <div class="grid-2">
     <div class="card">
-        <div class="card-head"><h3>Most issued &mdash; last 30 days</h3><?php if (can('transactions.view')): ?><a href="view_transactions.php" class="btn btn-sm">Transactions</a><?php endif; ?></div>
+        <div class="card-head"><h3>Most issued &mdash; last 30 days</h3><?php if (can('transactions.view')): ?><a href="view_transactions" class="btn btn-sm">Transactions</a><?php endif; ?></div>
         <?php echo $top_issued ? chart_hbars($top_issued, fn($v) => number_format($v) . ' units') : '<div class="empty-state"><p>Nothing issued in the last 30 days.</p></div>'; ?>
     </div>
     <div class="card">

@@ -12,7 +12,7 @@ $me   = (int)$_SESSION['user_id'];
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
 if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
 
-function back_to(string $tab): void { header('Location: ' . $tab . '.php'); exit(); }
+function back_to(string $tab): void { header('Location: ' . $tab); exit(); }
 
 /** What still uses a company/branch/department (so it can't be deleted). */
 function usage(PDO $pdo, string $type, int $id): array {
@@ -146,7 +146,7 @@ $f = function (string $k, $default = '') use ($editing) {
 };
 $singular = ['companies' => 'company', 'branches' => 'branch', 'departments' => 'department'][$tab];
 
-$breadcrumbs = [[$tabs[$tab], $editing ? $tab . '.php' : null]];
+$breadcrumbs = [[$tabs[$tab], $editing ? $tab : null]];
 if ($editing) $breadcrumbs[] = ['Edit ' . $editing['name'], null];
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -166,8 +166,8 @@ include __DIR__ . '/../includes/header.php';
 <!-- Add / edit -->
 <div class="form-container wide" id="form">
     <div class="form-title"><?php echo $editing ? 'Edit ' . htmlspecialchars($editing['name']) : 'Add ' . $singular; ?></div>
-    <?php if ($tab === 'branches' && !$companies): ?><div class="info-note">Add a company first under <a href="companies.php">Companies</a>.</div>
-    <?php elseif ($tab === 'departments' && !$branches): ?><div class="info-note">Add a branch first under <a href="branches.php">Branches</a>.</div>
+    <?php if ($tab === 'branches' && !$companies): ?><div class="info-note">Add a company first under <a href="companies">Companies</a>.</div>
+    <?php elseif ($tab === 'departments' && !$branches): ?><div class="info-note">Add a branch first under <a href="branches">Branches</a>.</div>
     <?php else: ?>
     <form method="POST"
           data-confirm-title="<?php echo $editing ? 'Save ' . $singular : 'Add ' . $singular; ?>"
@@ -198,7 +198,7 @@ include __DIR__ . '/../includes/header.php';
         <?php endif; ?>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary"><?php echo $editing ? 'Save changes' : 'Add ' . $singular; ?></button>
-            <?php if ($editing): ?><a href="<?php echo $tab; ?>.php" class="btn">Cancel</a><?php endif; ?>
+            <?php if ($editing): ?><a href="<?php echo $tab; ?>" class="btn">Cancel</a><?php endif; ?>
         </div>
     </form>
     <?php endif; ?>
@@ -237,7 +237,7 @@ include __DIR__ . '/../includes/header.php';
                     <td><?php echo $r['active'] ? '<span class="status-receiving">Active</span>' : '<span class="status-issuing">Disabled</span>'; ?></td>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($r['created_at'])); ?></td>
                     <td><div class="row-actions">
-                        <a href="<?php echo $tab; ?>.php?edit=<?php echo $r['id']; ?>#form" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($r['name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
+                        <a href="<?php echo $tab; ?>?edit=<?php echo $r['id']; ?>#form" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($r['name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
                         <form method="POST" class="inline-form"
                               data-confirm-title="<?php echo $r['active'] ? 'Disable' : 'Enable'; ?> <?php echo $singular; ?>"
                               data-confirm="<?php echo $r['active'] ? 'Disable ' . htmlspecialchars($r['name']) . '? It will stop appearing in pickers. Existing records keep it.' : 'Enable ' . htmlspecialchars($r['name']) . '?'; ?>"

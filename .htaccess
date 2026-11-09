@@ -1,0 +1,15 @@
+# Clean addresses when the app runs under Apache (mod_rewrite), same as router.php for php -S
+Options -Indexes -MultiViews
+RewriteEngine On
+
+# Never serve these folders or hidden files
+RewriteRule ^(config|includes|sql|storage|tools)(/|$) - [R=404,L]
+RewriteRule (^|/)\. - [R=404,L]
+
+# Old addresses with .php -> clean address
+RewriteCond %{REQUEST_METHOD} =GET
+RewriteRule ^(?:pages/)?([a-z_]+)\.php$ /$1 [R=301,L,QSA]
+
+# /dashboard -> pages/dashboard.php
+RewriteCond %{DOCUMENT_ROOT}/pages/$1.php -f
+RewriteRule ^([a-z_]+)/?$ pages/$1.php [L,QSA]

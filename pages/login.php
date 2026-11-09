@@ -3,7 +3,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/validation.php';
 
 if (isset($_SESSION['user_id'])) {
-    header('Location: dashboard.php');
+    header('Location: dashboard');
     exit();
 }
 
@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->prepare("INSERT INTO audit_trail (user_id, action, details) VALUES (?, 'LOGIN', 'User logged in')")->execute([$user['id']]);
                 } catch (Exception $e) {}
 
-                header('Location: dashboard.php');
+                header('Location: dashboard');
                 exit();
             } else {
                 $error = !empty($disabled) ? 'This account has been disabled. Contact the IT department.' : 'Incorrect email or password.';
@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
 
         <div class="login-alt">
-            Don't have an account? <a href="signup.php">Create one</a>
+            Don't have an account? <a href="signup">Create one</a>
         </div>
     </div>
     <div class="login-footer">

@@ -4,7 +4,7 @@ require_once __DIR__ . '/../includes/validation.php';
 require_once __DIR__ . '/../includes/org.php';
 
 if (isset($_SESSION['user_id'])) {
-    header('Location: dashboard.php');
+    header('Location: dashboard');
     exit();
 }
 
@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
             $stmt->execute([$email]);
             if ($stmt->fetch()) {
-                $error = 'An account with this email already exists. <a href="login.php">Sign in</a> instead.';
+                $error = 'An account with this email already exists. <a href="login">Sign in</a> instead.';
             } else {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
                 $pdo->prepare("INSERT INTO users (full_name, email, password, role, role_id, company_id, branch_id, department_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } catch (Exception $e) {}
                 $_SESSION['signup_done']  = $full_name;
                 $_SESSION['signup_email'] = $email;
-                header('Location: login.php');
+                header('Location: login');
                 exit();
             }
         } catch (PDOException $e) {
@@ -116,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
 
         <div class="login-alt">
-            Already have an account? <a href="login.php">Sign in</a>
+            Already have an account? <a href="login">Sign in</a>
         </div>
     </div>
     <div class="login-footer">

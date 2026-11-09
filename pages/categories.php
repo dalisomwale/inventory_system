@@ -7,7 +7,7 @@ requirePermission('categories.manage');
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
 if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
 
-function back_to_categories(): void { header('Location: categories.php'); exit(); }
+function back_to_categories(): void { header('Location: categories'); exit(); }
 
 // ── Add ─────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_category'])) {
@@ -96,7 +96,7 @@ if (!empty($_GET['edit'])) {
     foreach ($cats as $c) if ((int)$c['id'] === (int)$_GET['edit']) $editing = $c;
 }
 
-$breadcrumbs = $editing ? [['Categories', 'categories.php'], ['Edit ' . $editing['name'], null]] : [['Categories', null]];
+$breadcrumbs = $editing ? [['Categories', 'categories'], ['Edit ' . $editing['name'], null]] : [['Categories', null]];
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -129,7 +129,7 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save changes</button>
-            <a href="categories.php" class="btn">Cancel</a>
+            <a href="categories" class="btn">Cancel</a>
         </div>
     </form>
 </div>
@@ -177,8 +177,8 @@ include __DIR__ . '/../includes/header.php';
                     <td class="num"><?php echo 'K' . number_format($c['value']); ?></td>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($c['created_at'])); ?></td>
                     <td><div class="row-actions">
-                        <?php if (can('stock.view')): ?><a href="stock.php?category_id=<?php echo $c['id']; ?>" class="btn btn-icon" aria-label="View items in <?php echo htmlspecialchars($c['name']); ?>" data-tip="View items"><?php echo row_icon('view'); ?></a><?php endif; ?>
-                        <a href="categories.php?edit=<?php echo $c['id']; ?>#edit" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($c['name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
+                        <?php if (can('stock.view')): ?><a href="stock?category_id=<?php echo $c['id']; ?>" class="btn btn-icon" aria-label="View items in <?php echo htmlspecialchars($c['name']); ?>" data-tip="View items"><?php echo row_icon('view'); ?></a><?php endif; ?>
+                        <a href="categories?edit=<?php echo $c['id']; ?>#edit" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($c['name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
                         <?php if ((int)$c['items'] === 0): ?>
                         <form method="POST" class="inline-form"
                               data-confirm-title="Delete category"

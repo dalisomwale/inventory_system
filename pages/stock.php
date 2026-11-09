@@ -129,7 +129,7 @@ if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['f
 function stock_url(array $change = []): string {
     $keep = array_intersect_key($_GET, array_flip(['q', 'category_id', 'status', 'sort', 'company_id', 'branch_id', 'department_id']));
     $params = array_filter(array_merge($keep, $change), fn($v) => $v !== '' && $v !== null && $v !== 0 && $v !== '0');
-    return 'stock.php' . ($params ? '?' . http_build_query($params) : '');
+    return 'stock' . ($params ? '?' . http_build_query($params) : '');
 }
 
 if (wants_xlsx()) {
@@ -237,7 +237,7 @@ include __DIR__ . '/../includes/header.php';
     </div>
     <div class="form-group filter-buttons">
         <noscript><button type="submit" class="btn btn-primary">Apply</button></noscript>
-        <?php if ($q !== '' || $cat_id || $status || $sort !== 'name' || (!$scoped && ($branch_id || $company_id || $dept_id))): ?><a href="stock.php" class="btn">Clear</a><?php endif; ?>
+        <?php if ($q !== '' || $cat_id || $status || $sort !== 'name' || (!$scoped && ($branch_id || $company_id || $dept_id))): ?><a href="stock" class="btn">Clear</a><?php endif; ?>
     </div>
 </form>
 
@@ -267,7 +267,7 @@ include __DIR__ . '/../includes/header.php';
             <?php foreach ($rows as $r): ?>
                 <tr class="row-<?php echo $r['state']; ?>">
                     <td>
-                        <a class="item-link" href="stock_item.php?id=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['item_name']); ?></a>
+                        <a class="item-link" href="stock_item?id=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['item_name']); ?></a>
                         <?php if ($r['description']): ?><div class="item-desc"><?php echo htmlspecialchars($r['description']); ?></div><?php endif; ?>
                     </td>
                     <td><span class="cat-pill"><?php echo htmlspecialchars($r['category_name']); ?></span></td>
@@ -285,11 +285,11 @@ include __DIR__ . '/../includes/header.php';
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($r['created_at'])); ?></td>
                     <?php endif; ?>
                     <td><div class="row-actions">
-                        <a href="stock_item.php?id=<?php echo $r['id']; ?>" class="btn btn-icon" aria-label="View <?php echo htmlspecialchars($r['item_name']); ?>" data-tip="View"><?php echo row_icon('view'); ?></a>
+                        <a href="stock_item?id=<?php echo $r['id']; ?>" class="btn btn-icon" aria-label="View <?php echo htmlspecialchars($r['item_name']); ?>" data-tip="View"><?php echo row_icon('view'); ?></a>
 <?php if (can('items.manage')): ?>
-                        <a href="stock_edit.php?id=<?php echo $r['id']; ?>" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($r['item_name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
+                        <a href="stock_edit?id=<?php echo $r['id']; ?>" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($r['item_name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
                         <?php if ((int)$r['moves'] === 0): ?>
-                        <form method="POST" action="stock_edit.php" class="inline-form"
+                        <form method="POST" action="stock_edit" class="inline-form"
                               data-confirm-title="Delete item"
                               data-confirm="Delete <?php echo htmlspecialchars($r['item_name']); ?>? This cannot be undone."
                               data-confirm-ok="Delete" data-confirm-danger="1">
@@ -312,10 +312,10 @@ include __DIR__ . '/../includes/header.php';
     <?php elseif ($tot_items === 0): ?>
     <div class="empty-state">
         <p>There are no items yet.</p>
-        <?php if (can('items.manage')): ?><a href="stock_edit.php" class="btn btn-primary">Add your first item</a><?php endif; ?>
+        <?php if (can('items.manage')): ?><a href="stock_edit" class="btn btn-primary">Add your first item</a><?php endif; ?>
     </div>
     <?php else: ?>
-    <div class="empty-state"><p><?php echo $dept ? 'Nothing has been issued to ' . htmlspecialchars($dept['name']) . ' yet' . (($q !== '' || $cat_id || $status) ? ' that matches these filters' : '') . '.' : 'No items match these filters.'; ?></p><a href="stock.php" class="btn">Clear filters</a></div>
+    <div class="empty-state"><p><?php echo $dept ? 'Nothing has been issued to ' . htmlspecialchars($dept['name']) . ' yet' . (($q !== '' || $cat_id || $status) ? ' that matches these filters' : '') . '.' : 'No items match these filters.'; ?></p><a href="stock" class="btn">Clear filters</a></div>
     <?php endif; ?>
 </div>
 
@@ -330,7 +330,7 @@ include __DIR__ . '/../includes/header.php';
         form.querySelectorAll('input, select').forEach(function (el) {
             if (el.value === '' || (el.name === 'sort' && el.value === 'name')) el.disabled = true; else if (el.name) any = true;
         });
-        if (any) form.submit(); else window.location.href = 'stock.php';
+        if (any) form.submit(); else window.location.href = 'stock';
     }
     var narrower = { company_id: ['branch_id', 'department_id'], branch_id: ['department_id'] };
     form.querySelectorAll('select').forEach(function (s) {

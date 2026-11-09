@@ -19,7 +19,7 @@ if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['f
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
     if (!can('requisitions.raise')) {
         $_SESSION['flash_error'] = "You can't raise requisitions. Ask the System Admin if you need to.";
-        header('Location: requisitions.php'); exit();
+        header('Location: requisitions'); exit();
     }
     $v         = new Validator($_POST);
     $item_name = $v->text('item_name', 'Item', 200, true, 2);
@@ -111,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_purchase'])) {
         if ($attached) req_log($pdo, $id, 'docs_added', null, null, implode(', ', array_column($attached, 1)));
         logAudit($pdo, $_SESSION['user_id'], 'REQUISITION_RAISED', $item_id ? (int)$item_id : null, $quantity, req_ref($id) . " raised: $item_name");
         $_SESSION['flash'] = req_ref($id) . ' raised. ' . ($is_it ? 'It is now with IT for quotations.' : 'Attach the quotations below, then send it to the Director.');
-        header('Location: requisition.php?id=' . $id); exit();
+        header('Location: requisition?id=' . $id); exit();
     }
 }
 
@@ -283,11 +283,11 @@ include __DIR__ . '/../includes/header.php';
             <tbody>
             <?php foreach ($list as $p): ?>
                 <tr>
-                    <td style="white-space:nowrap"><a class="item-link inline" href="requisition.php?id=<?php echo $p['id']; ?>"><?php echo req_ref((int)$p['id']); ?></a></td>
+                    <td style="white-space:nowrap"><a class="item-link inline" href="requisition?id=<?php echo $p['id']; ?>"><?php echo req_ref((int)$p['id']); ?></a></td>
                     <td class="muted" style="white-space:nowrap"><?php echo date('d M Y', strtotime($p['created_at'])); ?></td>
                     <td><?php echo htmlspecialchars($p['added_by'] ?? '—'); ?></td>
                     <td>
-                        <a class="item-link" href="requisition.php?id=<?php echo $p['id']; ?>"><?php echo htmlspecialchars($p['item_name']); ?></a>
+                        <a class="item-link" href="requisition?id=<?php echo $p['id']; ?>"><?php echo htmlspecialchars($p['item_name']); ?></a>
                         <div class="item-desc"><?php echo htmlspecialchars($p['category_name'] ?? $p['category'] ?? ''); ?><?php echo $p['is_it'] ? ' · IT-related' : ''; ?></div>
                     </td>
                     <td class="num"><?php echo number_format($p['quantity']); ?></td>
@@ -295,7 +295,7 @@ include __DIR__ . '/../includes/header.php';
                     <td><?php echo $p['dept_name'] ? htmlspecialchars($p['dept_name']) : '<span class="muted-text">—</span>'; ?><div class="item-desc"><?php echo htmlspecialchars($p['branch_name'] ?? ''); ?></div></td>
                     <td><span class="<?php echo req_status_class($p['status']); ?>"><?php echo req_status_label($p['status']); ?></span>
                         <div class="item-desc">since <?php echo date('d M', strtotime($p['stage_at'] ?? $p['created_at'])); ?></div></td>
-                    <td><a href="requisition.php?id=<?php echo $p['id']; ?>" class="btn btn-sm <?php echo $p['my_turn'] && !in_array($p['status'], ['received','cancelled'], true) ? 'btn-primary' : ''; ?>"><?php echo $p['my_turn'] && !in_array($p['status'], ['received','cancelled'], true) ? 'Take action' : 'Open'; ?></a></td>
+                    <td><a href="requisition?id=<?php echo $p['id']; ?>" class="btn btn-sm <?php echo $p['my_turn'] && !in_array($p['status'], ['received','cancelled'], true) ? 'btn-primary' : ''; ?>"><?php echo $p['my_turn'] && !in_array($p['status'], ['received','cancelled'], true) ? 'Take action' : 'Open'; ?></a></td>
                 </tr>
             <?php endforeach; ?>
             </tbody>

@@ -124,7 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_new_item'])) {
                      "Added new item: $item_name in category: $cat_name. Initial stock: $quantity from: $supplier");
             $pdo->commit();
             complete_purchase($pdo, $purchase, (int)$item_id);
-            header("Location: receive_stock.php?category_id=$category_id&item_id=$item_id&branch_id=$branch_id&added=1" . ($purchase ? '&purchase_done=1' : ''));
+            header("Location: receive_stock?category_id=$category_id&item_id=$item_id&branch_id=$branch_id&added=1" . ($purchase ? '&purchase_done=1' : ''));
             exit();
         } catch (Exception $e) {
             $pdo->rollBack();
@@ -198,12 +198,12 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="page-header">
     <h1>Receive Stock</h1>
-    <a href="dashboard.php" class="btn btn-sm">Back to Dashboard</a>
+    <a href="dashboard" class="btn btn-sm">Back to Dashboard</a>
 </div>
 
 
 <?php if ($purchase): ?>
-<div class="info-note">Receiving <a href="requisition.php?id=<?php echo $purchase['id']; ?>"><?php echo req_ref((int)$purchase['id']); ?></a>: <strong><?php echo htmlspecialchars($purchase['quantity'] . ' × ' . $purchase['item_name']); ?></strong><?php echo $purchase['supplier'] ? ' from ' . htmlspecialchars($purchase['supplier']) : ''; ?>. Check the quantity that actually arrived.</div>
+<div class="info-note">Receiving <a href="requisition?id=<?php echo $purchase['id']; ?>"><?php echo req_ref((int)$purchase['id']); ?></a>: <strong><?php echo htmlspecialchars($purchase['quantity'] . ' × ' . $purchase['item_name']); ?></strong><?php echo $purchase['supplier'] ? ' from ' . htmlspecialchars($purchase['supplier']) : ''; ?>. Check the quantity that actually arrived.</div>
 <?php endif; ?>
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
 <?php if (isset($error)):   ?><div class="alert alert-danger"><?php echo $error; ?></div><?php endif; ?>
@@ -342,7 +342,7 @@ include __DIR__ . '/../includes/header.php';
 <div class="card" id="recent">
     <h3 style="margin-bottom:12px">Recent Receiving</h3>
     <div class="pill-tabs pill-tabs-inline">
-        <a href="receive_stock.php?branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>">All</a>
+        <a href="receive_stock?branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == 0 ? 'active' : ''; ?>">All</a>
         <?php foreach ($categories as $cat): ?>
         <a href="?category_id=<?php echo $cat['id']; ?>&branch_id=<?php echo $branch_id; ?>#recent" class="pill-tab <?php echo $selected_cat_id == $cat['id'] ? 'active' : ''; ?>">
             <?php echo htmlspecialchars($cat['name']); ?>

@@ -22,9 +22,9 @@ function load_req(PDO $pdo, int $id): ?array {
 $p = load_req($pdo, $id);
 if (!$p) {
     $_SESSION['flash_error'] = "That requisition doesn't exist, or you don't have access to it.";
-    header('Location: requisitions.php'); exit();
+    header('Location: requisitions'); exit();
 }
-$back = 'requisition.php?id=' . $p['id'];
+$back = 'requisition?id=' . $p['id'];
 $ref  = req_ref((int)$p['id']);
 $dept_side = req_is_department($pdo, $p);
 
@@ -176,7 +176,7 @@ $step_keys = array_keys(REQ_STEPS);
 $cur_idx = array_search($cur_step, $step_keys, true);
 if ($p['status'] === 'received') $cur_idx = count($step_keys);   // all done
 
-$breadcrumbs = [['Requisitions', 'requisitions.php'], [$ref, null]];
+$breadcrumbs = [['Requisitions', 'requisitions'], [$ref, null]];
 include __DIR__ . '/../includes/header.php';
 
 function action_form(string $act, string $label, array $o = []): string {
@@ -202,7 +202,7 @@ function action_form(string $act, string $label, array $o = []): string {
         <div class="req-sub"><span class="<?php echo req_status_class($p['status']); ?>"><?php echo req_status_label($p['status']); ?></span>
             <?php if (!in_array($p['status'], ['received', 'cancelled'], true)): ?><span class="muted-text">since <?php echo date('d M Y, H:i', strtotime($p['stage_at'] ?? $p['created_at'])); ?></span><?php endif; ?></div>
     </div>
-    <a href="requisitions.php" class="btn">All requisitions</a>
+    <a href="requisitions" class="btn">All requisitions</a>
 </div>
 
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
@@ -274,7 +274,7 @@ function action_form(string $act, string $label, array $o = []): string {
             }
             break;
         case 'paid':
-            if (req_actor($pdo, 'stock.receive', $p)) $actions .= '<p class="muted-text">When the items arrive, receive them into stock.</p><a href="receive_stock.php?purchase_id=' . $p['id'] . '" class="btn btn-success">Receive into stock</a>';
+            if (req_actor($pdo, 'stock.receive', $p)) $actions .= '<p class="muted-text">When the items arrive, receive them into stock.</p><a href="receive_stock?purchase_id=' . $p['id'] . '" class="btn btn-success">Receive into stock</a>';
             break;
     }
     ?>
@@ -298,7 +298,7 @@ function action_form(string $act, string $label, array $o = []): string {
             <tr class="<?php echo $approved_quote && $approved_quote['id'] === $q['id'] ? 'row-approved' : ''; ?>">
                 <td style="font-weight:600"><?php echo htmlspecialchars($q['supplier']); ?><?php if ($approved_quote && $approved_quote['id'] === $q['id']): ?> <span class="status-receiving">Approved</span><?php endif; ?></td>
                 <td class="num"><?php echo kwacha((float)$q['amount']); ?></td>
-                <td><a href="requisition_file.php?id=<?php echo $q['id']; ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($q['original_name']); ?></a> <span class="muted-text">(<?php echo req_file_size((int)$q['size']); ?>)</span></td>
+                <td><a href="requisition_file?id=<?php echo $q['id']; ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($q['original_name']); ?></a> <span class="muted-text">(<?php echo req_file_size((int)$q['size']); ?>)</span></td>
                 <td class="muted"><?php echo htmlspecialchars($q['by_name']); ?><div class="item-desc"><?php echo date('d M Y', strtotime($q['created_at'])); ?></div></td>
                 <td><?php if ($can_quote): ?>
                     <form method="POST" class="inline-form" data-confirm-title="Remove quotation" data-confirm="Remove the quotation from <?php echo htmlspecialchars($q['supplier']); ?>?" data-confirm-ok="Remove" data-confirm-danger="1">
@@ -331,7 +331,7 @@ function action_form(string $act, string $label, array $o = []): string {
     <div class="card">
         <div class="card-head"><h3>Attachments</h3><span class="card-hint">Added when it was raised</span></div>
         <?php foreach ($docs as $f): ?>
-        <p><a href="requisition_file.php?id=<?php echo $f['id']; ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($f['original_name']); ?></a>
+        <p><a href="requisition_file?id=<?php echo $f['id']; ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($f['original_name']); ?></a>
            <span class="muted-text">(<?php echo req_file_size((int)$f['size']); ?>) &middot; <?php echo htmlspecialchars($f['by_name']); ?>, <?php echo date('d M Y', strtotime($f['created_at'])); ?></span></p>
         <?php endforeach; ?>
     </div>
@@ -341,7 +341,7 @@ function action_form(string $act, string $label, array $o = []): string {
     <div class="card">
         <div class="card-head"><h3>Proof of payment</h3></div>
         <?php foreach ($pops as $f): ?>
-        <p><a href="requisition_file.php?id=<?php echo $f['id']; ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($f['original_name']); ?></a>
+        <p><a href="requisition_file?id=<?php echo $f['id']; ?>" target="_blank" rel="noopener"><?php echo htmlspecialchars($f['original_name']); ?></a>
            <span class="muted-text">(<?php echo req_file_size((int)$f['size']); ?>) &middot; sent by <?php echo htmlspecialchars($f['by_name']); ?>, <?php echo date('d M Y', strtotime($f['created_at'])); ?></span></p>
         <?php endforeach; ?>
     </div>

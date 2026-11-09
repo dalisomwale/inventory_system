@@ -14,7 +14,7 @@ $me    = (int)$_SESSION['user_id'];
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
 if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
 
-function back_to_users(): void { header('Location: users.php'); exit(); }
+function back_to_users(): void { header('Location: users'); exit(); }
 
 /** Number of other active admins besides $id. */
 function other_admins(PDO $pdo, int $id): int {
@@ -150,19 +150,19 @@ foreach ($users as $u) {
 }
 $val = fn($k, $d = '') => ($form ?? '') !== '' ? ($_POST[$k] ?? $d) : $d;
 
-$breadcrumbs = [['Users', ($editing || $resetting) ? 'users.php' : null]];
+$breadcrumbs = [['Users', ($editing || $resetting) ? 'users' : null]];
 if ($editing)   $breadcrumbs[] = ['Edit ' . $editing['full_name'], null];
 if ($resetting) $breadcrumbs[] = ['Reset password', null];
 function role_link(array $u, string $cls): string {
     $name = htmlspecialchars($u['role_name']);
-    return can('admin.roles') ? '<a href="roles.php?edit=' . (int)$u['role_id'] . '" class="' . $cls . ' role-link">' . $name . '</a>' : '<span class="' . $cls . '">' . $name . '</span>';
+    return can('admin.roles') ? '<a href="roles?edit=' . (int)$u['role_id'] . '" class="' . $cls . ' role-link">' . $name . '</a>' : '<span class="' . $cls . '">' . $name . '</span>';
 }
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
     <h1>Users</h1>
-    <span class="card-hint"><?php echo count($users); ?> account<?php echo count($users) === 1 ? '' : 's'; ?><?php echo $filter_role ? ' with the ' . htmlspecialchars($roles[$filter_role] ?? '') . ' role &middot; <a href="users.php">Show all</a>' : ''; ?> &middot; What each role can do is set under <a href="roles.php">Roles</a></span>
+    <span class="card-hint"><?php echo count($users); ?> account<?php echo count($users) === 1 ? '' : 's'; ?><?php echo $filter_role ? ' with the ' . htmlspecialchars($roles[$filter_role] ?? '') . ' role &middot; <a href="users">Show all</a>' : ''; ?> &middot; What each role can do is set under <a href="roles">Roles</a></span>
 </div>
 
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
@@ -186,7 +186,7 @@ include __DIR__ . '/../includes/header.php';
             <?php if ((int)$editing['id'] === $me): ?><input type="hidden" name="role_id" value="<?php echo (int)$editing['role_id']; ?>"><small>You can't change your own role.</small><?php endif; ?>
         </div>
         <?php echo org_pickers($pdo, ($form ?? '') ? $_POST : $editing); ?>
-        <div class="form-actions"><button type="submit" class="btn btn-primary">Save changes</button><a href="users.php" class="btn">Cancel</a></div>
+        <div class="form-actions"><button type="submit" class="btn btn-primary">Save changes</button><a href="users" class="btn">Cancel</a></div>
     </form>
 </div>
 <?php elseif ($resetting): ?>
@@ -202,7 +202,7 @@ include __DIR__ . '/../includes/header.php';
             <div class="form-group"><label for="confirm_password">Confirm new password *</label>
                 <input type="password" id="confirm_password" name="confirm_password" required data-match="new_password" autocomplete="new-password"></div>
         </div>
-        <div class="form-actions"><button type="submit" class="btn btn-primary">Reset password</button><a href="users.php" class="btn">Cancel</a></div>
+        <div class="form-actions"><button type="submit" class="btn btn-primary">Reset password</button><a href="users" class="btn">Cancel</a></div>
     </form>
 </div>
 <?php else: ?>
@@ -221,7 +221,7 @@ include __DIR__ . '/../includes/header.php';
                 <select id="role_id" name="role_id" required>
                     <?php foreach ($roles as $k => $label): ?><option value="<?php echo $k; ?>" <?php echo (int)$val('role_id', $default_role) === (int)$k ? 'selected' : ''; ?>><?php echo htmlspecialchars($label); ?></option><?php endforeach; ?>
                 </select>
-                <small><a href="roles.php">Roles and access rights</a></small></div>
+                <small><a href="roles">Roles and access rights</a></small></div>
             <div class="form-group"><label for="password">Temporary password *</label>
                 <input type="password" id="password" name="password" required minlength="8" maxlength="128" autocomplete="new-password"
                        pattern="(?=.*[A-Za-z])(?=.*\d).{8,}" title="At least 8 characters, with a letter and a number.">
@@ -240,7 +240,7 @@ include __DIR__ . '/../includes/header.php';
             <tbody>
             <?php foreach ($users as $u): $self = (int)$u['id'] === $me; ?>
                 <tr class="<?php echo $u['active'] ? '' : 'row-disabled'; ?>">
-                    <td style="font-weight:600"><a class="item-link inline" href="users.php?edit=<?php echo $u['id']; ?>"><?php echo htmlspecialchars($u['full_name']); ?></a><?php echo $self ? ' <span class="muted-text">(you)</span>' : ''; ?></td>
+                    <td style="font-weight:600"><a class="item-link inline" href="users?edit=<?php echo $u['id']; ?>"><?php echo htmlspecialchars($u['full_name']); ?></a><?php echo $self ? ' <span class="muted-text">(you)</span>' : ''; ?></td>
                     <td><?php echo htmlspecialchars($u['email'] ?? '—'); ?></td>
                     <td><?php echo $u['company_name'] ? htmlspecialchars($u['company_name']) : '<span class="muted-text">Not set</span>'; ?></td>
                     <td><?php echo $u['branch_name'] ? htmlspecialchars($u['branch_name']) : '<span class="muted-text">Not set</span>'; ?></td>
@@ -249,8 +249,8 @@ include __DIR__ . '/../includes/header.php';
                     <td><?php echo $u['active'] ? '<span class="status-receiving">Active</span>' : '<span class="status-issuing">Disabled</span>'; ?></td>
                     <td class="col-wide muted" style="white-space:nowrap"><?php echo $u['last_login_at'] ? date('d M Y, H:i', strtotime($u['last_login_at'])) : 'Never'; ?></td>
                     <td><div class="row-actions">
-                        <a href="users.php?edit=<?php echo $u['id']; ?>" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($u['full_name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
-                        <a href="users.php?reset=<?php echo $u['id']; ?>" class="btn btn-icon" aria-label="Reset password for <?php echo htmlspecialchars($u['full_name']); ?>" data-tip="Reset password"><?php echo row_icon('key'); ?></a>
+                        <a href="users?edit=<?php echo $u['id']; ?>" class="btn btn-icon" aria-label="Edit <?php echo htmlspecialchars($u['full_name']); ?>" data-tip="Edit"><?php echo row_icon('edit'); ?></a>
+                        <a href="users?reset=<?php echo $u['id']; ?>" class="btn btn-icon" aria-label="Reset password for <?php echo htmlspecialchars($u['full_name']); ?>" data-tip="Reset password"><?php echo row_icon('key'); ?></a>
                         <?php if (!$self): ?>
                         <form method="POST" class="inline-form"
                               data-confirm-title="<?php echo $u['active'] ? 'Disable account' : 'Enable account'; ?>"

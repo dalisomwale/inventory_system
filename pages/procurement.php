@@ -1,4 +1,4 @@
 <?php
 // Old address kept so bookmarks still work.
-header('Location: requisitions.php' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : ''));
+header('Location: requisitions' . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : ''));
 exit();

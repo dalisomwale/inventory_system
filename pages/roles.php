@@ -8,7 +8,7 @@ $me = (int)$_SESSION['user_id'];
 if (!empty($_SESSION['flash']))       { $success = htmlspecialchars($_SESSION['flash']);       unset($_SESSION['flash']); }
 if (!empty($_SESSION['flash_error'])) { $error   = htmlspecialchars($_SESSION['flash_error']); unset($_SESSION['flash_error']); }
 
-function back_to_roles(string $q = ''): void { header('Location: roles.php' . $q); exit(); }
+function back_to_roles(string $q = ''): void { header('Location: roles' . $q); exit(); }
 
 // ── Save (add or edit) ──────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_role'])) {
@@ -122,14 +122,14 @@ elseif ($editing)         $current = levels_from_perms($editing_perms);
 else                      $current = [];
 foreach ($roles as &$r) $r['summary'] = levels_summary(role_permissions($pdo, (int)$r['id'])); unset($r);
 
-$breadcrumbs = [['Roles', $showing_form ? 'roles.php' : null]];
+$breadcrumbs = [['Roles', $showing_form ? 'roles' : null]];
 if ($showing_form) $breadcrumbs[] = [$editing ? 'Edit ' . $editing['name'] : 'New role', null];
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="page-header">
     <h1><?php echo $showing_form ? ($editing ? htmlspecialchars($editing['name']) : 'New role') : 'Roles'; ?></h1>
-    <?php if (!$showing_form): ?><a href="roles.php?new=1" class="btn btn-primary">New role</a><?php endif; ?>
+    <?php if (!$showing_form): ?><a href="roles?new=1" class="btn btn-primary">New role</a><?php endif; ?>
 </div>
 
 <?php if (isset($success)): ?><div class="alert alert-success"><?php echo $success; ?></div><?php endif; ?>
@@ -187,7 +187,7 @@ include __DIR__ . '/../includes/header.php';
 
     <div class="form-actions">
         <?php if (!$locked): ?><button type="submit" class="btn btn-primary"><?php echo $editing ? 'Save role' : 'Create role'; ?></button><?php endif; ?>
-        <a href="roles.php" class="btn"><?php echo $locked ? 'Back' : 'Cancel'; ?></a>
+        <a href="roles" class="btn"><?php echo $locked ? 'Back' : 'Cancel'; ?></a>
     </div>
 </form>
 <script>
@@ -213,12 +213,12 @@ document.querySelectorAll('[data-level-all]').forEach(function (b) {
             <tbody>
             <?php foreach ($roles as $r): $sys = (int)$r['is_system']; ?>
                 <tr>
-                    <td style="font-weight:600"><a class="item-link inline" href="roles.php?edit=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['name']); ?></a><?php echo $sys ? ' <span class="status-ordered">Locked</span>' : ''; ?></td>
+                    <td style="font-weight:600"><a class="item-link inline" href="roles?edit=<?php echo $r['id']; ?>"><?php echo htmlspecialchars($r['name']); ?></a><?php echo $sys ? ' <span class="status-ordered">Locked</span>' : ''; ?></td>
                     <td class="muted"><?php echo htmlspecialchars($r['description'] ?: '—'); ?></td>
                     <td><?php if ($sys): ?>Full access everywhere
                         <?php elseif (!$r['summary']): ?><span class="muted-text">No access</span>
                         <?php else: ?><ul class="level-list"><?php foreach ($r['summary'] as [$al, $ln]): ?><li><span><?php echo htmlspecialchars($al); ?>:</span> <?php echo htmlspecialchars($ln); ?></li><?php endforeach; ?></ul><?php endif; ?></td>
-                    <td class="num"><a href="users.php?role_id=<?php echo $r['id']; ?>"><?php echo (int)$r['users']; ?></a></td>
+                    <td class="num"><a href="users?role_id=<?php echo $r['id']; ?>"><?php echo (int)$r['users']; ?></a></td>
                     <td><?php if ((int)$r['is_default']): ?><span class="status-receiving">Default</span>
                         <?php elseif (!$sys): ?>
                         <form method="POST" class="inline-form" data-confirm-title="Default role for sign-ups"
@@ -229,7 +229,7 @@ document.querySelectorAll('[data-level-all]').forEach(function (b) {
                         <?php else: ?><span class="muted-text">—</span><?php endif; ?>
                     </td>
                     <td><div class="row-actions">
-                        <a href="roles.php?edit=<?php echo $r['id']; ?>" class="btn btn-icon" aria-label="<?php echo $sys ? 'View' : 'Edit'; ?> <?php echo htmlspecialchars($r['name']); ?>" data-tip="<?php echo $sys ? 'View' : 'Edit'; ?>"><?php echo row_icon($sys ? 'view' : 'edit'); ?></a>
+                        <a href="roles?edit=<?php echo $r['id']; ?>" class="btn btn-icon" aria-label="<?php echo $sys ? 'View' : 'Edit'; ?> <?php echo htmlspecialchars($r['name']); ?>" data-tip="<?php echo $sys ? 'View' : 'Edit'; ?>"><?php echo row_icon($sys ? 'view' : 'edit'); ?></a>
                         <?php if (!$sys && (int)$r['users'] === 0 && !(int)$r['is_default']): ?>
                         <form method="POST" class="inline-form" data-confirm-title="Delete role"
                               data-confirm="Delete the <?php echo htmlspecialchars($r['name']); ?> role? This cannot be undone." data-confirm-ok="Delete" data-confirm-danger="1">

@@ -153,7 +153,7 @@ function requirePermission(string $perm): void {
     if (!can($perm)) {
         http_response_code(403);
         $_SESSION['flash_error'] = "You don't have access to that. Ask the System Admin if you need it.";
-        header('Location: dashboard.php');
+        header('Location: dashboard');
         exit();
     }
 }
