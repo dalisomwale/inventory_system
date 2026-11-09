@@ -585,7 +585,8 @@ table.compact thead th { padding: 7px 10px; }
 }
 
 /* Export to Excel button */
-.btn-excel { display: inline-flex; align-items: center; gap: 6px; background: #6b7280; border-color: #6b7280; color: #fff; }
+/* Small and plain everywhere (beats the bigger page buttons) */
+.btn-excel, .main-content .btn.btn-excel { display: inline-flex; align-items: center; background: #6b7280; border-color: #6b7280; color: #fff; padding: 3px 9px; font-size: .74rem; line-height: 1.4; min-height: 0; }
 .btn-excel:hover { background: #4b5563; border-color: #4b5563; color: #fff; }
 @media print { .btn-excel { display: none; } }
 

@@ -24,8 +24,7 @@ function xlsx_button(array $extra = []): string {
     $q = array_merge($_GET, $extra, ['export' => 'xlsx']);
     $href = strtok($_SERVER['REQUEST_URI'] ?? '', '?') . '?' . http_build_query($q);
     return '<a href="' . htmlspecialchars($href) . '" class="btn btn-sm btn-excel" download>'
-         . '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="19"/><line x1="16" y1="13" x2="8" y2="19"/></svg>'
-         . ' Export to Excel</a>';
+         . 'Export to Excel</a>';
 }
 
 function xlsx_esc(string $s): string {
