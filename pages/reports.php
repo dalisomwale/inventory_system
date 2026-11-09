@@ -18,7 +18,7 @@ if ($month > date('Y-m')) $month = date('Y-m');
 $pr = period_from_request(null);
 if ($pr) {
     [$from, $to] = [$pr['from'], $pr['to']];
-    $month_label = $pr['label'] . ' (' . $pr['range'] . ')';
+    $month_label = $pr['label'];
 } else {
     $from = $month . '-01';
     $to   = date('Y-m-t', strtotime($from));

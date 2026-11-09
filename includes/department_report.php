@@ -14,7 +14,7 @@ $cat_id    = (int)($_GET['category_id'] ?? 0);
 $pr        = period_from_request(null);
 $from      = $pr ? $pr['from'] : $month . '-01';
 $to        = $pr ? $pr['to'] : date('Y-m-t', strtotime($from));
-$span      = $pr ? $pr['label'] . ' (' . $pr['range'] . ')' : date('F Y', strtotime($from));
+$span      = $pr ? $pr['label'] : date('F Y', strtotime($from));
 
 $categories = $pdo->prepare("
     SELECT COALESCE(c.id, 0) AS id, COALESCE(c.name, i.category, 'Other') AS name,
@@ -52,7 +52,7 @@ $report_url = fn(array $p) => 'reports?' . http_build_query(array_filter($p + ($
 
 if (wants_xlsx()) {
     $title = 'Monthly Report - ' . ($dept_name ?: 'Your department') . ' - ' . $span . ($cat_name ? " - $cat_name" : '');
-    $meta  = ['Everything issued to ' . ($dept_name ?: 'your department') . ', ' . $span];
+    $meta  = ['Everything issued to ' . ($dept_name ?: 'your department') . ', ' . $span . ($pr ? ' (' . $pr['range'] . ')' : '')];
     xlsx_download('Department report ' . ($dept_name ?: '') . ' ' . ($pr ? "{$pr['from']} to {$pr['to']}" : $month) . ($cat_name ? " $cat_name" : ''), array_values(array_filter([
         $cat_id ? null : ['name' => 'By category', 'title' => $title, 'meta' => $meta,
             'columns' => ['Category', ['Items', 'int'], ['Units', 'int'], ['Value (K)', 'money']],

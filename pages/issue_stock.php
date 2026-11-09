@@ -289,7 +289,7 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Recent -->
 <div class="card" id="recent">
-    <div class="card-head"><h3>Recent issuing</h3><div style="display:flex; align-items:center; gap:12px"><span class="card-hint"><?php echo htmlspecialchars($pr['range']); ?></span><?php echo period_tabs($pr['key'], '#recent'); ?><?php if ($recent) echo xlsx_button(); ?></div></div>
+    <div class="card-head"><h3>Recent issuing</h3><div style="display:flex; align-items:center; gap:12px"><?php echo period_tabs($pr['key'], '#recent'); ?><?php if ($recent) echo xlsx_button(); ?></div></div>
     <div class="pill-tabs pill-tabs-inline">
         <a href="<?php echo htmlspecialchars($qs(['rcat' => 0])); ?>#recent" class="pill-tab <?php echo $recent_cat ? '' : 'active'; ?>">All</a>
         <?php foreach ($categories as $cat): ?>

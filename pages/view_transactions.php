@@ -7,7 +7,7 @@ $filter_type = $_GET['type']    ?? 'all';
 $old_date    = isset($_GET['date']) && !isset($_GET['period']) ? safe_date($_GET['date'], date('Y-m-d')) : null;
 $pr          = period_from_request($old_date ? null : 'day');
 [$from, $to] = $pr ? [$pr['from'], $pr['to']] : [$old_date, $old_date];
-$period_text = $pr ? $pr['label'] . ($pr['key'] === 'day' ? '' : ' (' . $pr['range'] . ')') : date('d M Y', strtotime($old_date));
+$period_text = $pr ? $pr['label'] : date('d M Y', strtotime($old_date));
 $filter_item = (int)($_GET['item_id'] ?? 0);
 $filter_cat  = $_GET['cat']     ?? '';
 // Department-limited users only see what was issued to their department
@@ -55,7 +55,7 @@ if (wants_xlsx()) {
     xlsx_download('Transactions ' . ($from === $to ? $from : "$from to $to") . ($dept_label ? " $dept_label" : ''), [[
         'name'    => 'Transactions',
         'title'   => 'Transaction History' . ($dept_label ? " - $dept_label" : ''),
-        'meta'    => array_filter(['Period: ' . $period_text . ($pr && $pr['key'] === 'day' ? ', ' . $pr['range'] : ''),
+        'meta'    => array_filter(['Period: ' . $period_text . ($pr ? ' (' . $pr['range'] . ')' : ''),
                                    $scope_dept === null ? 'Type: ' . ucfirst($filter_type) : '',
                                    $filter_cat ? "Category: $filter_cat" : '', $item_label ? "Item: $item_label" : '']),
         'columns' => ['Type', 'Date', 'Item', 'Category', 'Branch', ['Qty', 'int'], 'User', 'Supplier / issued to', 'Purpose'],
